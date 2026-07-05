@@ -125,6 +125,8 @@ var _map_damage_mult: float = 1.0
 var _permanent_power: float = 0.0
 ## Presion extra por el poder del Refugio (Fase 10): objetos colocados.
 var _shelter_power: float = 0.0
+var _obstacle_cache: Array = []
+var _obstacle_cache_timer: float = 0.0
 
 
 func _ready() -> void:
@@ -150,6 +152,7 @@ func _process(delta: float) -> void:
 	_elapsed_time += delta
 	if _emergency_cooldown > 0.0:
 		_emergency_cooldown -= delta
+	_obstacle_cache_timer = maxf(0.0, _obstacle_cache_timer - delta)
 	_update_event_timers(delta)
 	_update_backpressure(delta)
 	_maybe_emergency_cleanup()
@@ -492,7 +495,7 @@ func _random_ring_offset() -> Vector2:
 ## Empuja el punto de aparicion fuera de cualquier obstaculo cercano para que los
 ## enemigos no nazcan dentro de un muro/carro. Barato: pocos obstaculos colisionables.
 func _resolve_spawn_position(pos: Vector2) -> Vector2:
-	var obstacles := get_tree().get_nodes_in_group("obstacles")
+	var obstacles := _cached_obstacles()
 	if obstacles.is_empty():
 		return pos
 	for _attempt in 4:
@@ -513,6 +516,13 @@ func _resolve_spawn_position(pos: Vector2) -> Vector2:
 		if not blocked:
 			break
 	return pos
+
+
+func _cached_obstacles() -> Array:
+	if _obstacle_cache_timer <= 0.0:
+		_obstacle_cache = get_tree().get_nodes_in_group("obstacles")
+		_obstacle_cache_timer = 0.5
+	return _obstacle_cache
 
 
 func _on_enemy_died(_position: Vector2, _xp_value: int) -> void:

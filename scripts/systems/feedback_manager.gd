@@ -124,6 +124,8 @@ func damage_number(world_position: Vector2, amount: int, color: Color = Color(1,
 		return
 	node.global_position = world_position
 	_attach(node)
+	if not is_instance_valid(node):
+		return
 	node.call("setup", amount, color)
 
 
@@ -139,6 +141,8 @@ func hit_effect(world_position: Vector2, color: Color = Color(1, 1, 1), start_sc
 		return
 	node.global_position = world_position
 	_attach(node)
+	if not is_instance_valid(node):
+		return
 	node.call("setup", color, start_scale, end_scale)
 
 

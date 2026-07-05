@@ -101,6 +101,24 @@ func reset_progress() -> void:
 	sardines_changed.emit(get_sardines())
 
 
+## Reinicia solo la campana de Historia. Mantiene sardinas, mejoras y refugio, pero
+## borra capitulos completados, first-clears por dificultad y desbloqueos derivados
+## de mapas/plaga de partida libre para que el avance vuelva a depender de Historia.
+func abandon_story_campaign() -> void:
+	_data["story_chapters_cleared"] = 0
+	_data["story_difficulty"] = 1
+	var keys_to_remove: Array[String] = []
+	for key in _data.keys():
+		var text: String = str(key)
+		if text.begins_with("story_clear_") or text.begins_with("plague_unlocked_"):
+			keys_to_remove.append(text)
+	for key in keys_to_remove:
+		_data.erase(key)
+	_data["unlocked_maps"] = ["neighborhood"]
+	_data["completed_maps"] = []
+	save()
+
+
 func debug_add_sardines() -> void:
 	add_sardines(debug_add_sardines_amount)
 	save()

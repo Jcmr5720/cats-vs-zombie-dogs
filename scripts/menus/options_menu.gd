@@ -57,6 +57,7 @@ func _build_ui() -> void:
 	col.add_child(_toggle_row("Efectos intensos", "visual_effects"))
 	col.add_child(_toggle_row("Sombras", "shadows"))
 	col.add_child(_toggle_row("Mostrar FPS", "show_fps"))
+	col.add_child(_toggle_row("Omitir cinematicas", "skip_cinematics"))
 	col.add_child(_spacer(8))
 	col.add_child(MenuTheme.make_title("Audio", 24, MenuTheme.CYAN))
 	col.add_child(_volume_row("Master", "audio_master"))

@@ -18,6 +18,9 @@ mutantes en una ciudad abandonada. Tono arcade, caricaturesco y no realista.
 > También incluye el **Modo Historia** (6 capítulos con cinemáticas, dificultad
 > Fácil/Intermedio/Difícil/Extremo y mejoras desbloqueables) y **Partida libre**
 > con Niveles de Plaga 1-5 por mapa.
+> La dificultad de Historia se confirma justo antes de jugar, las cinemáticas
+> automáticas pueden omitirse, y Partida libre solo muestra zonas desbloqueadas
+> por el avance de Historia.
 
 > **Estado: FASE 08.9 - cierre de etapa (obstaculos con sentido, destructibles, UI) + 08.75/09/08.5.**
 > La Fase 08.9 cierra la etapa: **composicion de mapas por zonas** (los obstaculos se

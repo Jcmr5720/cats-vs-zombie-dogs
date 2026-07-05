@@ -73,7 +73,9 @@ func _occupied_item():
 
 
 func _apply_style() -> void:
-	var occupied: bool = _occupied_item() != null
+	var item = _occupied_item()
+	var occupied: bool = item != null
+	tooltip_text = "%s\n%s" % [item.display_name, slot_label] if occupied else "%s\nAcepta: %s" % [slot_label, ", ".join(allowed_categories.map(func(c): return str(c)))]
 	for state in ["normal", "hover", "pressed", "focus"]:
 		var box := StyleBoxFlat.new()
 		box.bg_color = Color(0.12, 0.10, 0.09, 0.9) if occupied else Color(0.09, 0.08, 0.075, 0.75)
@@ -109,9 +111,13 @@ func _draw() -> void:
 		if allowed_categories.size() > 1:
 			icon = "✦"
 		var font := ThemeDB.fallback_font
-		draw_string(font, Vector2(0, s.y * 0.42), icon, HORIZONTAL_ALIGNMENT_CENTER, s.x, 24, Color(0.55, 0.5, 0.42, 0.6))
-		draw_string(font, Vector2(0, s.y * 0.66), slot_label, HORIZONTAL_ALIGNMENT_CENTER, s.x, 11, Color(0.55, 0.52, 0.46, 0.8))
-		draw_string(font, Vector2(0, s.y * 0.85), "vacio", HORIZONTAL_ALIGNMENT_CENTER, s.x, 10, Color(0.45, 0.42, 0.38, 0.6))
+		draw_circle(s * 0.5, 29.0, Color(0.20, 0.17, 0.14, 0.48))
+		draw_circle(s * 0.5, 23.0, Color(0.08, 0.07, 0.065, 0.58))
+		draw_string(font, Vector2(0, s.y * 0.58), icon, HORIZONTAL_ALIGNMENT_CENTER, s.x, 30, Color(0.66, 0.58, 0.46, 0.82))
+		if allowed_categories.size() > 1:
+			for i in allowed_categories.size():
+				var dot_x: float = s.x * 0.5 - float(allowed_categories.size() - 1) * 6.0 + float(i) * 12.0
+				draw_circle(Vector2(dot_x, s.y * 0.78), 2.8, Color(0.52, 0.80, 0.88, 0.72))
 		return
 	# Ocupado: caja del objeto con sombra, cuerpo, tapa de acento y pips de nivel.
 	var item_size: Vector2 = item.size
@@ -120,16 +126,156 @@ func _draw() -> void:
 		center.y -= sin((1.0 - feedback) * PI) * 18.0
 		item_size *= Vector2(1.0 + 0.12 * feedback, 1.0 - 0.08 * feedback)
 	var rect := Rect2(center - item_size * 0.5, item_size)
-	draw_rect(Rect2(rect.position + Vector2(4, 5), rect.size), Color(0, 0, 0, 0.3), true)
-	draw_rect(rect, item.visual_color, true)
-	draw_rect(rect, item.visual_color.darkened(0.4), false, 2.0)
-	draw_rect(Rect2(rect.position, Vector2(rect.size.x, 7)), item.accent_color, true)
-	draw_line(rect.position + Vector2(3, 10), rect.position + Vector2(rect.size.x - 3, 10), item.visual_color.lightened(0.2), 1.5)
-	var font2 := ThemeDB.fallback_font
-	draw_string(font2, Vector2(0, s.y * 0.82), item.display_name, HORIZONTAL_ALIGNMENT_CENTER, s.x, 11, Color(0.95, 0.92, 0.85))
+	draw_rect(Rect2(rect.position + Vector2(4, 5), rect.size), Color(0, 0, 0, 0.28), true)
+	_draw_item_visual(item, rect)
+	tooltip_text = "%s\n%s" % [item.display_name, slot_label]
 	# Pips de nivel.
 	var level: int = _shelter.get_level(item.id)
 	var pip_start: float = s.x * 0.5 - float(item.max_level) * 6.0
 	for i in item.max_level:
 		var pip_color: Color = item.accent_color if i < level else Color(0.3, 0.28, 0.24)
 		draw_circle(Vector2(pip_start + float(i) * 12.0 + 4.0, s.y * 0.92), 3.2, pip_color)
+
+
+func _draw_item_visual(item, rect: Rect2) -> void:
+	var id: StringName = item.id
+	var c: Vector2 = rect.position + rect.size * 0.5
+	var v: Color = item.visual_color
+	var a: Color = item.accent_color
+	match id:
+		&"combat_scratcher":
+			_draw_post(c, rect.size.y * 0.82, v, a)
+		&"agility_treadmill":
+			_draw_treadmill(rect, v, a)
+		&"training_bag":
+			_draw_punching_bag(rect, v, a)
+		&"colony_beds":
+			_draw_beds(rect, v, a)
+		&"medical_station":
+			_draw_medical(rect, v, a)
+		&"tool_table":
+			_draw_tool_table(rect, v, a)
+		&"watch_post":
+			_draw_watch_post(rect, v, a)
+		&"sardine_storage":
+			_draw_sardine_storage(rect, v, a)
+		&"supply_box":
+			_draw_supply_box(rect, v, a)
+		&"meow_radio":
+			_draw_radio(rect, v, a)
+		&"shelter_map":
+			_draw_map_item(rect, v, a)
+		&"cardboard_barricade":
+			_draw_barricade(rect, v, a)
+		_:
+			draw_rect(rect, v, true)
+			draw_rect(rect, v.darkened(0.4), false, 2.0)
+
+
+func _draw_post(c: Vector2, h: float, v: Color, a: Color) -> void:
+	draw_rect(Rect2(c + Vector2(-18, h * 0.33), Vector2(36, 8)), v.darkened(0.25), true)
+	draw_rect(Rect2(c + Vector2(-7, -h * 0.38), Vector2(14, h * 0.76)), v, true)
+	draw_rect(Rect2(c + Vector2(-15, -h * 0.45), Vector2(30, 8)), a, true)
+	for y in 4:
+		draw_line(c + Vector2(-6, -h * 0.24 + y * 9), c + Vector2(6, -h * 0.29 + y * 9), v.lightened(0.28), 1.4)
+
+
+func _draw_treadmill(r: Rect2, v: Color, a: Color) -> void:
+	var base := Rect2(r.position + Vector2(2, r.size.y * 0.46), Vector2(r.size.x - 4, r.size.y * 0.32))
+	draw_rect(base, v.darkened(0.2), true)
+	draw_rect(base, a, false, 2.0)
+	draw_line(base.position + Vector2(8, base.size.y * 0.5), base.position + Vector2(base.size.x - 8, base.size.y * 0.5), Color(0.08, 0.09, 0.1), 4.0)
+	draw_line(base.position + Vector2(base.size.x * 0.78, 0), r.position + Vector2(r.size.x * 0.88, 4), a, 3.0)
+	draw_circle(base.position + Vector2(10, base.size.y), 5.0, Color(0.06, 0.06, 0.07))
+	draw_circle(base.position + Vector2(base.size.x - 10, base.size.y), 5.0, Color(0.06, 0.06, 0.07))
+
+
+func _draw_punching_bag(r: Rect2, v: Color, a: Color) -> void:
+	draw_line(r.position + Vector2(r.size.x * 0.5, -2), r.position + Vector2(r.size.x * 0.5, 10), a, 2.0)
+	var bag := Rect2(r.position + Vector2(r.size.x * 0.22, 8), Vector2(r.size.x * 0.56, r.size.y - 12))
+	draw_circle(bag.position + Vector2(bag.size.x * 0.5, bag.size.x * 0.35), bag.size.x * 0.5, v)
+	draw_rect(Rect2(bag.position + Vector2(0, bag.size.x * 0.35), Vector2(bag.size.x, bag.size.y - bag.size.x * 0.65)), v, true)
+	draw_circle(bag.position + Vector2(bag.size.x * 0.5, bag.size.y - bag.size.x * 0.3), bag.size.x * 0.5, v.darkened(0.05))
+	draw_line(bag.position + Vector2(5, bag.size.y * 0.45), bag.position + Vector2(bag.size.x - 5, bag.size.y * 0.38), a, 2.0)
+
+
+func _draw_beds(r: Rect2, v: Color, a: Color) -> void:
+	for i in 2:
+		var bed := Rect2(r.position + Vector2(3 + i * r.size.x * 0.46, r.size.y * 0.32), Vector2(r.size.x * 0.42, r.size.y * 0.42))
+		draw_rect(bed, v, true)
+		draw_rect(bed, v.darkened(0.35), false, 2.0)
+		draw_rect(Rect2(bed.position + Vector2(4, 4), Vector2(bed.size.x - 8, bed.size.y * 0.32)), a.lightened(0.15), true)
+		draw_circle(bed.position + Vector2(bed.size.x * 0.72, bed.size.y * 0.62), 5.0, Color(0.08, 0.07, 0.08))
+
+
+func _draw_medical(r: Rect2, v: Color, a: Color) -> void:
+	draw_rect(r, v, true)
+	draw_rect(r, Color(0.18, 0.18, 0.2), false, 2.0)
+	draw_rect(Rect2(r.position + Vector2(r.size.x * 0.42, 8), Vector2(r.size.x * 0.16, r.size.y - 16)), a, true)
+	draw_rect(Rect2(r.position + Vector2(8, r.size.y * 0.42), Vector2(r.size.x - 16, r.size.y * 0.16)), a, true)
+	draw_circle(r.position + Vector2(r.size.x - 8, 8), 3.0, Color(0.95, 0.25, 0.25))
+
+
+func _draw_tool_table(r: Rect2, v: Color, a: Color) -> void:
+	draw_rect(Rect2(r.position + Vector2(0, r.size.y * 0.38), Vector2(r.size.x, r.size.y * 0.18)), v, true)
+	draw_rect(Rect2(r.position + Vector2(6, r.size.y * 0.56), Vector2(5, r.size.y * 0.34)), v.darkened(0.25), true)
+	draw_rect(Rect2(r.position + Vector2(r.size.x - 11, r.size.y * 0.56), Vector2(5, r.size.y * 0.34)), v.darkened(0.25), true)
+	draw_line(r.position + Vector2(12, r.size.y * 0.25), r.position + Vector2(28, r.size.y * 0.12), a, 3.0)
+	draw_line(r.position + Vector2(29, r.size.y * 0.14), r.position + Vector2(38, r.size.y * 0.24), a, 3.0)
+	draw_rect(Rect2(r.position + Vector2(r.size.x * 0.58, r.size.y * 0.17), Vector2(14, 16)), Color(0.18, 0.2, 0.22), true)
+
+
+func _draw_watch_post(r: Rect2, v: Color, a: Color) -> void:
+	draw_rect(Rect2(r.position + Vector2(r.size.x * 0.42, r.size.y * 0.24), Vector2(r.size.x * 0.16, r.size.y * 0.62)), v.darkened(0.2), true)
+	var top := Rect2(r.position + Vector2(5, 2), Vector2(r.size.x - 10, r.size.y * 0.34))
+	draw_rect(top, v, true)
+	draw_rect(top, a, false, 2.0)
+	draw_circle(top.position + Vector2(top.size.x * 0.35, top.size.y * 0.52), 3.2, Color(0.85, 0.95, 0.7))
+	draw_circle(top.position + Vector2(top.size.x * 0.65, top.size.y * 0.52), 3.2, Color(0.85, 0.95, 0.7))
+
+
+func _draw_sardine_storage(r: Rect2, v: Color, a: Color) -> void:
+	draw_rect(r, v, true)
+	draw_rect(r, v.darkened(0.35), false, 2.0)
+	draw_rect(Rect2(r.position, Vector2(r.size.x, 8)), a, true)
+	for i in 3:
+		var y: float = r.position.y + 18 + i * 10
+		draw_line(Vector2(r.position.x + 10, y), Vector2(r.position.x + r.size.x - 10, y - 2), Color(0.65, 0.82, 0.9), 4.0)
+		draw_circle(Vector2(r.position.x + r.size.x - 13, y - 2), 3.0, Color(0.65, 0.82, 0.9))
+
+
+func _draw_supply_box(r: Rect2, v: Color, a: Color) -> void:
+	draw_rect(r, v, true)
+	draw_rect(r, v.darkened(0.42), false, 2.0)
+	draw_line(r.position + Vector2(r.size.x * 0.5, 0), r.position + Vector2(r.size.x * 0.5, r.size.y), v.darkened(0.35), 2.0)
+	draw_circle(r.position + Vector2(r.size.x * 0.5, r.size.y * 0.47), 10.0, a)
+	draw_string(ThemeDB.fallback_font, r.position + Vector2(0, r.size.y * 0.58), "?", HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 18, Color(0.12, 0.10, 0.08))
+
+
+func _draw_radio(r: Rect2, v: Color, a: Color) -> void:
+	draw_rect(Rect2(r.position + Vector2(3, 12), Vector2(r.size.x - 6, r.size.y - 14)), v, true)
+	draw_rect(Rect2(r.position + Vector2(3, 12), Vector2(r.size.x - 6, r.size.y - 14)), v.darkened(0.4), false, 2.0)
+	draw_line(r.position + Vector2(r.size.x * 0.25, 12), r.position + Vector2(4, 0), a, 2.0)
+	draw_circle(r.position + Vector2(r.size.x * 0.72, r.size.y * 0.52), 8.0, a)
+	for i in 3:
+		draw_line(r.position + Vector2(11, 23 + i * 7), r.position + Vector2(r.size.x * 0.48, 23 + i * 7), Color(0.08, 0.08, 0.09), 2.0)
+
+
+func _draw_map_item(r: Rect2, v: Color, a: Color) -> void:
+	var paper := Rect2(r.position + Vector2(4, 4), r.size - Vector2(8, 8))
+	draw_rect(paper, v.lightened(0.22), true)
+	draw_rect(paper, v.darkened(0.35), false, 2.0)
+	draw_line(paper.position + Vector2(paper.size.x * 0.34, 0), paper.position + Vector2(paper.size.x * 0.34, paper.size.y), v.darkened(0.18), 1.5)
+	draw_line(paper.position + Vector2(paper.size.x * 0.66, 0), paper.position + Vector2(paper.size.x * 0.66, paper.size.y), v.darkened(0.18), 1.5)
+	draw_line(paper.position + Vector2(7, paper.size.y * 0.65), paper.position + Vector2(paper.size.x - 8, paper.size.y * 0.28), a, 2.0)
+	draw_circle(paper.position + Vector2(paper.size.x * 0.72, paper.size.y * 0.28), 4.0, Color(0.95, 0.25, 0.25))
+
+
+func _draw_barricade(r: Rect2, v: Color, a: Color) -> void:
+	for i in 3:
+		var plank := Rect2(r.position + Vector2(0, 8 + i * 13), Vector2(r.size.x, 9))
+		draw_rect(plank, v.lightened(0.05 * i), true)
+		draw_rect(plank, v.darkened(0.35), false, 1.5)
+	draw_line(r.position + Vector2(8, r.size.y - 4), r.position + Vector2(r.size.x - 8, 5), a, 4.0)
+	draw_circle(r.position + Vector2(12, 14), 2.0, Color(0.10, 0.08, 0.06))
+	draw_circle(r.position + Vector2(r.size.x - 12, r.size.y - 14), 2.0, Color(0.10, 0.08, 0.06))

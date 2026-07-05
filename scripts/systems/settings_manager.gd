@@ -40,6 +40,7 @@ func defaults() -> Dictionary:
 		"visual_effects": true,
 		"shadows": true,
 		"show_fps": false,
+		"skip_cinematics": false,
 		"audio_master": 0.80,
 		"audio_music": 0.60,
 		"audio_sfx": 0.75,

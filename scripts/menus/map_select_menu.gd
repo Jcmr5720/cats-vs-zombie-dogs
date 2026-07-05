@@ -14,8 +14,14 @@ const MAP_PATHS: Array[String] = [
 
 ## Requisito de desbloqueo por mapa (texto para el jugador).
 const UNLOCK_REQUIREMENT: Dictionary = {
-	&"park": "Asegura Barrio Gatuno una vez",
-	&"industrial_alley": "Asegura Parque Abandonado una vez",
+	&"park": "Desbloquea el capitulo 2 en Historia",
+	&"industrial_alley": "Desbloquea el capitulo 3 en Historia",
+}
+
+const STORY_CHAPTER_UNLOCK: Dictionary = {
+	&"neighborhood": 1,
+	&"park": 2,
+	&"industrial_alley": 3,
 }
 
 ## Si es true, permite jugar mapas bloqueados (solo para pruebas). Debe ir en false
@@ -138,7 +144,7 @@ func _build_ui() -> void:
 
 
 func _build_card(map_data: Resource) -> Control:
-	var unlocked: bool = _save == null or _save.is_map_unlocked(map_data.id)
+	var unlocked: bool = _is_free_play_map_unlocked(map_data.id)
 	var completed: bool = _save != null and _save.has_method("is_map_completed") and _save.is_map_completed(map_data.id)
 	var best_time: float = _save.get_best_time(map_data.id) if _save != null and _save.has_method("get_best_time") else 0.0
 
@@ -425,6 +431,16 @@ func _completed_count() -> int:
 		if data != null and _save != null and _save.has_method("is_map_completed") and _save.is_map_completed(data.id):
 			completed += 1
 	return completed
+
+
+func _is_free_play_map_unlocked(map_id: StringName) -> bool:
+	if DEBUG_PLAY_LOCKED:
+		return true
+	var chapter_required: int = int(STORY_CHAPTER_UNLOCK.get(map_id, 1))
+	if chapter_required <= 1:
+		return true
+	var cleared: int = int(_save.get_value("story_chapters_cleared", 0)) if _save != null and _save.has_method("get_value") else 0
+	return chapter_required <= cleared + 1
 
 
 ## Dificultad como 1-3 puntos llenos (○●) en vez de texto largo.

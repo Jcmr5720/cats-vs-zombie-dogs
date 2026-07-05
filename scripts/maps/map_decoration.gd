@@ -113,6 +113,4 @@ func _draw_floor_detail(cx: int, cy: int, index: int, origin: Vector2) -> void:
 # --- Hash determinista por celda --------------------------------------------
 
 func _cell_rand(cx: int, cy: int, salt: int) -> float:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash("%d:%d_%d_%d" % [world_seed, cx, cy, salt])
-	return rng.randf()
+	return fposmod(sin(float(world_seed % 1000003) * 0.00013 + float(cx) * 12.9898 + float(cy) * 78.233 + float(salt) * 37.719) * 43758.5453, 1.0)

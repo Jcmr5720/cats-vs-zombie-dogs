@@ -72,16 +72,21 @@ func open_shelter() -> void:
 
 ## Lanza un capitulo: fija el mapa, congela la dificultad global del save y pasa
 ## por la cinematica de entrada (si tiene) antes del nivel.
-func start_story_chapter(chapter: Resource) -> void:
+func start_story_chapter(chapter: Resource, tier: int = -1) -> void:
 	if chapter == null or chapter.map == null:
 		return
 	story_chapter = chapter
 	var save: Node = get_node_or_null("/root/SaveManager")
-	story_tier = clampi(int(save.get_value("story_difficulty", 1)) if save != null else 1, 0, 3)
+	var resolved_tier: int = tier
+	if resolved_tier < 0:
+		resolved_tier = int(save.get_value("story_difficulty", 1)) if save != null else 1
+	story_tier = clampi(resolved_tier, 0, 3)
+	if save != null and save.has_method("set_value"):
+		save.set_value("story_difficulty", story_tier)
 	selected_map = chapter.map
 	plague_level = 1
 	run_seed = _new_seed()
-	if not chapter.cinematic_panels.is_empty():
+	if not _skip_cinematics() and not chapter.cinematic_panels.is_empty():
 		play_cinematic(chapter.cinematic_panels, chapter.accent_color, MAIN_LEVEL)
 	else:
 		_change_scene(MAIN_LEVEL)
@@ -149,6 +154,11 @@ func _new_seed() -> int:
 	return rng.randi_range(100_000_000, 999_999_999)
 
 
+func _skip_cinematics() -> bool:
+	var settings: Node = get_node_or_null("/root/Settings")
+	return settings != null and settings.has_method("get_value") and bool(settings.get_value("skip_cinematics", false))
+
+
 func return_to_main_menu() -> void:
 	story_chapter = null
 	_change_scene(MAIN_MENU)
@@ -171,6 +181,12 @@ func open_options() -> void:
 
 
 func quit_game() -> void:
+	var audio: Node = get_node_or_null("/root/AudioManager")
+	if audio != null:
+		if audio.has_method("shutdown"):
+			audio.shutdown()
+		elif audio.has_method("reset_for_scene_change"):
+			audio.reset_for_scene_change()
 	get_tree().quit()
 
 

@@ -105,7 +105,7 @@ func _fire_projectiles() -> bool:
 			continue
 		var angle_offset: float = deg_to_rad(start_angle + data.spread_degrees * float(index))
 		projectile.global_position = _player.global_position
-		get_tree().current_scene.add_child(projectile)
+		_projectile_parent().add_child(projectile)
 		projectile.call("setup", base_dir.rotated(angle_offset), opts)
 		_muzzle_flash(base_dir.rotated(angle_offset), data.visual_color, is_explosive)
 	_play_weapon_audio(&"shoot_strong" if is_explosive or data.weapon_type == &"boomerang" else &"shoot_basic")
@@ -138,7 +138,7 @@ func _fire_area() -> bool:
 	if area == null:
 		return false
 	area.global_position = spawn_position
-	get_tree().current_scene.add_child(area)
+	_projectile_parent().add_child(area)
 	area.call("setup", _effective_damage(), _effective_area(), data.duration, data.tick_interval, data.visual_color)
 	_play_weapon_audio(&"shoot_strong")
 	return true
@@ -313,6 +313,14 @@ func _play_weapon_audio(name: StringName) -> void:
 	var audio: Node = get_node_or_null("/root/AudioManager")
 	if audio != null and audio.has_method("play_sfx"):
 		audio.play_sfx(name)
+
+
+func _projectile_parent() -> Node:
+	if get_tree() != null and get_tree().current_scene != null:
+		return get_tree().current_scene
+	if get_parent() != null:
+		return get_parent()
+	return get_tree().root
 
 
 ## Texto corto de lo que aporta SUBIR al siguiente nivel (para las cartas).

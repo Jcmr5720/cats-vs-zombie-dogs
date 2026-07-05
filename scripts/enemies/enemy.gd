@@ -62,6 +62,10 @@ var _knockback: Vector2 = Vector2.ZERO
 # Separación simple para que no se apilen todos en el mismo punto.
 @export var separation_radius: float = 26.0
 @export var separation_strength: float = 36.0
+@export var separation_update_interval: float = 0.10
+@export var separation_neighbor_limit: int = 10
+var _separation_cache: Vector2 = Vector2.ZERO
+var _separation_timer: float = 0.0
 
 @onready var _visual: Node2D = $Visual
 @onready var _body: Polygon2D = $Visual/Body
@@ -123,7 +127,7 @@ func _physics_process(delta: float) -> void:
 	var wobble: float = sin(_time * _wobble_speed + _wobble_phase) * _wobble_strength
 	if not _has_subtarget:
 		direction = direction.rotated(wobble)
-	velocity = direction * speed * _speed_jitter + _separation() + _knockback + _avoid
+	velocity = direction * speed * _speed_jitter + _separation(delta) + _knockback + _avoid
 	move_and_slide()
 	if velocity.length_squared() > 1.0:
 		_face_angle = lerp_angle(_face_angle, velocity.angle(), 0.16)
@@ -182,9 +186,14 @@ func take_damage(amount: int, knockback_dir: Vector2 = Vector2.ZERO) -> void:
 
 
 ## Suma de empujes de los enemigos cercanos para que no se apilen en un punto.
-func _separation() -> Vector2:
+func _separation(delta: float) -> Vector2:
+	_separation_timer -= delta
+	if _separation_timer > 0.0:
+		return _separation_cache
+	_separation_timer = separation_update_interval + randf_range(0.0, separation_update_interval * 0.45)
 	var push: Vector2 = Vector2.ZERO
 	var radius_sq: float = separation_radius * separation_radius
+	var found: int = 0
 	for other in get_tree().get_nodes_in_group("enemies"):
 		if other == self or not is_instance_valid(other):
 			continue
@@ -193,7 +202,11 @@ func _separation() -> Vector2:
 		if dist_sq > 0.01 and dist_sq < radius_sq:
 			# Más cerca = empuje más fuerte (peso 1/dist).
 			push += offset / sqrt(dist_sq) * (1.0 - dist_sq / radius_sq)
-	return push * separation_strength
+			found += 1
+			if found >= separation_neighbor_limit:
+				break
+	_separation_cache = push * separation_strength
+	return _separation_cache
 
 
 func _steered_direction(target_position: Vector2, delta: float) -> Vector2:

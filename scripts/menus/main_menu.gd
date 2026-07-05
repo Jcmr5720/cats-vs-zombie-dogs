@@ -22,13 +22,13 @@ func _process(delta: float) -> void:
 	_anim_time += delta
 	queue_redraw()
 	if _title_label != null:
-		_title_label.position.y = 70.0 + sin(_anim_time * 1.6) * 5.0
+		_title_label.position.y = 34.0 + sin(_anim_time * 1.6) * 4.0
 
 
 func _build_ui() -> void:
 	_title_label = MenuTheme.make_title("Cats vs Zombie Dogs", 56, MenuTheme.ACCENT)
 	_title_label.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	_title_label.position = Vector2(0, 70)
+	_title_label.position = Vector2(0, 34)
 	# Contorno oscuro + sombra: el titulo se separa del fondo como logo.
 	_title_label.add_theme_color_override("font_outline_color", Color(0.16, 0.09, 0.03, 1.0))
 	_title_label.add_theme_constant_override("outline_size", 10)
@@ -39,12 +39,15 @@ func _build_ui() -> void:
 
 	var subtitle := MenuTheme.make_title("Rescata la colonia.", 22, MenuTheme.CYAN)
 	subtitle.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	subtitle.position = Vector2(0, 138)
+	subtitle.position = Vector2(0, 104)
 	add_child(subtitle)
 
 	# Columna central simple: solo los botones del menu.
 	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.anchor_left = 0.0
+	center.anchor_top = 0.30
+	center.anchor_right = 1.0
+	center.anchor_bottom = 0.98
 	add_child(center)
 
 	var col := VBoxContainer.new()

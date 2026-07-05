@@ -84,4 +84,12 @@ func _fire_at(target: Node2D) -> void:
 		var final_damage: int = max(1, int(round(damage * _external_damage_multiplier)))
 		projectile.call("setup", base_direction.rotated(angle_offset), projectile_speed, final_damage)
 		# El proyectil vive en el nivel para no depender del jugador/arma.
-		get_tree().current_scene.add_child(projectile)
+		_projectile_parent().add_child(projectile)
+
+
+func _projectile_parent() -> Node:
+	if get_tree() != null and get_tree().current_scene != null:
+		return get_tree().current_scene
+	if get_parent() != null:
+		return get_parent()
+	return get_tree().root

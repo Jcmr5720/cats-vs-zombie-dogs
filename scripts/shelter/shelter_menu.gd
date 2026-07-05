@@ -18,10 +18,13 @@ var _placing_item_id: StringName = &""
 
 var _slots: Array = []
 var _shop_panel: PanelContainer
+var _inventory_panel: PanelContainer
+var _inventory_grid: GridContainer
 var _bonus_list: VBoxContainer
 var _sardines_chip: Label
 var _placing_hint: Label
 var _tutorial_overlay: Control
+var _slot_remove_buttons: Dictionary = {}
 
 
 func _ready() -> void:
@@ -37,6 +40,9 @@ func _ready() -> void:
 	_refresh_all()
 	if _shelter != null and not _shelter.has_seen_tutorial():
 		_show_tutorial()
+	var audio: Node = get_node_or_null("/root/AudioManager")
+	if audio != null and audio.has_method("play_music"):
+		audio.play_music(&"shelter")
 	MenuTheme.add_fade_in(self)
 
 
@@ -60,6 +66,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		if _placing_item_id != &"":
 			_cancel_placement()
+		elif _inventory_panel != null and _inventory_panel.visible:
+			_inventory_panel.visible = false
 		elif _shop_panel != null and _shop_panel.visible:
 			_shop_panel.visible = false
 		else:
@@ -148,22 +156,21 @@ func _build_ui() -> void:
 	var title := MenuTheme.make_title("Refugio Felino", 34, MenuTheme.ACCENT)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title_block.add_child(title)
-	var subtitle := Label.new()
-	subtitle.text = "Solo los objetos colocados en el refugio otorgan bonificaciones."
-	subtitle.add_theme_font_size_override("font_size", 13)
-	subtitle.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
-	title_block.add_child(subtitle)
 	_sardines_chip = Label.new()
 	_sardines_chip.add_theme_font_size_override("font_size", 18)
 	_sardines_chip.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
 	_sardines_chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	top.add_child(_sardines_chip)
 	var shop_btn := MenuTheme.make_button("Tienda", MenuTheme.ACCENT)
-	shop_btn.custom_minimum_size = Vector2(150, 44)
+	shop_btn.custom_minimum_size = Vector2(130, 44)
 	shop_btn.pressed.connect(_open_shop)
 	top.add_child(shop_btn)
+	var inventory_btn := MenuTheme.make_button("Inventario", MenuTheme.CYAN)
+	inventory_btn.custom_minimum_size = Vector2(155, 44)
+	inventory_btn.pressed.connect(_open_inventory)
+	top.add_child(inventory_btn)
 	var back_btn := MenuTheme.make_button("Volver  (ESC)", MenuTheme.TEXT_DIM)
-	back_btn.custom_minimum_size = Vector2(170, 44)
+	back_btn.custom_minimum_size = Vector2(135, 44)
 	back_btn.pressed.connect(func() -> void: GameFlow.return_to_main_menu())
 	top.add_child(back_btn)
 
@@ -186,6 +193,7 @@ func _build_ui() -> void:
 		slot.set_script(ShelterSlot)
 		slot.setup(slot_infos[i])
 		slot.pressed.connect(_on_slot_pressed.bind(slot))
+		_add_remove_button(slot)
 		(row1 if i < 4 else row2).add_child(slot)
 		_slots.append(slot)
 
@@ -211,7 +219,7 @@ func _build_ui() -> void:
 	var bonus_col := VBoxContainer.new()
 	bonus_col.add_theme_constant_override("separation", 4)
 	bonus_panel.add_child(bonus_col)
-	var bonus_title := MenuTheme.make_title("Bonificaciones activas", 18, MenuTheme.ZOMBIE)
+	var bonus_title := MenuTheme.make_title("Bonus", 18, MenuTheme.ZOMBIE)
 	bonus_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	bonus_col.add_child(bonus_title)
 	_bonus_list = VBoxContainer.new()
@@ -227,12 +235,158 @@ func _build_ui() -> void:
 	add_child(_shop_panel)
 	_shop_panel.request_place.connect(_start_placement)
 	_shop_panel.closed.connect(func() -> void: _shop_panel.visible = false)
+	_build_inventory_panel()
 
 
 func _open_shop() -> void:
 	_cancel_placement()
+	if _inventory_panel != null:
+		_inventory_panel.visible = false
 	_shop_panel.visible = true
 	_shop_panel.refresh()
+
+
+func _open_inventory() -> void:
+	_cancel_placement()
+	if _shop_panel != null:
+		_shop_panel.visible = false
+	_inventory_panel.visible = true
+	_refresh_inventory()
+
+
+func _add_remove_button(slot: Button) -> void:
+	var remove := Button.new()
+	remove.text = "×"
+	remove.tooltip_text = "Quitar"
+	remove.custom_minimum_size = Vector2(26, 26)
+	remove.position = Vector2(96, 6)
+	remove.visible = false
+	remove.mouse_filter = Control.MOUSE_FILTER_STOP
+	remove.add_theme_font_size_override("font_size", 18)
+	remove.add_theme_color_override("font_color", Color(1.0, 0.82, 0.7))
+	for state in ["normal", "hover", "pressed", "focus"]:
+		var box := StyleBoxFlat.new()
+		box.bg_color = Color(0.18, 0.07, 0.06, 0.86) if state != "hover" else Color(0.55, 0.18, 0.13, 0.96)
+		box.border_color = Color(1.0, 0.42, 0.32, 0.75)
+		box.set_border_width_all(1)
+		box.set_corner_radius_all(999)
+		remove.add_theme_stylebox_override(state, box)
+	remove.pressed.connect(_on_remove_slot_pressed.bind(slot))
+	slot.add_child(remove)
+	_slot_remove_buttons[slot.slot_id] = remove
+
+
+func _on_remove_slot_pressed(slot: Button) -> void:
+	if _shelter == null:
+		return
+	if _shelter.remove_from_slot(slot.slot_id):
+		_play_ui(&"ui_click")
+		_play_slot_feedback(slot, Color(0.75, 0.75, 0.7))
+		_refresh_inventory()
+
+
+func _build_inventory_panel() -> void:
+	_inventory_panel = PanelContainer.new()
+	_inventory_panel.visible = false
+	_inventory_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	_inventory_panel.custom_minimum_size = Vector2(620, 390)
+	_inventory_panel.position = Vector2(-310, -195)
+	MenuTheme.style_panel(_inventory_panel, MenuTheme.CYAN, Color(0.06, 0.055, 0.05, 0.96))
+	add_child(_inventory_panel)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 10)
+	_inventory_panel.add_child(col)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	col.add_child(head)
+	var title := MenuTheme.make_title("Inventario", 24, MenuTheme.CYAN)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
+	var close_btn := _small_icon_button("×", "Cerrar")
+	close_btn.custom_minimum_size = Vector2(38, 34)
+	close_btn.pressed.connect(func() -> void: _inventory_panel.visible = false)
+	head.add_child(close_btn)
+
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(scroll)
+	_inventory_grid = GridContainer.new()
+	_inventory_grid.columns = 3
+	_inventory_grid.add_theme_constant_override("h_separation", 10)
+	_inventory_grid.add_theme_constant_override("v_separation", 10)
+	scroll.add_child(_inventory_grid)
+
+
+func _refresh_inventory() -> void:
+	if _inventory_grid == null or _shelter == null:
+		return
+	for child in _inventory_grid.get_children():
+		child.queue_free()
+	var any: bool = false
+	for item in _shelter.get_items():
+		if not _shelter.is_purchased(item.id) or _shelter.is_placed(item.id):
+			continue
+		any = true
+		_inventory_grid.add_child(_make_inventory_item(item))
+	if not any:
+		var empty := Label.new()
+		empty.text = "Sin objetos libres"
+		empty.add_theme_font_size_override("font_size", 18)
+		empty.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
+		_inventory_grid.add_child(empty)
+
+
+func _make_inventory_item(item) -> Control:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(185, 98)
+	MenuTheme.style_panel(panel, item.accent_color, Color(0.10, 0.09, 0.08, 0.94))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	panel.add_child(row)
+	var swatch := ColorRect.new()
+	swatch.color = item.visual_color
+	swatch.custom_minimum_size = Vector2(34, 56)
+	swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(swatch)
+	var text_col := VBoxContainer.new()
+	text_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(text_col)
+	var name := Label.new()
+	name.text = item.display_name
+	name.clip_text = true
+	name.add_theme_font_size_override("font_size", 13)
+	name.add_theme_color_override("font_color", MenuTheme.TEXT)
+	text_col.add_child(name)
+	var level := Label.new()
+	level.text = "Nv. %d" % _shelter.get_level(item.id)
+	level.add_theme_font_size_override("font_size", 12)
+	level.add_theme_color_override("font_color", item.accent_color)
+	text_col.add_child(level)
+	var place := _small_icon_button("+", "Colocar")
+	place.custom_minimum_size = Vector2(34, 34)
+	place.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	place.pressed.connect(func() -> void: _start_placement(item.id))
+	row.add_child(place)
+	return panel
+
+
+func _small_icon_button(text: String, tooltip: String) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.tooltip_text = tooltip
+	button.add_theme_font_size_override("font_size", 18)
+	button.add_theme_color_override("font_color", Color(1, 1, 1))
+	for state in ["normal", "hover", "pressed", "focus"]:
+		var box := StyleBoxFlat.new()
+		box.bg_color = Color(0.09, 0.10, 0.11, 0.92) if state != "hover" else Color(0.18, 0.25, 0.27, 0.96)
+		box.border_color = Color(0.45, 0.85, 1.0, 0.65)
+		box.set_border_width_all(1)
+		box.set_corner_radius_all(999)
+		button.add_theme_stylebox_override(state, box)
+	return button
 
 
 # --- Colocacion ------------------------------------------------------------------
@@ -240,8 +394,11 @@ func _open_shop() -> void:
 func _start_placement(item_id: StringName) -> void:
 	_placing_item_id = item_id
 	_shop_panel.visible = false
+	if _inventory_panel != null:
+		_inventory_panel.visible = false
 	var item = _shelter.get_item(item_id)
-	_placing_hint.text = "Elige un slot para %s  ·  ESC cancela" % (item.display_name if item != null else "el objeto")
+	_placing_hint.text = "Elige un slot verde"
+	_placing_hint.tooltip_text = item.display_name if item != null else ""
 	_placing_hint.visible = true
 	for slot in _slots:
 		var free: bool = _shelter.get_item_in_slot(slot.slot_id) == &""
@@ -269,13 +426,9 @@ func _on_slot_pressed(slot: Button) -> void:
 		return
 	var occupied: StringName = _shelter.get_item_in_slot(slot.slot_id)
 	if occupied != &"":
-		# Slot ocupado: quitar el objeto (vuelve al almacen, deja de dar bonus).
-		_shelter.remove_from_slot(slot.slot_id)
-		_play_ui(&"ui_click")
-		_play_slot_feedback(slot, Color(0.75, 0.75, 0.7))
+		_play_slot_feedback(slot, Color(0.75, 0.9, 1.0))
 	else:
-		# Slot vacio: abrir la tienda para elegir que comprar/colocar.
-		_open_shop()
+		_open_inventory()
 
 
 # --- Refresco ----------------------------------------------------------------------
@@ -285,6 +438,11 @@ func _refresh_all() -> void:
 	_refresh_bonuses()
 	for slot in _slots:
 		slot.refresh()
+		var remove := _slot_remove_buttons.get(slot.slot_id) as Button
+		if remove != null:
+			remove.visible = _shelter != null and _shelter.get_item_in_slot(slot.slot_id) != &""
+	if _inventory_panel != null and _inventory_panel.visible:
+		_refresh_inventory()
 
 
 func _refresh_chips() -> void:
@@ -296,19 +454,32 @@ func _refresh_bonuses() -> void:
 		child.queue_free()
 	var bonuses: Dictionary = _shelter.get_bonuses() if _shelter != null else {}
 	var any: bool = false
+	var shown: int = 0
+	var total: int = 0
 	for key in bonuses:
 		var line: String = ShelterBonusCalculator.format_key(str(key), float(bonuses[key]))
 		if line == "":
 			continue
 		any = true
+		total += 1
+		if shown >= 6:
+			continue
+		shown += 1
 		var label := Label.new()
 		label.text = "• %s" % line
 		label.add_theme_font_size_override("font_size", 14)
 		label.add_theme_color_override("font_color", MenuTheme.TEXT)
 		_bonus_list.add_child(label)
+	var hidden: int = max(0, total - shown)
+	if hidden > 0:
+		var more := Label.new()
+		more.text = "+%d" % hidden
+		more.add_theme_font_size_override("font_size", 13)
+		more.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
+		_bonus_list.add_child(more)
 	if not any:
 		var empty := Label.new()
-		empty.text = "Sin bonificaciones.\nCompra y coloca objetos."
+		empty.text = "—"
 		empty.add_theme_font_size_override("font_size", 13)
 		empty.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
 		_bonus_list.add_child(empty)
@@ -335,7 +506,7 @@ func _show_tutorial() -> void:
 	panel.add_child(col)
 	col.add_child(MenuTheme.make_title("Bienvenida al Refugio", 24, MenuTheme.ACCENT))
 	var body := Label.new()
-	body.text = "Compra objetos para fortalecer tu colonia. Solo los objetos colocados en el refugio otorgan bonificaciones."
+	body.text = "Compra. Coloca. Solo lo equipado da bonus."
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.add_theme_font_size_override("font_size", 16)
 	body.add_theme_color_override("font_color", MenuTheme.TEXT)

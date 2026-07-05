@@ -23,6 +23,7 @@ const UI_REAL_STREAMS: Dictionary = {
 
 var _sfx: Dictionary = {}
 var _music: Dictionary = {}
+var _music_gain_db: Dictionary = {}
 var _cooldowns_ms: Dictionary = {}
 var _limits: Dictionary = {}
 var _last_played: Dictionary = {}
@@ -37,6 +38,26 @@ func _ready() -> void:
 	_ensure_buses()
 	_build_streams()
 	_build_players()
+
+
+func _exit_tree() -> void:
+	shutdown()
+
+
+func shutdown() -> void:
+	for player in _sfx_pool:
+		if is_instance_valid(player):
+			player.stop()
+			player.stream = null
+	if is_instance_valid(_music_player):
+		_music_player.stop()
+		_music_player.stream = null
+	_sfx.clear()
+	_music.clear()
+	_music_gain_db.clear()
+	_cooldowns_ms.clear()
+	_limits.clear()
+	_last_played.clear()
 
 
 func play_sfx(name: StringName) -> void:
@@ -57,6 +78,7 @@ func play_music(name: StringName) -> void:
 	_current_music = name
 	_music_player.stop()
 	_music_player.stream = _music[name]
+	_music_player.volume_db = float(_music_gain_db.get(name, 0.0))
 	_music_player.play()
 
 
@@ -64,6 +86,8 @@ func stop_music() -> void:
 	_current_music = &""
 	if is_instance_valid(_music_player):
 		_music_player.stop()
+		_music_player.stream = null
+		_music_player.volume_db = 0.0
 
 
 func reset_for_scene_change() -> void:
@@ -72,6 +96,8 @@ func reset_for_scene_change() -> void:
 			player.stop()
 	if is_instance_valid(_music_player):
 		_music_player.stop()
+		_music_player.stream = null
+		_music_player.volume_db = 0.0
 	_current_music = &""
 	_last_played.clear()
 
@@ -208,6 +234,7 @@ func _build_streams() -> void:
 	_music[&"gameplay"] = _make_music_loop([392.0, 440.0, 493.88, 329.63], 0.08, 0.060)
 	_music[&"boss"] = _make_music_loop([196.0, 220.0, 246.94, 174.61], 0.12, 0.075)
 	_music[&"shelter"] = _make_shelter_loop()
+	_music_gain_db[&"shelter"] = 5.0
 
 
 func _add_tone(name: StringName, freq: float, duration: float, volume: float, shape: String, cooldown_ms: int, limit: int) -> void:
@@ -310,20 +337,36 @@ func _make_music_loop(notes: Array, volume: float, bass_volume: float) -> AudioS
 
 
 func _make_shelter_loop() -> AudioStreamWAV:
-	var seconds: float = 10.0
+	var seconds: float = 16.0
 	var frames: int = int(seconds * MIX_RATE)
 	var bytes := PackedByteArray()
 	bytes.resize(frames * 2)
 	for i in frames:
 		var t: float = float(i) / float(MIX_RATE)
-		var pad: float = sin(TAU * 220.0 * t) * 0.020 + sin(TAU * 329.63 * t) * 0.014
-		var purr_gate: float = 0.5 + 0.5 * sin(TAU * 25.0 * t)
-		var purr: float = sin(TAU * 47.0 * t + sin(TAU * 5.0 * t) * 0.35) * 0.030 * purr_gate
-		var tiny_bell: float = 0.0
-		if fmod(t, 2.5) < 0.08:
-			tiny_bell = sin(TAU * 880.0 * t) * 0.012 * (1.0 - fmod(t, 2.5) / 0.08)
-		var fade: float = min(1.0, min(t / 0.25, (seconds - t) / 0.25))
-		var value: int = int(clampf((pad + purr + tiny_bell) * fade, -1.0, 1.0) * 32767.0)
+		var phrase_pos: float = fmod(t, 8.0)
+		var bar_pos: float = fmod(t, 2.0)
+		var chord_index: int = int(floor(t / 4.0)) % 4
+		var root: float = [146.875, 164.875, 196.0, 174.125][chord_index]
+		var pad_lfo: float = 0.76 + 0.24 * sin(TAU * 0.125 * t)
+		var pad: float = (
+			sin(TAU * root * t) * 0.046 +
+			sin(TAU * root * 1.5 * t) * 0.028 +
+			sin(TAU * root * 2.0 * t) * 0.018
+		) * pad_lfo
+		var purr_gate: float = 0.55 + 0.45 * sin(TAU * 24.0 * t)
+		var purr: float = sin(TAU * 48.0 * t + sin(TAU * 4.0 * t) * 0.25) * 0.055 * purr_gate
+		var tick: float = 0.0
+		if bar_pos < 0.07:
+			tick = sin(TAU * 784.0 * t) * 0.032 * (1.0 - bar_pos / 0.07)
+		elif fmod(bar_pos, 0.5) < 0.035:
+			var local: float = fmod(bar_pos, 0.5)
+			tick = sin(TAU * (392.0 + 98.0 * float(chord_index)) * t) * 0.018 * (1.0 - local / 0.035)
+		var warmth: float = sin(TAU * 73.5 * t) * 0.018 * (0.5 + 0.5 * sin(TAU * 0.25 * phrase_pos))
+		var soft_bell: float = 0.0
+		if fmod(phrase_pos + 0.25, 2.0) < 0.09:
+			var bell_pos: float = fmod(phrase_pos + 0.25, 2.0)
+			soft_bell = sin(TAU * root * 3.0 * t) * 0.020 * (1.0 - bell_pos / 0.09)
+		var value: int = int(clampf((pad + purr + tick + warmth + soft_bell) * 1.12, -1.0, 1.0) * 32767.0)
 		bytes.encode_s16(i * 2, value)
 	var stream := _wav(bytes, true)
 	stream.loop_begin = 0
