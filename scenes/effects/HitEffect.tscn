@@ -1,0 +1,36 @@
+[gd_scene load_steps=2 format=3 uid="uid://bvc01hitfx01"]
+
+[ext_resource type="Script" path="res://scripts/effects/hit_effect.gd" id="1_hit"]
+
+[node name="HitEffect" type="Node2D"]
+script = ExtResource("1_hit")
+
+[node name="Flash" type="Polygon2D" parent="."]
+color = Color(1, 1, 1, 0.85)
+polygon = PackedVector2Array(0, -7, 5, -5, 7, 0, 5, 5, 0, 7, -5, 5, -7, 0, -5, -5)
+
+[node name="Ring" type="Polygon2D" parent="."]
+color = Color(1, 1, 1, 0.9)
+polygon = PackedVector2Array(0, -16, 4, -5, 15, -5, 6, 2, 10, 14, 0, 7, -10, 14, -6, 2, -15, -5, -4, -5)
+
+[node name="Sparks" type="Node2D" parent="."]
+
+[node name="S1" type="Polygon2D" parent="Sparks"]
+color = Color(1, 1, 1, 0.9)
+polygon = PackedVector2Array(0, -3.5, 2.2, 0, 0, 3.5, -2.2, 0)
+
+[node name="S2" type="Polygon2D" parent="Sparks"]
+color = Color(1, 1, 1, 0.9)
+polygon = PackedVector2Array(0, -3, 2, 0, 0, 3, -2, 0)
+
+[node name="S3" type="Polygon2D" parent="Sparks"]
+color = Color(1, 1, 1, 0.9)
+polygon = PackedVector2Array(0, -3.5, 2.2, 0, 0, 3.5, -2.2, 0)
+
+[node name="S4" type="Polygon2D" parent="Sparks"]
+color = Color(1, 1, 1, 0.9)
+polygon = PackedVector2Array(0, -2.6, 1.8, 0, 0, 2.6, -1.8, 0)
+
+[node name="S5" type="Polygon2D" parent="Sparks"]
+color = Color(1, 1, 1, 0.9)
+polygon = PackedVector2Array(0, -3, 2, 0, 0, 3, -2, 0)

@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="ChapterData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/story/chapter_data.gd" id="1_chdata"]
+[ext_resource type="Resource" path="res://data/maps/story/neighborhood_dark_map.tres" id="2_map"]
+
+[resource]
+script = ExtResource("1_chdata")
+id = &"ch4"
+number = 4
+title = "Barrio en Tinieblas"
+tagline = "La plaga vuelve al lugar donde todo empezo."
+map = ExtResource("2_map")
+cinematic_panels = Array[Dictionary]([{
+"body": "La ciudad se apaga. Una tormenta cubre la luna y la plaga vuelve, mas rabiosa, al barrio que la vio nacer.",
+"kind": &"storm",
+"title": "La segunda ola"
+}, {
+"body": "Las farolas mueren una a una. El barrio que la colonia aseguro ya no reconoce a sus gatos.",
+"kind": &"city",
+"title": "Sin luces"
+}, {
+"body": "Esta vez no vienen a probar. Vienen todos, y vienen a la vez.",
+"kind": &"dogs",
+"title": "Mas rapidos, mas hambrientos"
+}, {
+"body": "La gata se planta en medio de la calle a oscuras. Que vengan: cada tejado a su espalda es una razon para no ceder.",
+"kind": &"hero",
+"title": "Resistir el asedio"
+}])
+first_clear_reward = 170
+accent_color = Color(0.62, 0.4, 0.9, 1)

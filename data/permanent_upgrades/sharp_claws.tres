@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="PermanentUpgradeData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/meta/permanent_upgrade_data.gd" id="1_pud"]
+
+[resource]
+script = ExtResource("1_pud")
+id = &"sharp_claws"
+display_name = "Garras Afiladas"
+description = "+3% daño inicial del jugador por nivel."
+max_level = 10
+base_cost = 40
+cost_growth = 1.35
+effect_type = &"player_damage_pct"
+effect_value_per_level = 0.03
+icon_color = Color(1, 0.5, 0.45, 1)
+category = &"ataque"

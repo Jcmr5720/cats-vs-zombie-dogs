@@ -1,0 +1,55 @@
+[gd_resource type="Resource" script_class="MapData" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/maps/map_data.gd" id="1_mdata"]
+[ext_resource type="Resource" path="res://data/obstacles/pk_tree.tres" id="2_tree"]
+[ext_resource type="Resource" path="res://data/obstacles/pk_bench.tres" id="3_bench"]
+[ext_resource type="Resource" path="res://data/obstacles/pk_rock.tres" id="4_rock"]
+[ext_resource type="Resource" path="res://data/obstacles/pk_bush.tres" id="5_bush"]
+[ext_resource type="Resource" path="res://data/obstacles/pk_fence.tres" id="6_fence"]
+
+[resource]
+script = ExtResource("1_mdata")
+id = &"park"
+display_name = "Parque Abandonado"
+description = "Zona abierta y verde con senderos y pasto descuidado."
+background_color = Color(0.09, 0.14, 0.1, 1)
+secondary_color = Color(0.06, 0.11, 0.075, 1)
+grid_color = Color(0.17, 0.26, 0.18, 1)
+accent_color = Color(0.55, 0.9, 0.42, 1)
+hazard_color = Color(0.62, 0.95, 0.32, 1)
+decoration_accent_color = Color(0.38, 0.72, 0.34, 1)
+biome = &"park"
+pattern_type = &"park_paths"
+pattern_strength = 0.62
+decoration_density = 0.5
+decoration_scale_min = 0.75
+decoration_scale_max = 1.45
+ambient_detail_count = 4
+road_line_enabled = false
+hazard_line_enabled = false
+difficulty_modifier = 1.1
+runner_probability_modifier = 1.25
+enemy_health_modifier = 1.0
+enemy_speed_modifier = 1.05
+rescue_spawn_modifier = 0.8
+rescue_distance_bonus = 0.0
+obstacle_types = [ExtResource("2_tree"), ExtResource("3_bench"), ExtResource("4_rock"), ExtResource("5_bush"), ExtResource("6_fence")]
+obstacle_density = 0.5
+max_obstacles = 36
+min_obstacle_distance = 160.0
+safe_radius_around_player = 300.0
+safe_radius_around_rescue = 160.0
+obstacle_field_radius = 1700.0
+allow_large_blocks = false
+road_layout_type = &"none"
+road_half_width = 150.0
+boss_spawn_time = 720.0
+miniboss_times = PackedFloat32Array(150, 360)
+duration_seconds = 720.0
+survive_seconds = 720.0
+require_defeat_boss = false
+rescue_cats_required = 2
+defeat_minibosses_required = 0
+objective_description = "Rescata 2 gatos y sobrevive"
+victory_message = "Parque recuperado"
+game_over_message = "El parque cayo"

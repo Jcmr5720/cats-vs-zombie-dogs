@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://sheltershop001"]
+
+[ext_resource type="Script" path="res://scripts/shelter/shelter_shop_panel.gd" id="1_shop"]
+
+[node name="ShelterShopPanel" type="PanelContainer"]
+custom_minimum_size = Vector2(760, 470)
+script = ExtResource("1_shop")

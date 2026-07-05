@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ShelterItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/shelter/shelter_item_data.gd" id="1_sidata"]
+
+[resource]
+script = ExtResource("1_sidata")
+id = &"combat_scratcher"
+display_name = "Rascador de Combate"
+description = "La gata afila sus garras cada manana: +3% de daño inicial por nivel."
+category = &"entrenamiento"
+price = 80
+max_level = 5
+upgrade_base_cost = 50
+upgrade_cost_growth = 1.5
+effect_type = &"player_damage_pct"
+effect_value_per_level = 0.03
+visual_color = Color(0.55, 0.4, 0.28, 1)
+accent_color = Color(1.0, 0.6, 0.2, 1)
+size = Vector2(46, 58)
+sort_order = 0

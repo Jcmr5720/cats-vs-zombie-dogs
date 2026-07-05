@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="PermanentUpgradeData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/meta/permanent_upgrade_data.gd" id="1_pudata"]
+
+[resource]
+script = ExtResource("1_pudata")
+id = &"corazon_de_leon"
+display_name = "Corazon de Leon"
+description = "La colonia lucha como su heroina: +5% de daño de los compañeros por nivel."
+max_level = 6
+base_cost = 120
+cost_growth = 1.5
+effect_type = &"companion_damage_pct"
+effect_value_per_level = 0.05
+icon_color = Color(1, 0.75, 0.3, 1)
+category = &"colonia"
+unlock_story_chapter = 6

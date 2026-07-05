@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="BossData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/bosses/boss_data.gd" id="1_bdata"]
+
+[resource]
+script = ExtResource("1_bdata")
+id = &"alpha_prime"
+display_name = "Alfa Primigenio"
+boss_type = &"boss"
+max_health = 2600
+move_speed = 74.0
+contact_damage = 20
+attack_damage = 42
+attack_cooldown = 3.8
+attack_range = 1100.0
+knockback = 360.0
+xp_reward = 320
+visual_color = Color(0.22, 0.08, 0.12, 1)
+accent_color = Color(0.5, 1, 0.45, 1)
+visual_scale = 1.25
+phase_thresholds = PackedFloat32Array(0.7, 0.45, 0.2)
+spawn_time = 780.0
+difficulty_multiplier = 0.08

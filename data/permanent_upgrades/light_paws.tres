@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="PermanentUpgradeData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/meta/permanent_upgrade_data.gd" id="1_pud"]
+
+[resource]
+script = ExtResource("1_pud")
+id = &"light_paws"
+display_name = "Patas Ligeras"
+description = "+2% velocidad inicial del jugador por nivel."
+max_level = 8
+base_cost = 35
+cost_growth = 1.35
+effect_type = &"player_speed_pct"
+effect_value_per_level = 0.02
+icon_color = Color(0.55, 0.85, 1, 1)
+category = &"utilidad"

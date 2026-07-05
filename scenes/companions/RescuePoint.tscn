@@ -1,0 +1,75 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/companions/rescue_point.gd" id="1_rescue"]
+
+[sub_resource type="CircleShape2D" id="1"]
+radius = 38.0
+
+[node name="RescuePoint" type="Node2D"]
+script = ExtResource("1_rescue")
+
+[node name="Visual" type="Node2D" parent="."]
+
+[node name="Glow" type="Polygon2D" parent="Visual"]
+color = Color(0.86, 0.9, 1, 0.35)
+polygon = PackedVector2Array(-44, -16, -24, -44, 24, -44, 44, -16, 44, 16, 24, 44, -24, 44, -44, 16)
+
+[node name="PulseRing" type="Polygon2D" parent="Visual"]
+color = Color(1, 0.9, 0.58, 0.32)
+polygon = PackedVector2Array(-52, -8, -28, -36, 28, -36, 52, -8, 52, 8, 28, 36, -28, 36, -52, 8)
+
+[node name="Crate" type="Polygon2D" parent="Visual"]
+color = Color(0.24, 0.28, 0.35, 1)
+polygon = PackedVector2Array(-26, -18, 26, -18, 26, 20, -26, 20)
+
+[node name="Cat" type="Polygon2D" parent="Visual"]
+color = Color(0.95, 0.72, 0.42, 1)
+polygon = PackedVector2Array(-11, -8, -5, -16, 0, -9, 5, -16, 11, -8, 11, 7, 6, 12, -6, 12, -11, 7)
+
+[node name="Icon" type="Polygon2D" parent="Visual"]
+color = Color(0.3, 0.55, 0.9, 1)
+polygon = PackedVector2Array(0, -5, 4, -1, 9, -1, 5, 3, 7, 9, 0, 5, -7, 9, -5, 3, -9, -1, -4, -1)
+
+[node name="Area2D" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D"]
+shape = SubResource("1")
+
+[node name="FloatLabel" type="Label" parent="."]
+offset_left = -52.0
+offset_top = -74.0
+offset_right = 52.0
+offset_bottom = -52.0
+theme_override_font_sizes/font_size = 14
+horizontal_alignment = 1
+text = "Rescate!"
+
+[node name="NameLabel" type="Label" parent="."]
+offset_left = -80.0
+offset_top = -54.0
+offset_right = 80.0
+offset_bottom = -30.0
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 14
+text = "Gato sobreviviente"
+
+[node name="Prompt" type="Label" parent="."]
+visible = false
+offset_left = -60.0
+offset_top = 32.0
+offset_right = 60.0
+offset_bottom = 52.0
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 13
+text = "Rescatando..."
+
+[node name="ProgressBar" type="ProgressBar" parent="."]
+visible = false
+offset_left = -56.0
+offset_top = 54.0
+offset_right = 56.0
+offset_bottom = 70.0
+max_value = 100.0
+show_percentage = false

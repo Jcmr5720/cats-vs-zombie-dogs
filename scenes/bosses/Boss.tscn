@@ -1,0 +1,88 @@
+[gd_scene load_steps=3 format=3 uid="uid://bvc05boss01"]
+
+[ext_resource type="Script" path="res://scripts/bosses/boss.gd" id="1_boss"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_boss"]
+radius = 48.0
+
+[node name="Boss" type="CharacterBody2D"]
+collision_layer = 2
+collision_mask = 0
+script = ExtResource("1_boss")
+
+[node name="Aura" type="Polygon2D" parent="."]
+color = Color(1, 0.85, 0.25, 0.16)
+polygon = PackedVector2Array(95, 0, 82, 47, 47, 82, 0, 95, -47, 82, -82, 47, -95, 0, -82, -47, -47, -82, 0, -95, 47, -82, 82, -47)
+
+[node name="AuraInner" type="Polygon2D" parent="."]
+color = Color(1, 0.6, 0.15, 0.1)
+polygon = PackedVector2Array(64, 0, 55, 32, 32, 55, 0, 64, -32, 55, -55, 32, -64, 0, -55, -32, -32, -55, 0, -64, 32, -55, 55, -32)
+
+[node name="Shadow" type="Polygon2D" parent="."]
+position = Vector2(0, 38)
+color = Color(0, 0, 0, 0.28)
+polygon = PackedVector2Array(-64, -12, -32, -22, 40, -20, 80, -8, 76, 12, 34, 24, -44, 22, -80, 8)
+
+[node name="Visual" type="Node2D" parent="."]
+
+[node name="Tail" type="Polygon2D" parent="Visual"]
+color = Color(0.22, 0.13, 0.3, 1)
+polygon = PackedVector2Array(-48, -6, -82, -16, -82, 8, -48, 8)
+
+[node name="Legs" type="Polygon2D" parent="Visual"]
+color = Color(0.2, 0.12, 0.28, 1)
+polygon = PackedVector2Array(-44, 26, -34, 56, -18, 28, 6, 28, 16, 56, 30, 28, 44, 28, 44, 38, -44, 38)
+
+[node name="Body" type="Polygon2D" parent="Visual"]
+color = Color(0.32, 0.2, 0.42, 1)
+polygon = PackedVector2Array(-52, -32, -36, -40, 34, -40, 52, -30, 52, 30, 36, 40, -36, 40, -52, 30)
+
+[node name="BackSpikes" type="Polygon2D" parent="Visual"]
+color = Color(0.16, 0.09, 0.22, 1)
+polygon = PackedVector2Array(-42, -36, -30, -58, -18, -38, -6, -60, 8, -38, 22, -56, 34, -36)
+
+[node name="ChestScar" type="Polygon2D" parent="Visual"]
+color = Color(0.95, 0.35, 0.25, 0.75)
+polygon = PackedVector2Array(-10, -22, -1, -7, -7, -7, 6, 20, -4, 4, 2, 4)
+
+[node name="Ears" type="Polygon2D" parent="Visual"]
+color = Color(0.26, 0.16, 0.34, 1)
+polygon = PackedVector2Array(20, -34, 30, -64, 44, -36, 58, -36, 72, -64, 80, -32, 80, -26, 20, -26)
+
+[node name="Head" type="Polygon2D" parent="Visual"]
+color = Color(0.38, 0.25, 0.48, 1)
+polygon = PackedVector2Array(34, -34, 78, -28, 90, -10, 90, 14, 78, 30, 34, 34)
+
+[node name="Snout" type="Polygon2D" parent="Visual"]
+color = Color(0.26, 0.16, 0.34, 1)
+polygon = PackedVector2Array(86, -14, 112, -10, 112, 14, 86, 16)
+
+[node name="NoseGlow" type="Polygon2D" parent="Visual"]
+color = Color(1, 0.24, 0.18, 0.75)
+polygon = PackedVector2Array(104, -5, 116, -3, 116, 5, 104, 6)
+
+[node name="Fangs" type="Polygon2D" parent="Visual"]
+color = Color(0.95, 0.95, 0.86, 1)
+polygon = PackedVector2Array(92, 14, 98, 14, 95, 26, 102, 14, 108, 14, 105, 24)
+
+[node name="EyeLeft" type="Polygon2D" parent="Visual"]
+color = Color(1, 0.78, 0.2, 1)
+polygon = PackedVector2Array(56, -20, 72, -20, 72, -8, 56, -8)
+
+[node name="EyeRight" type="Polygon2D" parent="Visual"]
+color = Color(1, 0.78, 0.2, 1)
+polygon = PackedVector2Array(56, 6, 72, 6, 72, 18, 56, 18)
+
+[node name="EyeGlow" type="Polygon2D" parent="Visual"]
+color = Color(1, 0.65, 0.1, 0.26)
+polygon = PackedVector2Array(48, -26, 80, -26, 80, 24, 48, 24)
+
+[node name="Telegraph" type="Node2D" parent="."]
+visible = false
+
+[node name="Arrow" type="Polygon2D" parent="Telegraph"]
+color = Color(1, 0.4, 0.35, 0.65)
+polygon = PackedVector2Array(40, -14, 120, -14, 120, -28, 160, 0, 120, 28, 120, 14, 40, 14)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_boss")

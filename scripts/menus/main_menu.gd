@@ -1,0 +1,148 @@
+extends Control
+## Menu principal (Fase 08). Punto de entrada del juego. Navega a selector de mapas,
+## mejoras permanentes, estadisticas, opciones y salir, todo via el autoload GameFlow.
+## Fondo urbano nocturno dibujado por codigo (luna, silueta de gato, huellas).
+
+const MenuTheme = preload("res://scripts/menus/menu_theme.gd")
+
+var _anim_time: float = 0.0
+var _title_label: Label
+
+
+func _ready() -> void:
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_build_ui()
+	MenuTheme.add_fade_in(self)
+	var audio: Node = get_node_or_null("/root/AudioManager")
+	if audio != null and audio.has_method("play_music"):
+		audio.play_music(&"menu")
+
+
+func _process(delta: float) -> void:
+	_anim_time += delta
+	queue_redraw()
+	if _title_label != null:
+		_title_label.position.y = 70.0 + sin(_anim_time * 1.6) * 5.0
+
+
+func _build_ui() -> void:
+	_title_label = MenuTheme.make_title("Cats vs Zombie Dogs", 56, MenuTheme.ACCENT)
+	_title_label.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	_title_label.position = Vector2(0, 70)
+	# Contorno oscuro + sombra: el titulo se separa del fondo como logo.
+	_title_label.add_theme_color_override("font_outline_color", Color(0.16, 0.09, 0.03, 1.0))
+	_title_label.add_theme_constant_override("outline_size", 10)
+	_title_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
+	_title_label.add_theme_constant_override("shadow_offset_y", 5)
+	_title_label.add_theme_constant_override("shadow_offset_x", 0)
+	add_child(_title_label)
+
+	var subtitle := MenuTheme.make_title("Rescata la colonia.", 22, MenuTheme.CYAN)
+	subtitle.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	subtitle.position = Vector2(0, 138)
+	add_child(subtitle)
+
+	# Columna central simple: solo los botones del menu.
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(center)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 12)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	center.add_child(col)
+
+	var b_story := MenuTheme.make_button("Historia", MenuTheme.ACCENT)
+	b_story.pressed.connect(func() -> void: GameFlow.open_story())
+	col.add_child(b_story)
+	b_story.grab_focus.call_deferred()
+
+	var b_play := MenuTheme.make_button("Partida libre", MenuTheme.CYAN)
+	b_play.pressed.connect(func() -> void: GameFlow.open_map_select())
+	col.add_child(b_play)
+
+	var b_shelter := MenuTheme.make_button("Refugio", MenuTheme.PURPLE)
+	b_shelter.pressed.connect(func() -> void: GameFlow.open_shelter())
+	col.add_child(b_shelter)
+
+	var b_meta := MenuTheme.make_button("Mejoras", MenuTheme.ZOMBIE)
+	b_meta.pressed.connect(func() -> void: GameFlow.open_meta_progression())
+	col.add_child(b_meta)
+
+	var b_stats := MenuTheme.make_button("Progreso", MenuTheme.CYAN)
+	b_stats.pressed.connect(func() -> void: GameFlow.open_stats())
+	col.add_child(b_stats)
+
+	var b_options := MenuTheme.make_button("Opciones", MenuTheme.PURPLE)
+	b_options.pressed.connect(func() -> void: GameFlow.open_options())
+	col.add_child(b_options)
+
+	var b_quit := MenuTheme.make_button("Salir", Color(0.8, 0.4, 0.4))
+	b_quit.pressed.connect(func() -> void: GameFlow.quit_game())
+	col.add_child(b_quit)
+
+	b_play.grab_focus()
+
+
+## Fondo decorativo: degradado, luna, silueta de gato y huellas. Solo formas.
+func _draw() -> void:
+	var size: Vector2 = get_viewport_rect().size
+	# Degradado vertical simple por bandas.
+	var bands: int = 24
+	for i in bands:
+		var t: float = float(i) / float(bands - 1)
+		var col: Color = MenuTheme.BG_TOP.lerp(MenuTheme.BG_BOTTOM, t)
+		draw_rect(Rect2(0, size.y * t, size.x, size.y / bands + 1), col, true)
+
+	# Estrellas deterministas con parpadeo suave en la mitad superior del cielo.
+	for i in 44:
+		var sx: float = fposmod(sin(float(i) * 12.9898) * 43758.5453, 1.0) * size.x
+		var sy: float = fposmod(sin(float(i) * 78.233) * 12543.123, 1.0) * size.y * 0.55
+		var twinkle: float = 0.22 + 0.18 * sin(_anim_time * (1.0 + fposmod(float(i) * 0.37, 1.0)) + float(i))
+		var star_radius: float = 2.1 if i % 5 == 0 else 1.3
+		draw_circle(Vector2(sx, sy), star_radius, Color(0.82, 0.88, 1.0, maxf(0.06, twinkle)))
+
+	# Luna con leve halo.
+	var moon: Vector2 = Vector2(size.x * 0.82, size.y * 0.22)
+	draw_circle(moon, 80.0, Color(0.95, 0.95, 0.8, 0.10))
+	draw_circle(moon, 58.0, Color(0.95, 0.94, 0.78, 0.85))
+	draw_circle(moon + Vector2(18, -8), 50.0, MenuTheme.BG_TOP.lerp(MenuTheme.BG_BOTTOM, 0.2))
+
+	# Silueta de gato sentado (placeholder geometrico) abajo a la izquierda.
+	var base: Vector2 = Vector2(size.x * 0.16, size.y * 0.82)
+	var body := PackedVector2Array([
+		base + Vector2(-34, 0), base + Vector2(-30, -70), base + Vector2(-10, -88),
+		base + Vector2(10, -88), base + Vector2(30, -70), base + Vector2(34, 0),
+	])
+	draw_colored_polygon(body, Color(0.03, 0.03, 0.05, 1.0))
+	# Orejas.
+	draw_colored_polygon(PackedVector2Array([base + Vector2(-30, -78), base + Vector2(-22, -108), base + Vector2(-10, -84)]), Color(0.03, 0.03, 0.05, 1.0))
+	draw_colored_polygon(PackedVector2Array([base + Vector2(30, -78), base + Vector2(22, -108), base + Vector2(10, -84)]), Color(0.03, 0.03, 0.05, 1.0))
+	# Ojos brillantes (acento zombi).
+	draw_circle(base + Vector2(-12, -74), 4.0, MenuTheme.ZOMBIE)
+	draw_circle(base + Vector2(12, -74), 4.0, MenuTheme.ZOMBIE)
+	# Cola.
+	draw_line(base + Vector2(32, -6), base + Vector2(70, -30), Color(0.03, 0.03, 0.05, 1.0), 12.0)
+
+	# Huellas de gato cruzando (puntos suaves).
+	for i in 7:
+		var p: Vector2 = Vector2(size.x * (0.30 + i * 0.06), size.y * (0.9 - sin(i * 0.9 + _anim_time * 0.4) * 0.02))
+		var a: float = 0.10 + 0.05 * sin(_anim_time + i)
+		draw_circle(p, 6.0, Color(MenuTheme.ACCENT.r, MenuTheme.ACCENT.g, MenuTheme.ACCENT.b, a))
+		draw_circle(p + Vector2(7, -7), 3.0, Color(MenuTheme.ACCENT.r, MenuTheme.ACCENT.g, MenuTheme.ACCENT.b, a))
+		draw_circle(p + Vector2(0, -9), 3.0, Color(MenuTheme.ACCENT.r, MenuTheme.ACCENT.g, MenuTheme.ACCENT.b, a))
+		draw_circle(p + Vector2(-7, -7), 3.0, Color(MenuTheme.ACCENT.r, MenuTheme.ACCENT.g, MenuTheme.ACCENT.b, a))
+
+	# Skyline simple al fondo para que la pantalla no se sienta vacia.
+	var building_w: float = size.x / 11.0
+	for i in 11:
+		var h: float = size.y * (0.18 + 0.18 * abs(sin(float(i) * 0.8 + 0.4)))
+		var x: float = i * building_w
+		draw_rect(Rect2(x, size.y - h, building_w + 4.0, h), Color(0.05, 0.06, 0.08, 0.95), true)
+		for w in 4:
+			for row in 4:
+				if int(abs(sin(float(i * 3 + w * 7 + row) + _anim_time * 0.2)) * 10.0) % 3 == 0:
+					continue
+				var wx: float = x + 10.0 + w * 18.0
+				var wy: float = size.y - h + 12.0 + row * 22.0
+				draw_rect(Rect2(wx, wy, 8, 12), Color(1.0, 0.78, 0.34, 0.22), true)

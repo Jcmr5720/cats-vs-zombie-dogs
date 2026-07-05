@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="PermanentUpgradeData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/meta/permanent_upgrade_data.gd" id="1_pud"]
+
+[resource]
+script = ExtResource("1_pud")
+id = &"colony_call"
+display_name = "Llamado de la Colonia"
+description = "El primer rescate aparece 4s antes por nivel."
+max_level = 5
+base_cost = 55
+cost_growth = 1.4
+effect_type = &"first_rescue_seconds"
+effect_value_per_level = 4.0
+icon_color = Color(0.6, 1, 0.7, 1)
+category = &"colonia"

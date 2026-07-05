@@ -1,0 +1,198 @@
+[gd_scene load_steps=7 format=3 uid="uid://bvc01player01"]
+
+[ext_resource type="Script" path="res://scripts/player/player.gd" id="1_player"]
+[ext_resource type="Script" path="res://scripts/weapons/weapon_manager.gd" id="2_weapons"]
+[ext_resource type="Script" path="res://scripts/companions/rescue_arrow.gd" id="3_arrow"]
+[ext_resource type="Script" path="res://scripts/systems/camera_effects.gd" id="4_camfx"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_body"]
+radius = 16.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_pickup"]
+radius = 90.0
+
+[node name="Player" type="CharacterBody2D"]
+collision_layer = 1
+collision_mask = 0
+script = ExtResource("1_player")
+
+[node name="Visual" type="Node2D" parent="."]
+
+[node name="Shadow" type="Polygon2D" parent="Visual"]
+position = Vector2(0, 20)
+color = Color(0, 0, 0, 0.24)
+polygon = PackedVector2Array(-22, -4, -11, -8, 12, -8, 24, -3, 19, 5, 8, 8, -15, 7, -25, 3)
+
+[node name="Tail" type="Polygon2D" parent="Visual"]
+color = Color(0.9, 0.6, 0.32, 1)
+polygon = PackedVector2Array(-11, 8, -24, 0, -33, 3, -34, 9, -26, 13, -13, 15)
+
+[node name="TailTip" type="Polygon2D" parent="Visual/Tail"]
+color = Color(0.99, 0.92, 0.78, 1)
+polygon = PackedVector2Array(-34, 2, -27, 3, -30, 12, -34.5, 9)
+
+[node name="BodyOutline" type="Polygon2D" parent="Visual"]
+color = Color(0.34, 0.21, 0.11, 1)
+polygon = PackedVector2Array(-15.5, -3, -10, -8.5, 10, -8.5, 15.5, -3, 14.5, 17.5, 8, 22.5, -8, 22.5, -14.5, 17.5)
+
+[node name="HeadOutline" type="Polygon2D" parent="Visual"]
+color = Color(0.34, 0.21, 0.11, 1)
+polygon = PackedVector2Array(-16.5, -17, -10.5, -26.5, 10.5, -26.5, 16.5, -17, 15.5, -3, 9.5, 3.5, -9.5, 3.5, -15.5, -3)
+
+[node name="EarOutlineLeft" type="Polygon2D" parent="Visual"]
+color = Color(0.34, 0.21, 0.11, 1)
+polygon = PackedVector2Array(-16, -20, -4, -22, -12, -37)
+
+[node name="EarOutlineRight" type="Polygon2D" parent="Visual"]
+color = Color(0.34, 0.21, 0.11, 1)
+polygon = PackedVector2Array(16, -20, 4, -22, 12, -37)
+
+[node name="EarLeft" type="Polygon2D" parent="Visual"]
+color = Color(0.96, 0.68, 0.37, 1)
+polygon = PackedVector2Array(-14, -21, -6, -22.5, -11.5, -34)
+
+[node name="EarRight" type="Polygon2D" parent="Visual"]
+color = Color(0.96, 0.68, 0.37, 1)
+polygon = PackedVector2Array(14, -21, 6, -22.5, 11.5, -34)
+
+[node name="EarInnerLeft" type="Polygon2D" parent="Visual"]
+color = Color(0.97, 0.6, 0.62, 1)
+polygon = PackedVector2Array(-12.5, -23, -8, -23.5, -11, -31)
+
+[node name="EarInnerRight" type="Polygon2D" parent="Visual"]
+color = Color(0.97, 0.6, 0.62, 1)
+polygon = PackedVector2Array(12.5, -23, 8, -23.5, 11, -31)
+
+[node name="Body" type="Polygon2D" parent="Visual"]
+color = Color(0.96, 0.7, 0.38, 1)
+polygon = PackedVector2Array(-13, -2, -9, -6, 9, -6, 13, -2, 12, 16, 7, 20, -7, 20, -12, 16)
+
+[node name="BodyStripeBack1" type="Polygon2D" parent="Visual"]
+color = Color(0.84, 0.54, 0.26, 1)
+polygon = PackedVector2Array(-12.5, 5, -8.5, 4, -9, 8, -12.8, 9)
+
+[node name="BodyStripeBack2" type="Polygon2D" parent="Visual"]
+color = Color(0.84, 0.54, 0.26, 1)
+polygon = PackedVector2Array(12.5, 5, 8.5, 4, 9, 8, 12.8, 9)
+
+[node name="BodyStripeBack3" type="Polygon2D" parent="Visual"]
+color = Color(0.84, 0.54, 0.26, 1)
+polygon = PackedVector2Array(-12, 11, -8.5, 10.4, -9, 14, -12.3, 14.6)
+
+[node name="Belly" type="Polygon2D" parent="Visual"]
+color = Color(0.99, 0.93, 0.8, 1)
+polygon = PackedVector2Array(-7, 4, 0, 1, 7, 4, 7, 14, 0, 18, -7, 14)
+
+[node name="PawLeft" type="Polygon2D" parent="Visual"]
+color = Color(0.99, 0.93, 0.8, 1)
+polygon = PackedVector2Array(-7.5, 18, -3.5, 18, -3, 22, -8, 22)
+
+[node name="PawRight" type="Polygon2D" parent="Visual"]
+color = Color(0.99, 0.93, 0.8, 1)
+polygon = PackedVector2Array(3.5, 18, 7.5, 18, 8, 22, 3, 22)
+
+[node name="PawLineLeft" type="Polygon2D" parent="Visual"]
+color = Color(0.84, 0.6, 0.4, 0.8)
+polygon = PackedVector2Array(-5.9, 19.5, -5.1, 19.5, -5.1, 21.8, -5.9, 21.8)
+
+[node name="PawLineRight" type="Polygon2D" parent="Visual"]
+color = Color(0.84, 0.6, 0.4, 0.8)
+polygon = PackedVector2Array(5.1, 19.5, 5.9, 19.5, 5.9, 21.8, 5.1, 21.8)
+
+[node name="Head" type="Polygon2D" parent="Visual"]
+color = Color(0.98, 0.76, 0.44, 1)
+polygon = PackedVector2Array(-14, -16, -9, -24, 9, -24, 14, -16, 13, -4, 8, 1, -8, 1, -13, -4)
+
+[node name="HeadStripeLeft" type="Polygon2D" parent="Visual"]
+color = Color(0.84, 0.54, 0.26, 1)
+polygon = PackedVector2Array(-6.5, -24, -4, -24.3, -4.8, -18, -6.8, -18)
+
+[node name="HeadStripeMid" type="Polygon2D" parent="Visual"]
+color = Color(0.84, 0.54, 0.26, 1)
+polygon = PackedVector2Array(-1.3, -24.5, 1.3, -24.5, 0.8, -17, -0.8, -17)
+
+[node name="HeadStripeRight" type="Polygon2D" parent="Visual"]
+color = Color(0.84, 0.54, 0.26, 1)
+polygon = PackedVector2Array(4, -24.3, 6.5, -24, 6.8, -18, 4.8, -18)
+
+[node name="Collar" type="Polygon2D" parent="Visual"]
+color = Color(0.1, 0.46, 0.78, 1)
+polygon = PackedVector2Array(-10, -1, 10, -1, 9, 3, -9, 3)
+
+[node name="Scarf" type="Polygon2D" parent="Visual"]
+color = Color(0.2, 0.65, 0.95, 1)
+polygon = PackedVector2Array(-9, 0, 9, 0, 0, 10)
+
+[node name="Muzzle" type="Polygon2D" parent="Visual"]
+color = Color(0.99, 0.93, 0.8, 1)
+polygon = PackedVector2Array(-6, -8, 6, -8, 8, -4, 5, -1, -5, -1, -8, -4)
+
+[node name="EyeLeft" type="Polygon2D" parent="Visual"]
+position = Vector2(-6.5, -11)
+color = Color(0.12, 0.2, 0.15, 1)
+polygon = PackedVector2Array(-3.2, -3.6, 3.2, -3.6, 4.2, 0, 3.2, 3.6, -3.2, 3.6, -4.2, 0)
+
+[node name="Shine" type="Polygon2D" parent="Visual/EyeLeft"]
+color = Color(0.85, 0.97, 0.9, 0.9)
+polygon = PackedVector2Array(-2.6, -2.8, -0.6, -2.8, -0.6, -0.8, -2.6, -0.8)
+
+[node name="EyeRight" type="Polygon2D" parent="Visual"]
+position = Vector2(6.5, -11)
+color = Color(0.12, 0.2, 0.15, 1)
+polygon = PackedVector2Array(-3.2, -3.6, 3.2, -3.6, 4.2, 0, 3.2, 3.6, -3.2, 3.6, -4.2, 0)
+
+[node name="Shine" type="Polygon2D" parent="Visual/EyeRight"]
+color = Color(0.85, 0.97, 0.9, 0.9)
+polygon = PackedVector2Array(0.6, -2.8, 2.6, -2.8, 2.6, -0.8, 0.6, -0.8)
+
+[node name="Nose" type="Polygon2D" parent="Visual"]
+color = Color(0.96, 0.46, 0.5, 1)
+polygon = PackedVector2Array(-2.5, -7, 2.5, -7, 0, -3.5)
+
+[node name="WhiskersLeft" type="Polygon2D" parent="Visual"]
+color = Color(1, 1, 1, 0.5)
+polygon = PackedVector2Array(-13, -6, -24, -8, -24, -6.8, -13, -4.6)
+
+[node name="WhiskersLeftLow" type="Polygon2D" parent="Visual"]
+color = Color(1, 1, 1, 0.5)
+polygon = PackedVector2Array(-13, -3, -23, -2, -23, -0.8, -13, -1.6)
+
+[node name="WhiskersRight" type="Polygon2D" parent="Visual"]
+color = Color(1, 1, 1, 0.5)
+polygon = PackedVector2Array(13, -6, 24, -8, 24, -6.8, 13, -4.6)
+
+[node name="WhiskersRightLow" type="Polygon2D" parent="Visual"]
+color = Color(1, 1, 1, 0.5)
+polygon = PackedVector2Array(13, -3, 23, -2, 23, -0.8, 13, -1.6)
+
+[node name="FacingIndicator" type="Node2D" parent="."]
+
+[node name="Arrow" type="Polygon2D" parent="FacingIndicator"]
+color = Color(0.99, 0.95, 0.6, 0.9)
+polygon = PackedVector2Array(20, -4, 30, 0, 20, 4)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_body")
+
+[node name="PickupArea" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 8
+
+[node name="PickupShape" type="CollisionShape2D" parent="PickupArea"]
+shape = SubResource("CircleShape2D_pickup")
+
+[node name="WeaponManager" type="Node2D" parent="."]
+script = ExtResource("2_weapons")
+
+[node name="RescueArrow" type="Node2D" parent="."]
+script = ExtResource("3_arrow")
+
+[node name="Arrow" type="Polygon2D" parent="RescueArrow"]
+color = Color(0.7, 1, 0.85, 0.85)
+polygon = PackedVector2Array(14, -7, 26, 0, 14, 7, 18, 0)
+
+[node name="Camera2D" type="Camera2D" parent="."]
+process_mode = 3
+script = ExtResource("4_camfx")
+
+[connection signal="area_entered" from="PickupArea" to="." method="_on_pickup_area_area_entered"]

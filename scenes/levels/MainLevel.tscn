@@ -1,0 +1,129 @@
+[gd_scene load_steps=32 format=3 uid="uid://bvc01mainlevel01"]
+
+[ext_resource type="PackedScene" uid="uid://bvc01hud01" path="res://scenes/ui/HUD.tscn" id="1_hud"]
+[ext_resource type="PackedScene" uid="uid://bvc01player01" path="res://scenes/player/Player.tscn" id="2_player"]
+[ext_resource type="Script" path="res://scripts/enemies/enemy_spawner.gd" id="3_spawner"]
+[ext_resource type="PackedScene" uid="uid://bvc01enemy01" path="res://scenes/enemies/Enemy.tscn" id="4_enemy"]
+[ext_resource type="Script" path="res://scripts/systems/game_manager.gd" id="5_gm"]
+[ext_resource type="Script" path="res://scripts/systems/upgrade_manager.gd" id="6_upgrades"]
+[ext_resource type="Resource" path="res://data/enemies/normal_zombie_dog.tres" id="7_normal"]
+[ext_resource type="Resource" path="res://data/enemies/runner_zombie_dog.tres" id="8_runner"]
+[ext_resource type="Resource" path="res://data/enemies/tank_zombie_dog.tres" id="7b_tank"]
+[ext_resource type="Resource" path="res://data/enemies/pup_zombie_dog.tres" id="8b_pup"]
+[ext_resource type="Script" path="res://scripts/systems/background_grid.gd" id="9_grid"]
+[ext_resource type="Script" path="res://scripts/companions/companion_manager.gd" id="10_companion_manager"]
+[ext_resource type="PackedScene" path="res://scenes/companions/Companion.tscn" id="11_companion_scene"]
+[ext_resource type="Script" path="res://scripts/companions/rescue_spawner.gd" id="12_rescue_spawner"]
+[ext_resource type="PackedScene" path="res://scenes/companions/RescuePoint.tscn" id="13_rescue_point"]
+[ext_resource type="Resource" path="res://data/companions/police_cat.tres" id="14_police_cat"]
+[ext_resource type="Resource" path="res://data/companions/medic_cat.tres" id="15_medic_cat"]
+[ext_resource type="Resource" path="res://data/companions/engineer_cat.tres" id="16_engineer_cat"]
+[ext_resource type="PackedScene" uid="uid://bvc01projectile01" path="res://scenes/weapons/Projectile.tscn" id="17_projectile"]
+[ext_resource type="Script" path="res://scripts/bosses/boss_spawner.gd" id="18_boss_spawner"]
+[ext_resource type="Script" path="res://scripts/systems/wave_event_manager.gd" id="19_wave_events"]
+[ext_resource type="PackedScene" uid="uid://bvc05boss01" path="res://scenes/bosses/Boss.tscn" id="20_boss_scene"]
+[ext_resource type="PackedScene" uid="uid://bvc05miniboss01" path="res://scenes/bosses/MiniBoss.tscn" id="21_miniboss_scene"]
+[ext_resource type="Resource" path="res://data/bosses/rottweiler_charger.tres" id="22_boss_data"]
+[ext_resource type="Resource" path="res://data/bosses/bulldog_brute.tres" id="23_miniboss_data"]
+[ext_resource type="Script" path="res://scripts/maps/map_manager.gd" id="24_map_manager"]
+[ext_resource type="PackedScene" path="res://scenes/maps/MapDecoration.tscn" id="25_map_decoration"]
+[ext_resource type="Resource" path="res://data/maps/neighborhood_map.tres" id="26_neighborhood"]
+[ext_resource type="Resource" path="res://data/maps/park_map.tres" id="27_park"]
+[ext_resource type="Resource" path="res://data/maps/industrial_alley_map.tres" id="28_industrial"]
+[ext_resource type="Script" path="res://scripts/maps/obstacle_spawner.gd" id="29_obst_spawner"]
+[ext_resource type="PackedScene" path="res://scenes/maps/Obstacle.tscn" id="30_obstacle"]
+
+[node name="MainLevel" type="Node2D"]
+
+[node name="Background" type="CanvasLayer" parent="."]
+layer = -1
+
+[node name="Color" type="ColorRect" parent="Background"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.12, 0.13, 0.17, 1)
+
+[node name="WorldGrid" type="Node2D" parent="."]
+z_index = -1
+script = ExtResource("9_grid")
+
+[node name="ObstacleSpawner" type="Node2D" parent="."]
+script = ExtResource("29_obst_spawner")
+obstacle_scene = ExtResource("30_obstacle")
+
+[node name="MapDecoration" parent="." instance=ExtResource("25_map_decoration")]
+z_index = -1
+
+[node name="HUD" parent="." instance=ExtResource("1_hud")]
+
+[node name="Player" parent="." instance=ExtResource("2_player")]
+
+[node name="CompanionManager" type="Node2D" parent="."]
+script = ExtResource("10_companion_manager")
+player_path = NodePath("../Player")
+hud_path = NodePath("../HUD")
+companion_scene = ExtResource("11_companion_scene")
+projectile_scene = ExtResource("17_projectile")
+
+[node name="RescueSpawner" type="Node2D" parent="."]
+script = ExtResource("12_rescue_spawner")
+player_path = NodePath("../Player")
+companion_manager_path = NodePath("../CompanionManager")
+hud_path = NodePath("../HUD")
+rescue_point_scene = ExtResource("13_rescue_point")
+companion_pool = [ExtResource("14_police_cat"), ExtResource("15_medic_cat"), ExtResource("16_engineer_cat")]
+
+[node name="EnemySpawner" type="Node2D" parent="."]
+script = ExtResource("3_spawner")
+enemy_scene = ExtResource("4_enemy")
+enemy_types = [ExtResource("7_normal"), ExtResource("8_runner"), ExtResource("7b_tank"), ExtResource("8b_pup")]
+
+[node name="BossSpawner" type="Node2D" parent="."]
+script = ExtResource("18_boss_spawner")
+boss_scene = ExtResource("20_boss_scene")
+miniboss_scene = ExtResource("21_miniboss_scene")
+player_path = NodePath("../Player")
+hud_path = NodePath("../HUD")
+enemy_spawner_path = NodePath("../EnemySpawner")
+default_boss_data = ExtResource("22_boss_data")
+default_miniboss_data = ExtResource("23_miniboss_data")
+
+[node name="WaveEventManager" type="Node" parent="."]
+script = ExtResource("19_wave_events")
+hud_path = NodePath("../HUD")
+enemy_spawner_path = NodePath("../EnemySpawner")
+boss_spawner_path = NodePath("../BossSpawner")
+
+[node name="MapManager" type="Node" parent="."]
+script = ExtResource("24_map_manager")
+current_map_data = ExtResource("26_neighborhood")
+map_pool = [ExtResource("26_neighborhood"), ExtResource("27_park"), ExtResource("28_industrial")]
+background_grid_path = NodePath("../WorldGrid")
+decoration_path = NodePath("../MapDecoration")
+hud_path = NodePath("../HUD")
+player_path = NodePath("../Player")
+enemy_spawner_path = NodePath("../EnemySpawner")
+rescue_spawner_path = NodePath("../RescueSpawner")
+wave_event_manager_path = NodePath("../WaveEventManager")
+boss_spawner_path = NodePath("../BossSpawner")
+companion_manager_path = NodePath("../CompanionManager")
+obstacle_spawner_path = NodePath("../ObstacleSpawner")
+
+[node name="GameManager" type="Node" parent="."]
+script = ExtResource("5_gm")
+player_path = NodePath("../Player")
+hud_path = NodePath("../HUD")
+
+[node name="UpgradeManager" type="Node" parent="."]
+script = ExtResource("6_upgrades")
+player_path = NodePath("../Player")
+hud_path = NodePath("../HUD")
+
+[connection signal="health_changed" from="Player" to="HUD" method="on_health_changed"]
+[connection signal="damaged" from="Player" to="HUD" method="on_player_damaged"]
+[connection signal="experience_changed" from="Player" to="HUD" method="on_experience_changed"]
+[connection signal="level_changed" from="Player" to="HUD" method="on_level_changed"]
+[connection signal="stats_updated" from="EnemySpawner" to="HUD" method="on_stats_updated"]

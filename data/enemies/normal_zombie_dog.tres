@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemies/enemy_data.gd" id="1_enemy_data"]
+
+[resource]
+script = ExtResource("1_enemy_data")
+id = &"zombie_dog"
+display_name = "Zombie Dog"
+max_health = 20
+speed = 90.0
+contact_damage = 10
+xp_value = 3
+spawn_weight = 0.75
+weight_growth = 0.0
+body_color = Color(0.36, 0.56, 0.32, 1)
+accent_color = Color(0.23, 0.37, 0.2, 1)
+eye_color = Color(0.96, 0.86, 0.2, 1)
+visual_scale = Vector2(1.08, 1.02)

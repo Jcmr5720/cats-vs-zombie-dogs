@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ShelterItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/shelter/shelter_item_data.gd" id="1_sidata"]
+
+[resource]
+script = ExtResource("1_sidata")
+id = &"agility_treadmill"
+display_name = "Cinta de Agilidad"
+description = "Carreras al amanecer: +2% de velocidad inicial por nivel."
+category = &"entrenamiento"
+price = 70
+max_level = 5
+upgrade_base_cost = 45
+upgrade_cost_growth = 1.5
+effect_type = &"player_speed_pct"
+effect_value_per_level = 0.02
+visual_color = Color(0.3, 0.35, 0.45, 1)
+accent_color = Color(0.45, 0.85, 1.0, 1)
+size = Vector2(60, 36)
+sort_order = 1

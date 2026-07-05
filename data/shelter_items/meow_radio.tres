@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="ShelterItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/shelter/shelter_item_data.gd" id="1_sidata"]
+
+[resource]
+script = ExtResource("1_sidata")
+id = &"meow_radio"
+display_name = "Radio de Maullidos"
+description = "Llamadas de auxilio mas claras: el primer rescate aparece 3 s antes por nivel (nunca antes del segundo 15)."
+category = &"rescate"
+price = 80
+max_level = 5
+upgrade_base_cost = 45
+upgrade_cost_growth = 1.5
+effect_type = &"rescue_first_seconds"
+effect_value_per_level = 3.0
+visual_color = Color(0.35, 0.3, 0.28, 1)
+accent_color = Color(0.45, 0.85, 1.0, 1)
+size = Vector2(42, 50)
+unlock_condition = &"chapter_3"
+sort_order = 9

@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1_wdata"]
+
+[resource]
+script = ExtResource("1_wdata")
+id = &"yarn_bomb"
+display_name = "Ovillo Explosivo"
+description = "Lanza un ovillo que explota en area al impactar."
+weapon_type = &"explosive"
+damage = 12
+cooldown = 1.4
+range = 480.0
+projectile_speed = 520.0
+projectile_count = 1
+spread_degrees = 0.0
+area_radius = 80.0
+knockback = 160.0
+visual_color = Color(1, 0.5, 0.45, 1)
+rarity = &"rare"
+rarity_weight = 0.5
+max_level = 5

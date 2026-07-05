@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="CompanionData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/companions/companion_data.gd" id="1_companion_data"]
+
+[resource]
+script = ExtResource("1_companion_data")
+id = &"medic_cat"
+display_name = "Gato Medico"
+role = &"medic"
+max_health = 50
+move_speed = 228.0
+follow_distance = 74.0
+attack_damage = 0
+attack_cooldown = 1.0
+attack_range = 180.0
+projectile_speed = 0.0
+heal_amount = 5
+heal_cooldown = 7.0
+passive_regen = 1
+passive_regen_interval = 2.0
+passive_regen_range = 230.0
+damage_reduction = 0.02
+revive_time = 1.5
+revive_health_percent = 0.4
+visual_color = Color(0.95, 0.97, 0.9, 1)
+accent_color = Color(0.22, 0.72, 0.45, 1)
+detail_color = Color(0.97, 1, 0.97, 1)
+projectile_color = Color(0.66, 1, 0.8, 1)
+spawn_weight = 0.95

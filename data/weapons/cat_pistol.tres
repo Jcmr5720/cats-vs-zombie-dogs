@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1_wdata"]
+
+[resource]
+script = ExtResource("1_wdata")
+id = &"cat_pistol"
+display_name = "Pistola Gatuna"
+description = "Dispara al enemigo mas cercano. Arma inicial."
+weapon_type = &"projectile"
+damage = 10
+cooldown = 0.55
+range = 500.0
+projectile_speed = 600.0
+projectile_count = 1
+spread_degrees = 12.0
+knockback = 130.0
+visual_color = Color(1, 0.95, 0.7, 1)
+rarity = &"common"
+rarity_weight = 1.0
+max_level = 5

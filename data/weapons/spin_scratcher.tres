@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1_wdata"]
+
+[resource]
+script = ExtResource("1_wdata")
+id = &"spin_scratcher"
+display_name = "Rascador Giratorio"
+description = "Garras que giran alrededor y danan al contacto."
+weapon_type = &"orbital"
+damage = 5
+cooldown = 0.4
+range = 120.0
+projectile_count = 1
+area_radius = 90.0
+tick_interval = 0.4
+knockback = 90.0
+visual_color = Color(0.8, 0.95, 1, 1)
+rarity = &"rare"
+rarity_weight = 0.5
+max_level = 5

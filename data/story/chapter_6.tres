@@ -1,0 +1,48 @@
+[gd_resource type="Resource" script_class="ChapterData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/story/chapter_data.gd" id="1_chdata"]
+[ext_resource type="Resource" path="res://data/maps/story/factory_map.tres" id="2_map"]
+
+[resource]
+script = ExtResource("1_chdata")
+id = &"ch6"
+number = 6
+title = "La Fabrica"
+tagline = "Donde nacio la plaga, terminara."
+map = ExtResource("2_map")
+cinematic_panels = Array[Dictionary]([{
+"body": "Todos los rastros llevan al mismo sitio: la vieja fabrica, todavia caliente, todavia respirando.",
+"kind": &"factory",
+"title": "El origen"
+}, {
+"body": "Dentro espera el primero de todos. El perro que la plaga hizo suyo antes que a ningun otro.",
+"kind": &"storm",
+"title": "El Alfa Primigenio"
+}, {
+"body": "Esta vez no va sola. En cada tejado, en cada valla, la colonia entera contiene el aliento.",
+"kind": &"cats",
+"title": "La colonia entera"
+}, {
+"body": "Una gata contra el origen del fin del mundo. Suena justo.",
+"kind": &"hero",
+"title": "La ultima noche"
+}])
+ending_panels = Array[Dictionary]([{
+"body": "El Alfa cae y, con el, el silencio. Por primera vez en meses, la ciudad amanece sin ladridos.",
+"kind": &"dawn",
+"title": "Amanece"
+}, {
+"body": "Los gatos bajan de los tejados. El barrio, el parque, la fabrica: todo vuelve a oler a hogar.",
+"kind": &"cats",
+"title": "La ciudad de los gatos"
+}, {
+"body": "Nadie sabe su nombre. No hace falta. Cuando un gatito pregunta quien los salvo, la colonia responde: la gata que abre camino.",
+"kind": &"hero",
+"title": "La gata que abrio camino"
+}, {
+"body": "En algun lugar, un ladrido lejano. La colonia aguza las orejas. Si la plaga vuelve... ya sabe quien la espera.",
+"kind": &"dawn",
+"title": "¿Fin?"
+}])
+first_clear_reward = 300
+accent_color = Color(1, 0.3, 0.15, 1)

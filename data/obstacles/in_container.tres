@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ObstacleData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/maps/obstacle_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"in_container"
+category = &"container"
+min_size = Vector2(56, 42)
+max_size = Vector2(74, 52)
+max_rotation = 0.1
+body_color = Color(0.3, 0.4, 0.5, 1)
+detail_color = Color(0.2, 0.28, 0.36, 1)
+outline_color = Color(0.09, 0.12, 0.15, 1)
+accent_color = Color(0.92, 0.6, 0.22, 1)
+collidable = true
+collision_shape = &"rect"
+block_scale = 1.0
+spawn_weight = 1.3
+z_offset = 2

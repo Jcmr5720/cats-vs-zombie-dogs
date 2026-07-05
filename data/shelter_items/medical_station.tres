@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ShelterItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/shelter/shelter_item_data.gd" id="1_sidata"]
+
+[resource]
+script = ExtResource("1_sidata")
+id = &"medical_station"
+display_name = "Estacion Medica"
+description = "Vendas y hierba gatera medicinal: +1 de curacion del Gato Medico por nivel."
+category = &"companeros"
+price = 90
+max_level = 5
+upgrade_base_cost = 55
+upgrade_cost_growth = 1.5
+effect_type = &"medic_heal_flat"
+effect_value_per_level = 1.0
+visual_color = Color(0.75, 0.75, 0.78, 1)
+accent_color = Color(0.4, 0.9, 0.55, 1)
+size = Vector2(48, 46)
+sort_order = 4

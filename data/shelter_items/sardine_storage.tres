@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ShelterItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/shelter/shelter_item_data.gd" id="1_sidata"]
+
+[resource]
+script = ExtResource("1_sidata")
+id = &"sardine_storage"
+display_name = "Almacen de Sardinas"
+description = "Reservas bien contadas: +5% de Sardinas ganadas al final por nivel."
+category = &"economia"
+price = 100
+max_level = 5
+upgrade_base_cost = 60
+upgrade_cost_growth = 1.55
+effect_type = &"sardine_pct"
+effect_value_per_level = 0.05
+visual_color = Color(0.55, 0.5, 0.35, 1)
+accent_color = Color(1.0, 0.85, 0.35, 1)
+size = Vector2(56, 48)
+sort_order = 7

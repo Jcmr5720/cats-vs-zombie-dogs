@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="ObstacleData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/maps/obstacle_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"in_barrel"
+category = &"barrel"
+min_size = Vector2(30, 30)
+max_size = Vector2(40, 40)
+max_rotation = 0.0
+body_color = Color(0.56, 0.34, 0.16, 1)
+detail_color = Color(0.7, 0.46, 0.22, 1)
+outline_color = Color(0.14, 0.09, 0.05, 1)
+accent_color = Color(0.92, 0.82, 0.24, 1)
+collidable = true
+collision_shape = &"circle"
+block_scale = 0.9
+spawn_weight = 1.2
+z_offset = 1
+blocks_projectiles = true
+blocks_laser = true
+destructible = true
+health = 25
+xp_reward = 3
+explosive = true
+explosion_radius = 92.0
+explosion_damage = 22

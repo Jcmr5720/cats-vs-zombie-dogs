@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="PermanentUpgradeData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/meta/permanent_upgrade_data.gd" id="1_pud"]
+
+[resource]
+script = ExtResource("1_pud")
+id = &"feline_mechanics"
+display_name = "Mecánica Gatuna"
+description = "-2% cooldown inicial de armas por nivel."
+max_level = 5
+base_cost = 55
+cost_growth = 1.4
+effect_type = &"weapon_cooldown_pct"
+effect_value_per_level = 0.02
+icon_color = Color(0.8, 0.9, 1, 1)
+category = &"armas"

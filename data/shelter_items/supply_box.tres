@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="ShelterItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/shelter/shelter_item_data.gd" id="1_sidata"]
+
+[resource]
+script = ExtResource("1_sidata")
+id = &"supply_box"
+display_name = "Caja de Suministros"
+description = "Hallazgos raros entre los escombros: +2% de probabilidad de mejores cartas por nivel."
+category = &"economia"
+price = 110
+max_level = 5
+upgrade_base_cost = 65
+upgrade_cost_growth = 1.55
+effect_type = &"upgrade_rarity_pct"
+effect_value_per_level = 0.02
+visual_color = Color(0.5, 0.42, 0.3, 1)
+accent_color = Color(0.7, 0.5, 0.95, 1)
+size = Vector2(50, 42)
+unlock_condition = &"chapter_3"
+sort_order = 8

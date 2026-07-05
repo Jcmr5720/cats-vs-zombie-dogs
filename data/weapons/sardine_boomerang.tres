@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1_wdata"]
+
+[resource]
+script = ExtResource("1_wdata")
+id = &"sardine_boomerang"
+display_name = "Sardina Boomerang"
+description = "Sale recta y atraviesa varios enemigos."
+weapon_type = &"boomerang"
+damage = 7
+cooldown = 1.1
+range = 520.0
+projectile_speed = 520.0
+projectile_count = 1
+spread_degrees = 8.0
+pierce = 3
+knockback = 110.0
+visual_color = Color(0.7, 0.85, 1, 1)
+rarity = &"rare"
+rarity_weight = 0.5
+max_level = 5

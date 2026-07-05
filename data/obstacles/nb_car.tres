@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ObstacleData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/maps/obstacle_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"nb_car"
+category = &"car"
+min_size = Vector2(64, 34)
+max_size = Vector2(76, 40)
+max_rotation = 0.35
+body_color = Color(0.5, 0.28, 0.3, 1)
+detail_color = Color(0.62, 0.76, 0.86, 1)
+outline_color = Color(0.08, 0.08, 0.1, 1)
+accent_color = Color(0.95, 0.85, 0.5, 1)
+collidable = true
+collision_shape = &"rect"
+block_scale = 1.0
+spawn_weight = 1.2
+z_offset = 1

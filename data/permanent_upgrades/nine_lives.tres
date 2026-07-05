@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="PermanentUpgradeData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/meta/permanent_upgrade_data.gd" id="1_pud"]
+
+[resource]
+script = ExtResource("1_pud")
+id = &"nine_lives"
+display_name = "Nueve Vidas"
+description = "+5 vida máxima inicial por nivel."
+max_level = 10
+base_cost = 45
+cost_growth = 1.4
+effect_type = &"max_health_flat"
+effect_value_per_level = 5.0
+icon_color = Color(0.95, 0.55, 0.55, 1)
+category = &"defensa"

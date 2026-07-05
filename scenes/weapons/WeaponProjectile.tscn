@@ -1,0 +1,33 @@
+[gd_scene load_steps=3 format=3 uid="uid://bvc04weaponproj01"]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_projectile.gd" id="1_wproj"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_wproj"]
+radius = 6.0
+
+[node name="WeaponProjectile" type="Area2D"]
+collision_layer = 0
+collision_mask = 2
+script = ExtResource("1_wproj")
+
+[node name="Trail" type="Line2D" parent="."]
+points = PackedVector2Array(-24, 0, -7, 0)
+width = 4.0
+default_color = Color(1, 0.82, 0.34, 0.36)
+begin_cap_mode = 2
+end_cap_mode = 2
+
+[node name="Halo" type="Polygon2D" parent="."]
+color = Color(1, 0.92, 0.45, 0.24)
+polygon = PackedVector2Array(14, 0, 10, 10, 0, 14, -10, 10, -14, 0, -10, -10, 0, -14, 10, -10)
+
+[node name="Visual" type="Polygon2D" parent="."]
+color = Color(1, 0.95, 0.7, 1)
+polygon = PackedVector2Array(-9, -3, 7, -4, 13, 0, 7, 4, -9, 3)
+
+[node name="Core" type="Polygon2D" parent="."]
+color = Color(1, 1, 0.88, 1)
+polygon = PackedVector2Array(-2, -2, 8, -2, 11, 0, 8, 2, -2, 2)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_wproj")

@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ObstacleData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/maps/obstacle_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"nb_dumpster"
+category = &"container"
+min_size = Vector2(48, 38)
+max_size = Vector2(60, 46)
+max_rotation = 0.15
+body_color = Color(0.24, 0.44, 0.34, 1)
+detail_color = Color(0.16, 0.3, 0.24, 1)
+outline_color = Color(0.08, 0.12, 0.1, 1)
+accent_color = Color(0.9, 0.72, 0.24, 1)
+collidable = true
+collision_shape = &"rect"
+block_scale = 1.0
+spawn_weight = 1.1
+z_offset = 1

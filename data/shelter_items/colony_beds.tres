@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ShelterItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/shelter/shelter_item_data.gd" id="1_sidata"]
+
+[resource]
+script = ExtResource("1_sidata")
+id = &"colony_beds"
+display_name = "Camas de Colonia"
+description = "Compañeros bien descansados: +5 de vida maxima de compañeros por nivel."
+category = &"companeros"
+price = 70
+max_level = 5
+upgrade_base_cost = 40
+upgrade_cost_growth = 1.5
+effect_type = &"companion_health_flat"
+effect_value_per_level = 5.0
+visual_color = Color(0.45, 0.35, 0.5, 1)
+accent_color = Color(0.75, 0.55, 0.9, 1)
+size = Vector2(58, 34)
+sort_order = 3

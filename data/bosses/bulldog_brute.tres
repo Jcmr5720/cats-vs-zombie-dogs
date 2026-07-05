@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="BossData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/bosses/boss_data.gd" id="1_bdata"]
+
+[resource]
+script = ExtResource("1_bdata")
+id = &"bulldog_brute"
+display_name = "Bulldog Bruto Zombi"
+boss_type = &"miniboss"
+max_health = 320
+move_speed = 58.0
+contact_damage = 16
+attack_damage = 0
+attack_cooldown = 0.0
+attack_range = 0.0
+knockback = 260.0
+xp_reward = 90
+visual_color = Color(0.5, 0.42, 0.32, 1)
+accent_color = Color(1, 0.7, 0.25, 1)
+visual_scale = 1.9
+phase_thresholds = PackedFloat32Array()
+spawn_time = 180.0
+difficulty_multiplier = 0.06

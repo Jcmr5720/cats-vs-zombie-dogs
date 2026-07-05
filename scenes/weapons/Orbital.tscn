@@ -1,0 +1,21 @@
+[gd_scene load_steps=2 format=3 uid="uid://bvc04orbital01"]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_orbital.gd" id="1_orb"]
+
+[node name="Orbital" type="Node2D"]
+script = ExtResource("1_orb")
+
+[node name="Trail" type="Line2D" parent="."]
+points = PackedVector2Array(0, 18, 0, -18)
+width = 5.0
+default_color = Color(0.85, 0.95, 1, 0.28)
+begin_cap_mode = 2
+end_cap_mode = 2
+
+[node name="Visual" type="Polygon2D" parent="."]
+color = Color(0.8, 0.95, 1, 1)
+polygon = PackedVector2Array(-14, -5, -4, -9, 6, -8, 15, -2, 10, 6, -2, 10, -14, 5, -8, 0)
+
+[node name="Spark" type="Polygon2D" parent="."]
+color = Color(1, 1, 1, 0.95)
+polygon = PackedVector2Array(8, -9, 12, -2, 7, 5, 2, 1, -7, 8, -3, 0, -8, -7, 1, -2)

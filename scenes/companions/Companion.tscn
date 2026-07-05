@@ -1,0 +1,140 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/companions/companion.gd" id="1_companion"]
+[ext_resource type="PackedScene" uid="uid://bvc01projectile01" path="res://scenes/weapons/Projectile.tscn" id="2_projectile"]
+
+[sub_resource type="CircleShape2D" id="1_body_shape"]
+radius = 14.0
+
+[sub_resource type="CircleShape2D" id="2_revive_shape"]
+radius = 28.0
+
+[node name="Companion" type="CharacterBody2D"]
+collision_layer = 0
+collision_mask = 0
+script = ExtResource("1_companion")
+projectile_scene = ExtResource("2_projectile")
+
+[node name="Visual" type="Node2D" parent="."]
+
+[node name="Shadow" type="Polygon2D" parent="Visual"]
+position = Vector2(0, 17)
+color = Color(0, 0, 0, 0.22)
+polygon = PackedVector2Array(-20, -4, -9, -7, 11, -7, 22, -3, 18, 5, 6, 8, -13, 7, -22, 3)
+
+[node name="Outline" type="Polygon2D" parent="Visual"]
+color = Color(0.3, 0.2, 0.1, 1)
+polygon = PackedVector2Array(-16, -16, -8, -22, 8, -22, 16, -16, 17, 16, 10, 21, -10, 21, -17, 16)
+
+[node name="Tail" type="Polygon2D" parent="Visual"]
+color = Color(0.81, 0.56, 0.3, 1)
+polygon = PackedVector2Array(-14, 4, -30, -2, -33, 9, -17, 12)
+
+[node name="Body" type="Polygon2D" parent="Visual"]
+color = Color(0.92, 0.68, 0.38, 1)
+polygon = PackedVector2Array(-15, -2, -10, -10, 10, -10, 15, -2, 14, 15, 8, 19, -8, 19, -14, 15)
+
+[node name="Belly" type="Polygon2D" parent="Visual"]
+color = Color(0.98, 0.92, 0.8, 1)
+polygon = PackedVector2Array(-7, 2, 0, -1, 7, 2, 7, 12, 0, 15, -7, 12)
+
+[node name="Head" type="Polygon2D" parent="Visual"]
+color = Color(0.95, 0.72, 0.42, 1)
+polygon = PackedVector2Array(-13, -14, -7, -19, 7, -19, 13, -14, 12, -1, 6, 4, -6, 4, -12, -1)
+
+[node name="Muzzle" type="Polygon2D" parent="Visual"]
+color = Color(0.99, 0.94, 0.83, 1)
+polygon = PackedVector2Array(-6, -3, 0, -5, 6, -3, 6, 3, 0, 6, -6, 3)
+
+[node name="EarLeft" type="Polygon2D" parent="Visual"]
+color = Color(0.88, 0.64, 0.36, 1)
+polygon = PackedVector2Array(-11, -15, -4, -15, -9, -28)
+
+[node name="EarRight" type="Polygon2D" parent="Visual"]
+color = Color(0.88, 0.64, 0.36, 1)
+polygon = PackedVector2Array(11, -15, 4, -15, 9, -28)
+
+[node name="EyeLeft" type="Polygon2D" parent="Visual"]
+color = Color(0.12, 0.16, 0.18, 1)
+polygon = PackedVector2Array(-8, -10, -3, -10, -3, -4, -8, -4)
+
+[node name="ShineL" type="Polygon2D" parent="Visual/EyeLeft"]
+color = Color(0.85, 0.95, 0.92, 0.85)
+polygon = PackedVector2Array(-7.4, -9.4, -5.6, -9.4, -5.6, -7.6, -7.4, -7.6)
+
+[node name="EyeRight" type="Polygon2D" parent="Visual"]
+color = Color(0.12, 0.16, 0.18, 1)
+polygon = PackedVector2Array(3, -10, 8, -10, 8, -4, 3, -4)
+
+[node name="ShineR" type="Polygon2D" parent="Visual/EyeRight"]
+color = Color(0.85, 0.95, 0.92, 0.85)
+polygon = PackedVector2Array(3.6, -9.4, 5.4, -9.4, 5.4, -7.6, 3.6, -7.6)
+
+[node name="WhiskersL" type="Polygon2D" parent="Visual"]
+color = Color(1, 1, 1, 0.42)
+polygon = PackedVector2Array(-11, -3, -20, -5, -20, -3.9, -11, -1.7)
+
+[node name="WhiskersR" type="Polygon2D" parent="Visual"]
+color = Color(1, 1, 1, 0.42)
+polygon = PackedVector2Array(11, -3, 20, -5, 20, -3.9, 11, -1.7)
+
+[node name="RoleMarker" type="Polygon2D" parent="Visual"]
+color = Color(0.2, 0.28, 0.38, 1)
+polygon = PackedVector2Array(0, -3, 5, 1, 2, 8, -2, 8, -5, 1)
+
+[node name="RoleHat" type="Polygon2D" parent="Visual"]
+color = Color(0.22, 0.31, 0.42, 1)
+polygon = PackedVector2Array(-10, -20, 10, -20, 7, -24, -7, -24)
+
+[node name="HatDetail" type="Polygon2D" parent="Visual"]
+color = Color(0.14, 0.2, 0.3, 1)
+polygon = PackedVector2Array(-12, -20, 12, -20, 10, -17, -10, -17)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("1_body_shape")
+
+[node name="HealthBar" type="ProgressBar" parent="."]
+offset_left = -24.0
+offset_top = -54.0
+offset_right = 24.0
+offset_bottom = -44.0
+show_percentage = false
+max_value = 100.0
+value = 100.0
+
+[node name="StatusLabel" type="Label" parent="."]
+offset_left = -52.0
+offset_top = -72.0
+offset_right = 52.0
+offset_bottom = -52.0
+theme_override_font_sizes/font_size = 12
+horizontal_alignment = 1
+text = "Companero"
+
+[node name="ReviveArea" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 1
+monitoring = false
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ReviveArea"]
+shape = SubResource("2_revive_shape")
+disabled = true
+
+[node name="ReviveBar" type="ProgressBar" parent="."]
+visible = false
+offset_left = -34.0
+offset_top = 26.0
+offset_right = 34.0
+offset_bottom = 40.0
+show_percentage = false
+max_value = 100.0
+
+[node name="ReviveLabel" type="Label" parent="."]
+visible = false
+offset_left = -52.0
+offset_top = 42.0
+offset_right = 52.0
+offset_bottom = 62.0
+theme_override_font_sizes/font_size = 12
+horizontal_alignment = 1
+text = "Reviviendo..."

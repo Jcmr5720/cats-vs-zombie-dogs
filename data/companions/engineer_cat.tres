@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="CompanionData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/companions/companion_data.gd" id="1_companion_data"]
+
+[resource]
+script = ExtResource("1_companion_data")
+id = &"engineer_cat"
+display_name = "Gato Ingeniero"
+role = &"engineer"
+max_health = 55
+move_speed = 224.0
+follow_distance = 78.0
+attack_damage = 16
+attack_cooldown = 1.3
+attack_range = 560.0
+projectile_speed = 500.0
+heal_amount = 0
+heal_cooldown = 8.0
+damage_reduction = 0.04
+revive_time = 1.5
+revive_health_percent = 0.4
+visual_color = Color(0.95, 0.72, 0.36, 1)
+accent_color = Color(0.38, 0.18, 0.06, 1)
+detail_color = Color(1, 0.95, 0.8, 1)
+projectile_color = Color(1, 0.72, 0.32, 1)
+spawn_weight = 0.9

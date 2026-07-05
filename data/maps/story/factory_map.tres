@@ -1,0 +1,57 @@
+[gd_resource type="Resource" script_class="MapData" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/maps/map_data.gd" id="1_mdata"]
+[ext_resource type="Resource" path="res://data/obstacles/in_container.tres" id="2_container"]
+[ext_resource type="Resource" path="res://data/obstacles/in_barrel.tres" id="3_barrel"]
+[ext_resource type="Resource" path="res://data/obstacles/in_pipe.tres" id="4_pipe"]
+[ext_resource type="Resource" path="res://data/obstacles/in_wall.tres" id="5_wall"]
+[ext_resource type="Resource" path="res://data/obstacles/in_block.tres" id="6_block"]
+[ext_resource type="Resource" path="res://data/bosses/alpha_prime.tres" id="7_alpha"]
+
+[resource]
+script = ExtResource("1_mdata")
+id = &"factory"
+display_name = "La Fabrica"
+description = "El origen de la plaga, todavia caliente, todavia respirando."
+background_color = Color(0.085, 0.085, 0.095, 1)
+secondary_color = Color(0.05, 0.05, 0.06, 1)
+grid_color = Color(0.2, 0.18, 0.16, 1)
+accent_color = Color(0.75, 0.8, 0.85, 1)
+hazard_color = Color(1, 0.3, 0.15, 1)
+decoration_accent_color = Color(0.7, 0.4, 0.25, 1)
+biome = &"industrial"
+pattern_type = &"industrial"
+pattern_strength = 0.68
+decoration_density = 0.46
+decoration_scale_min = 0.8
+decoration_scale_max = 1.5
+ambient_detail_count = 3
+road_line_enabled = false
+hazard_line_enabled = true
+difficulty_modifier = 1.6
+runner_probability_modifier = 1.0
+enemy_health_modifier = 1.3
+enemy_speed_modifier = 1.05
+rescue_spawn_modifier = 1.3
+rescue_distance_bonus = 120.0
+obstacle_types = [ExtResource("2_container"), ExtResource("3_barrel"), ExtResource("4_pipe"), ExtResource("5_wall"), ExtResource("6_block")]
+obstacle_density = 0.75
+max_obstacles = 46
+min_obstacle_distance = 120.0
+safe_radius_around_player = 260.0
+safe_radius_around_rescue = 150.0
+obstacle_field_radius = 1500.0
+allow_large_blocks = true
+road_layout_type = &"none"
+road_half_width = 130.0
+boss_spawn_time = 780.0
+miniboss_times = PackedFloat32Array(180, 420, 600)
+duration_seconds = 900.0
+survive_seconds = 900.0
+require_defeat_boss = true
+rescue_cats_required = 0
+defeat_minibosses_required = 0
+boss_data = ExtResource("7_alpha")
+objective_description = "Sobrevive y destruye al Alfa Primigenio"
+victory_message = "La plaga termino aqui"
+game_over_message = "El origen sigue vivo"

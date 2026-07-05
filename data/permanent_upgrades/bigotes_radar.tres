@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="PermanentUpgradeData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/meta/permanent_upgrade_data.gd" id="1_pudata"]
+
+[resource]
+script = ExtResource("1_pudata")
+id = &"bigotes_radar"
+display_name = "Bigotes Radar"
+description = "Los bigotes de la gata sienten cada orbe de experiencia: +4% de radio de recogida por nivel."
+max_level = 6
+base_cost = 60
+cost_growth = 1.45
+effect_type = &"pickup_range_pct"
+effect_value_per_level = 0.04
+icon_color = Color(0.45, 0.85, 1, 1)
+category = &"utilidad"
+unlock_story_chapter = 2

@@ -1,0 +1,359 @@
+extends CharacterBody2D
+## Gato jugador. Se mueve con WASD/flechas, recibe daño con cooldown,
+## acumula experiencia, sube de nivel y emite señales para que el HUD,
+## el GameManager y el sistema de upgrades reaccionen sin acoplamiento directo.
+
+signal health_changed(current: int, maximum: int)
+signal experience_changed(current: int, needed: int)
+signal level_changed(level: int)
+signal level_up_requested(level: int)
+signal damaged(amount: int)
+signal died
+
+@export var speed: float = 250.0
+@export var max_health: int = 100
+## Bajado de 10 a 8: la primera mejora llega antes y engancha desde el arranque.
+@export var starting_experience_to_level: int = 8
+## Cuánto crece la experiencia necesaria por nivel (1.35 = +35%). Bajado de 1.4
+## para que las cartas de mejora sigan fluyendo a mitad de partida (ritmo survivor).
+@export var experience_growth: float = 1.35
+## Tiempo de invulnerabilidad tras recibir daño (evita daño cada frame).
+@export var damage_cooldown: float = 0.5
+
+# Topes sanos para que los upgrades no vuelvan al gato invencible (Fase 2.8).
+const MAX_SPEED: float = 420.0
+const MAX_HEALTH_CAP: int = 220
+const MAX_PICKUP_SCALE: float = 2.4
+
+var current_health: int
+var level: int = 1
+var experience: int = 0
+var experience_to_level: int
+## Cuántas mejoras ha elegido el jugador (lo usa la dificultad dinámica).
+var upgrades_chosen: int = 0
+
+var _damage_timer: float = 0.0
+## Reduccion de dano recibido por sinergia (Medico + Rascador). Sutil, tope 0.5.
+var _synergy_damage_reduction: float = 0.0
+## Reduccion permanente de dano (Pelaje Erizado, Fase 09). Se combina de forma
+## multiplicativa con la sinergia; NO usar set_synergy (el WeaponManager la pisa).
+var _permanent_damage_reduction: float = 0.0
+## Multiplicador de XP por mejoras permanentes (Instinto Felino, Fase 07).
+var _xp_multiplier: float = 1.0
+## Impulso externo (empuje de jefes/mini-jefes) que decae y se suma al movimiento.
+var _knockback: Vector2 = Vector2.ZERO
+var _is_dead: bool = false
+var _last_facing: Vector2 = Vector2.RIGHT
+var _anim_time: float = 0.0
+var _is_moving: bool = false
+var _hurt_tween: Tween
+## Temporizador de nubecitas de polvo al correr (game feel).
+var _dust_timer: float = 0.0
+@onready var _weapons: Node = $WeaponManager
+@onready var _pickup_area: Area2D = $PickupArea
+@onready var _facing_indicator: Node2D = $FacingIndicator
+@onready var _visual: Node2D = $Visual
+@onready var _tail: Polygon2D = $Visual/Tail
+@onready var _scarf: Polygon2D = $Visual/Scarf
+@onready var _eye_left: Polygon2D = $Visual/EyeLeft
+@onready var _eye_right: Polygon2D = $Visual/EyeRight
+
+
+func _ready() -> void:
+	# Colisiona con los obstaculos de mapa (capa 5, Fase 08.75) sin atravesarlos.
+	set_collision_mask_value(5, true)
+	_apply_permanent_upgrades()
+	current_health = max_health
+	experience_to_level = starting_experience_to_level
+	add_to_group("player")
+	# Emite el estado inicial para que el HUD arranque sincronizado.
+	health_changed.emit(current_health, max_health)
+	experience_changed.emit(experience, experience_to_level)
+	level_changed.emit(level)
+
+
+func _physics_process(delta: float) -> void:
+	if _is_dead:
+		return
+
+	if _damage_timer > 0.0:
+		_damage_timer -= delta
+
+	var direction: Vector2 = Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	velocity = direction * speed + _knockback
+	move_and_slide()
+
+	# El empuje externo (jefes) decae de forma exponencial.
+	if _knockback != Vector2.ZERO:
+		_knockback *= exp(-8.0 * delta)
+		if _knockback.length_squared() < 1.0:
+			_knockback = Vector2.ZERO
+
+	# Dirección visual mínima: el indicador apunta hacia el último movimiento.
+	if direction != Vector2.ZERO:
+		_last_facing = direction
+	_is_moving = direction != Vector2.ZERO
+	if is_instance_valid(_facing_indicator):
+		_facing_indicator.rotation = lerp_angle(_facing_indicator.rotation, _last_facing.angle(), 0.25)
+
+	# Polvo bajo las patas mientras corre.
+	_dust_timer -= delta
+	if _is_moving and _dust_timer <= 0.0:
+		_dust_timer = 0.18
+		Feedback.dust_puff(global_position + Vector2(-_last_facing.x * 10.0, 18.0))
+
+	_animate_visual(delta)
+
+
+## Animación sutil del gato: respiración constante, "bounce"/squash al moverse y
+## meneo de cola. Solo afecta al nodo Visual, nunca a la colisión.
+func _animate_visual(delta: float) -> void:
+	if not is_instance_valid(_visual):
+		return
+	_anim_time += delta
+
+	# Respiración base + squash-and-stretch suave al caminar.
+	var breathe: float = sin(_anim_time * 2.2) * 0.025
+	var walk: float = sin(_anim_time * 12.0) * 0.05 if _is_moving else 0.0
+	var target := Vector2(1.0 + breathe - walk, 1.0 + breathe + walk)
+	_visual.scale = _visual.scale.lerp(target, 0.3)
+
+	# Inclinación hacia el movimiento horizontal: el gato "se lanza" al correr.
+	var lean_target: float = _last_facing.x * 0.09 if _is_moving else 0.0
+	_visual.rotation = lerpf(_visual.rotation, lean_target, 0.18)
+
+	# Meneo de cola: más vivo al moverse.
+	if is_instance_valid(_tail):
+		var tail_speed: float = 9.0 if _is_moving else 2.5
+		var tail_amp: float = 0.35 if _is_moving else 0.12
+		_tail.rotation = sin(_anim_time * tail_speed) * tail_amp
+	if is_instance_valid(_scarf):
+		_scarf.rotation = sin(_anim_time * 7.0) * (0.16 if _is_moving else 0.05)
+	if is_instance_valid(_eye_left) and is_instance_valid(_eye_right):
+		var blink: bool = fmod(_anim_time, 4.2) > 4.08
+		var eye_scale_y: float = 0.18 if blink else 1.0
+		_eye_left.scale.y = lerpf(_eye_left.scale.y, eye_scale_y, 0.45)
+		_eye_right.scale.y = lerpf(_eye_right.scale.y, eye_scale_y, 0.45)
+		# Mirada direccional sutil: los ojos se desplazan hacia donde mira el gato,
+		# alrededor de su posición base en la cara (fijada en Player.tscn).
+		var glance: Vector2 = _last_facing.normalized() * Vector2(1.8, 1.2)
+		_eye_left.position = _eye_left.position.lerp(Vector2(-6.5, -11) + glance, 0.18)
+		_eye_right.position = _eye_right.position.lerp(Vector2(6.5, -11) + glance, 0.18)
+
+
+## Recibe daño de un enemigo. Ignora golpes durante el cooldown.
+func take_damage(amount: int) -> void:
+	if _is_dead or _damage_timer > 0.0:
+		return
+
+	_damage_timer = damage_cooldown
+	# Sinergia defensiva + reduccion permanente: multiplicativas entre si.
+	var final_amount: int = max(1, int(round(amount * (1.0 - _synergy_damage_reduction) * (1.0 - _permanent_damage_reduction))))
+	current_health = max(current_health - final_amount, 0)
+	health_changed.emit(current_health, max_health)
+	damaged.emit(final_amount)
+	_play_audio(&"player_damage")
+	if max_health > 0 and float(current_health) / float(max_health) <= 0.25:
+		_play_audio(&"low_health")
+
+	# Game feel: el gato parpadea en rojo, la camara da un shake leve y AudioManager
+	# reproduce un SFX con cooldown interno.
+	_flash_hurt()
+	Feedback.shake(0.35)
+
+	if current_health <= 0:
+		_die()
+
+
+## Parpadeo rojo breve al recibir daño (sobre el nodo Visual).
+func _flash_hurt() -> void:
+	if not is_instance_valid(_visual):
+		return
+	if _hurt_tween != null and _hurt_tween.is_valid():
+		_hurt_tween.kill()
+	_visual.modulate = Color(1.8, 0.4, 0.4, 1.0)
+	_hurt_tween = create_tween()
+	_hurt_tween.tween_property(_visual, "modulate", Color(1, 1, 1, 1), 0.35)
+
+
+## Radio de recolección de XP en píxeles del mundo (lo usa el imán del orbe).
+func get_pickup_radius() -> float:
+	if is_instance_valid(_pickup_area):
+		# El upgrade de pickup escala el área; 90 es el radio base de la shape.
+		return 90.0 * _pickup_area.scale.x
+	return 90.0
+
+
+## Llamado por XPOrb al ser recogido.
+func add_experience(amount: int) -> void:
+	if _is_dead:
+		return
+
+	experience += max(1, int(round(amount * _xp_multiplier)))
+	while experience >= experience_to_level:
+		experience -= experience_to_level
+		_level_up()
+
+	experience_changed.emit(experience, experience_to_level)
+
+
+## Conectado a PickupArea.area_entered: recoge orbes de experiencia.
+func _on_pickup_area_area_entered(area: Area2D) -> void:
+	if _is_dead:
+		return
+	if area.is_in_group("xp_orbs") and area.has_method("collect"):
+		area.collect(self)
+
+
+func apply_upgrade(upgrade_id: StringName) -> void:
+	var companion_manager: Node = get_tree().get_first_node_in_group("companion_manager")
+	# Magnitudes comunes reducidas en Fase 2.8 para que el escalado no sea tan
+	# brusco; las mejoras raras/épicas mantienen más impacto (salen menos).
+	match upgrade_id:
+		&"weapon_damage":
+			if is_instance_valid(_weapons) and _weapons.has_method("multiply_damage"):
+				_weapons.multiply_damage(1.10)
+		&"weapon_cooldown":
+			if is_instance_valid(_weapons) and _weapons.has_method("multiply_cooldown"):
+				_weapons.multiply_cooldown(0.90)
+		&"player_speed":
+			speed = min(speed * 1.06, MAX_SPEED)
+		&"max_health":
+			increase_max_health(15)
+		&"extra_projectile":
+			if is_instance_valid(_weapons) and _weapons.has_method("add_projectiles"):
+				_weapons.add_projectiles(1)
+		&"weapon_range":
+			if is_instance_valid(_weapons) and _weapons.has_method("multiply_range"):
+				_weapons.multiply_range(1.10)
+		&"pickup_range":
+			_increase_pickup_range(1.25)
+		&"companion_damage":
+			if is_instance_valid(companion_manager) and companion_manager.has_method("multiply_damage"):
+				companion_manager.multiply_damage(1.10)
+		&"companion_cooldown":
+			if is_instance_valid(companion_manager) and companion_manager.has_method("multiply_cooldown"):
+				companion_manager.multiply_cooldown(0.90)
+		&"medic_boost":
+			if is_instance_valid(companion_manager) and companion_manager.has_method("increase_medic_heal"):
+				companion_manager.increase_medic_heal(2)
+		&"colony_protection":
+			if is_instance_valid(companion_manager) and companion_manager.has_method("multiply_incoming_damage"):
+				companion_manager.multiply_incoming_damage(0.90)
+		&"quick_revive":
+			if is_instance_valid(companion_manager) and companion_manager.has_method("multiply_revive_time"):
+				companion_manager.multiply_revive_time(0.80)
+		&"colony_bond":
+			if is_instance_valid(companion_manager) and companion_manager.has_method("increase_colony_bond_bonus"):
+				companion_manager.increase_colony_bond_bonus(0.05)
+
+	upgrades_chosen += 1
+
+
+func increase_max_health(amount: int) -> void:
+	max_health = min(max_health + amount, MAX_HEALTH_CAP)
+	current_health = min(current_health + amount, max_health)
+	health_changed.emit(current_health, max_health)
+
+
+func heal(amount: int) -> void:
+	if _is_dead or amount <= 0 or current_health >= max_health:
+		return
+	current_health = min(current_health + amount, max_health)
+	health_changed.emit(current_health, max_health)
+
+
+## Reduccion de dano recibido aportada por sinergias (la fija el WeaponManager).
+func set_synergy_damage_reduction(reduction: float) -> void:
+	_synergy_damage_reduction = clampf(reduction, 0.0, 0.5)
+
+
+## Empuje externo (jefes/mini-jefes). Se acumula y decae en el _physics_process.
+func apply_knockback(impulse: Vector2) -> void:
+	if _is_dead:
+		return
+	_knockback += impulse
+
+
+func set_external_damage_multiplier(multiplier: float) -> void:
+	if is_instance_valid(_weapons) and _weapons.has_method("set_external_damage_multiplier"):
+		_weapons.set_external_damage_multiplier(multiplier)
+
+
+## Acceso al WeaponManager para el UpgradeManager (cartas de arma).
+func get_weapon_manager() -> Node:
+	return _weapons
+
+
+## Aplica las mejoras permanentes (Fase 07) al iniciar la partida. Lee los valores
+## del autoload MetaProgression; si no existe (p.ej. en tests), no hace nada.
+func _apply_permanent_upgrades() -> void:
+	var mp: Node = get_node_or_null("/root/MetaProgression")
+	if mp == null:
+		return
+	max_health = min(max_health + mp.max_health_bonus(), MAX_HEALTH_CAP)
+	speed = min(speed * mp.player_speed_mult(), MAX_SPEED)
+	_xp_multiplier = mp.xp_mult()
+	# Mejoras de historia (Fase 09): radio de recogida y armadura permanente.
+	if mp.has_method("pickup_range_mult") and is_instance_valid(_pickup_area):
+		var pickup_scale: float = min(_pickup_area.scale.x * mp.pickup_range_mult(), MAX_PICKUP_SCALE)
+		_pickup_area.scale = Vector2(pickup_scale, pickup_scale)
+	if mp.has_method("permanent_damage_reduction"):
+		_permanent_damage_reduction = clampf(mp.permanent_damage_reduction(), 0.0, 0.25)
+
+	# Refugio Felino (Fase 10): bonus de objetos COLOCADOS. Se SUMAN a las mejoras
+	# permanentes (fuentes distintas, nunca se duplican) con topes propios.
+	var shelter: Node = get_node_or_null("/root/Shelter")
+	var shelter_damage_mult: float = 1.0
+	if shelter != null and shelter.has_method("get_bonuses"):
+		var bonuses: Dictionary = shelter.get_bonuses()
+		max_health = min(max_health + int(round(float(bonuses.get("player_max_health_bonus", 0.0)))), MAX_HEALTH_CAP)
+		speed = min(speed * (1.0 + float(bonuses.get("player_speed_bonus", 0.0))), MAX_SPEED)
+		shelter_damage_mult = 1.0 + float(bonuses.get("player_damage_bonus", 0.0))
+		# La reduccion del refugio se suma a la permanente, con tope global sano.
+		_permanent_damage_reduction = clampf(_permanent_damage_reduction + float(bonuses.get("damage_reduction_bonus", 0.0)), 0.0, 0.35)
+
+	if is_instance_valid(_weapons):
+		if _weapons.has_method("set_permanent_damage_mult"):
+			_weapons.set_permanent_damage_mult(mp.player_damage_mult() * shelter_damage_mult)
+		if _weapons.has_method("set_permanent_cooldown_mult"):
+			_weapons.set_permanent_cooldown_mult(mp.weapon_cooldown_mult())
+
+
+func _increase_pickup_range(multiplier: float) -> void:
+	if not is_instance_valid(_pickup_area):
+		return
+	var new_scale: float = min(_pickup_area.scale.x * multiplier, MAX_PICKUP_SCALE)
+	_pickup_area.scale = Vector2(new_scale, new_scale)
+
+
+func _level_up() -> void:
+	level += 1
+	experience_to_level = int(ceil(experience_to_level * experience_growth))
+	level_changed.emit(level)
+	_play_audio(&"level_up")
+	# Estallido cian de subida de nivel sobre el gato: doble onda + shake leve.
+	Feedback.hit_effect(global_position, Color(0.45, 0.86, 1.0, 0.9), 0.5, 2.6)
+	Feedback.hit_effect(global_position, Color(0.8, 0.96, 1.0, 0.8), 0.25, 1.4)
+	Feedback.shake(0.15)
+	level_up_requested.emit(level)
+
+
+func get_last_facing_direction() -> Vector2:
+	return _last_facing.normalized()
+
+
+func is_dead() -> bool:
+	return _is_dead
+
+
+func _die() -> void:
+	_is_dead = true
+	velocity = Vector2.ZERO
+	died.emit()
+
+
+func _play_audio(name: StringName) -> void:
+	var audio: Node = get_node_or_null("/root/AudioManager")
+	if audio != null and audio.has_method("play_sfx"):
+		audio.play_sfx(name)

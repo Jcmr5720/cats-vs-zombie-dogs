@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://bvc065mapdecor01"]
+
+[ext_resource type="Script" path="res://scripts/maps/map_decoration.gd" id="1_decor"]
+
+[node name="MapDecoration" type="Node2D"]
+z_index = -1
+script = ExtResource("1_decor")

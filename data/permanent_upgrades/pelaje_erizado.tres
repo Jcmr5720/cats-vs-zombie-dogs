@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="PermanentUpgradeData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/meta/permanent_upgrade_data.gd" id="1_pudata"]
+
+[resource]
+script = ExtResource("1_pudata")
+id = &"pelaje_erizado"
+display_name = "Pelaje Erizado"
+description = "La noche del asedio endurecio a la gata: -2% de daño recibido por nivel."
+max_level = 5
+base_cost = 90
+cost_growth = 1.5
+effect_type = &"damage_reduction_pct"
+effect_value_per_level = 0.02
+icon_color = Color(0.62, 0.4, 0.9, 1)
+category = &"jugador"
+unlock_story_chapter = 4

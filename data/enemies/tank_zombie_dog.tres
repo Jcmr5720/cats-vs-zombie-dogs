@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemies/enemy_data.gd" id="1_enemy_data"]
+
+[resource]
+script = ExtResource("1_enemy_data")
+id = &"tank_zombie_dog"
+display_name = "Mastin Podrido"
+max_health = 85
+speed = 55.0
+contact_damage = 18
+xp_value = 10
+spawn_weight = 0.0
+weight_growth = 0.045
+body_color = Color(0.32, 0.36, 0.44, 1)
+accent_color = Color(0.2, 0.24, 0.32, 1)
+eye_color = Color(0.95, 0.35, 0.2, 1)
+visual_scale = Vector2(1.55, 1.45)

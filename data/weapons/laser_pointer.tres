@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1_wdata"]
+
+[resource]
+script = ExtResource("1_wdata")
+id = &"laser_pointer"
+display_name = "Puntero Laser"
+description = "Rayo instantaneo de alto dano al mas cercano."
+weapon_type = &"laser"
+damage = 20
+cooldown = 2.2
+range = 620.0
+projectile_count = 1
+knockback = 30.0
+visual_color = Color(1, 0.35, 0.4, 1)
+rarity = &"epic"
+rarity_weight = 0.25
+max_level = 5

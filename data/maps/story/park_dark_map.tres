@@ -1,0 +1,55 @@
+[gd_resource type="Resource" script_class="MapData" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/maps/map_data.gd" id="1_mdata"]
+[ext_resource type="Resource" path="res://data/obstacles/pk_tree.tres" id="2_tree"]
+[ext_resource type="Resource" path="res://data/obstacles/pk_bench.tres" id="3_bench"]
+[ext_resource type="Resource" path="res://data/obstacles/pk_rock.tres" id="4_rock"]
+[ext_resource type="Resource" path="res://data/obstacles/pk_bush.tres" id="5_bush"]
+[ext_resource type="Resource" path="res://data/obstacles/pk_fence.tres" id="6_fence"]
+
+[resource]
+script = ExtResource("1_mdata")
+id = &"park_dark"
+display_name = "Corazon del Parque"
+description = "La maleza se volvio negra y en su centro la plaga ha hecho nido."
+background_color = Color(0.05, 0.085, 0.06, 1)
+secondary_color = Color(0.03, 0.06, 0.042, 1)
+grid_color = Color(0.1, 0.17, 0.11, 1)
+accent_color = Color(0.4, 0.95, 0.55, 1)
+hazard_color = Color(0.55, 1, 0.35, 1)
+decoration_accent_color = Color(0.28, 0.55, 0.3, 1)
+biome = &"park"
+pattern_type = &"park_paths"
+pattern_strength = 0.62
+decoration_density = 0.5
+decoration_scale_min = 0.75
+decoration_scale_max = 1.45
+ambient_detail_count = 4
+road_line_enabled = false
+hazard_line_enabled = false
+difficulty_modifier = 1.5
+runner_probability_modifier = 1.15
+enemy_health_modifier = 1.25
+enemy_speed_modifier = 1.05
+rescue_spawn_modifier = 0.75
+rescue_distance_bonus = 0.0
+obstacle_types = [ExtResource("2_tree"), ExtResource("3_bench"), ExtResource("4_rock"), ExtResource("5_bush"), ExtResource("6_fence")]
+obstacle_density = 0.5
+max_obstacles = 36
+min_obstacle_distance = 160.0
+safe_radius_around_player = 300.0
+safe_radius_around_rescue = 160.0
+obstacle_field_radius = 1700.0
+allow_large_blocks = false
+road_layout_type = &"none"
+road_half_width = 150.0
+boss_spawn_time = 720.0
+miniboss_times = PackedFloat32Array(150, 390)
+duration_seconds = 720.0
+survive_seconds = 720.0
+require_defeat_boss = false
+rescue_cats_required = 3
+defeat_minibosses_required = 2
+objective_description = "Rescata 3 gatos y derrota 2 centinelas"
+victory_message = "El nido cayo"
+game_over_message = "El parque se cerro"

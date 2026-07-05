@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="PermanentUpgradeData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/meta/permanent_upgrade_data.gd" id="1_pud"]
+
+[resource]
+script = ExtResource("1_pud")
+id = &"feline_instinct"
+display_name = "Instinto Felino"
+description = "+3% experiencia ganada por nivel."
+max_level = 8
+base_cost = 50
+cost_growth = 1.42
+effect_type = &"xp_pct"
+effect_value_per_level = 0.03
+icon_color = Color(0.7, 0.6, 1, 1)
+category = &"utilidad"
