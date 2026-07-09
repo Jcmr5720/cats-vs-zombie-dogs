@@ -21,10 +21,13 @@ var _shop_panel: PanelContainer
 var _inventory_panel: PanelContainer
 var _inventory_grid: GridContainer
 var _bonus_list: VBoxContainer
-var _sardines_chip: Label
+var _sardines_label: Label
 var _placing_hint: Label
 var _tutorial_overlay: Control
 var _slot_remove_buttons: Dictionary = {}
+## Capa modal compartida (oscurece el fondo y centra tienda/inventario por anclas).
+var _modal_dim: ColorRect
+var _modal_center: CenterContainer
 
 
 func _ready() -> void:
@@ -66,10 +69,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		if _placing_item_id != &"":
 			_cancel_placement()
-		elif _inventory_panel != null and _inventory_panel.visible:
-			_inventory_panel.visible = false
-		elif _shop_panel != null and _shop_panel.visible:
-			_shop_panel.visible = false
+		elif _modal_dim != null and _modal_dim.visible:
+			_close_modals()
 		else:
 			GameFlow.return_to_main_menu()
 
@@ -141,38 +142,28 @@ func _draw() -> void:
 # --- UI --------------------------------------------------------------------------
 
 func _build_ui() -> void:
-	# Cabecera.
-	var top := HBoxContainer.new()
-	top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	top.offset_left = 30
-	top.offset_right = -30
-	top.offset_top = 16
-	top.add_theme_constant_override("separation", 12)
-	add_child(top)
-	var title_block := VBoxContainer.new()
-	title_block.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_block.add_theme_constant_override("separation", 0)
-	top.add_child(title_block)
-	var title := MenuTheme.make_title("Refugio Felino", 34, MenuTheme.ACCENT)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	title_block.add_child(title)
-	_sardines_chip = Label.new()
-	_sardines_chip.add_theme_font_size_override("font_size", 18)
-	_sardines_chip.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
-	_sardines_chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	top.add_child(_sardines_chip)
-	var shop_btn := MenuTheme.make_button("Tienda", MenuTheme.ACCENT)
-	shop_btn.custom_minimum_size = Vector2(130, 44)
+	# Cabecera: barra superior estándar (retorno + título + acciones).
+	var header := MarginContainer.new()
+	header.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	header.add_theme_constant_override("margin_left", MenuTheme.GAP_L)
+	header.add_theme_constant_override("margin_right", MenuTheme.GAP_L)
+	header.add_theme_constant_override("margin_top", MenuTheme.GAP_M)
+	add_child(header)
+	var top := MenuTheme.make_top_bar("Refugio", func() -> void: GameFlow.return_to_main_menu(), MenuTheme.ACCENT)
+	header.add_child(top)
+	var actions: HBoxContainer = top.get_node("Actions")
+	# Chip de sardinas (con handle a la etiqueta para refrescar).
+	var sardines_chip := MenuTheme.make_chip("0", MenuTheme.GOLD, &"sardine")
+	_sardines_label = sardines_chip.get_child(0).get_child(1)
+	actions.add_child(sardines_chip)
+	var shop_btn := MenuTheme.make_button("Tienda", MenuTheme.ACCENT, &"primary")
+	shop_btn.custom_minimum_size = Vector2(128, 44)
 	shop_btn.pressed.connect(_open_shop)
-	top.add_child(shop_btn)
-	var inventory_btn := MenuTheme.make_button("Inventario", MenuTheme.CYAN)
-	inventory_btn.custom_minimum_size = Vector2(155, 44)
+	actions.add_child(shop_btn)
+	var inventory_btn := MenuTheme.make_button("Inventario", MenuTheme.CYAN, &"secondary")
+	inventory_btn.custom_minimum_size = Vector2(140, 44)
 	inventory_btn.pressed.connect(_open_inventory)
-	top.add_child(inventory_btn)
-	var back_btn := MenuTheme.make_button("Volver  (ESC)", MenuTheme.TEXT_DIM)
-	back_btn.custom_minimum_size = Vector2(135, 44)
-	back_btn.pressed.connect(func() -> void: GameFlow.return_to_main_menu())
-	top.add_child(back_btn)
+	actions.add_child(inventory_btn)
 
 	# Slots del refugio: dos filas sobre el suelo de la habitacion.
 	var slots_box := VBoxContainer.new()
@@ -212,45 +203,64 @@ func _build_ui() -> void:
 	var bonus_panel := PanelContainer.new()
 	bonus_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
 	bonus_panel.offset_left = -300
-	bonus_panel.offset_right = -30
+	bonus_panel.offset_right = -MenuTheme.GAP_L
 	bonus_panel.offset_top = -140
-	MenuTheme.style_panel(bonus_panel, MenuTheme.ZOMBIE, Color(0.06, 0.055, 0.05, 0.92))
+	MenuTheme.style_panel(bonus_panel, MenuTheme.ZOMBIE, Color(0.06, 0.055, 0.05, 0.94))
 	add_child(bonus_panel)
 	var bonus_col := VBoxContainer.new()
-	bonus_col.add_theme_constant_override("separation", 4)
+	bonus_col.add_theme_constant_override("separation", MenuTheme.GAP_S)
 	bonus_panel.add_child(bonus_col)
-	var bonus_title := MenuTheme.make_title("Bonus", 18, MenuTheme.ZOMBIE)
-	bonus_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	bonus_col.add_child(bonus_title)
+	bonus_col.add_child(MenuTheme.make_section_header("Bonus activos", MenuTheme.ZOMBIE))
 	_bonus_list = VBoxContainer.new()
-	_bonus_list.add_theme_constant_override("separation", 2)
+	_bonus_list.add_theme_constant_override("separation", MenuTheme.GAP_XS)
 	bonus_col.add_child(_bonus_list)
 
-	# Tienda (overlay centrado, oculta al inicio).
+	# Capa modal compartida: dim + centrador por anclas (tienda / inventario).
+	_modal_dim = ColorRect.new()
+	_modal_dim.color = Color(0, 0, 0, 0.62)
+	_modal_dim.visible = false
+	_modal_dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_modal_dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(_modal_dim)
+	_modal_center = CenterContainer.new()
+	_modal_center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_modal_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_modal_center)
+
+	# Tienda (centrada en la capa modal, oculta al inicio).
 	_shop_panel = SHOP_PANEL_SCENE.instantiate()
 	_shop_panel.visible = false
-	_shop_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	_shop_panel.custom_minimum_size = Vector2(760, 470)
-	_shop_panel.position = Vector2(-380, -235)
-	add_child(_shop_panel)
+	_shop_panel.custom_minimum_size = Vector2(780, 480)
+	_modal_center.add_child(_shop_panel)
 	_shop_panel.request_place.connect(_start_placement)
-	_shop_panel.closed.connect(func() -> void: _shop_panel.visible = false)
+	_shop_panel.closed.connect(_close_modals)
 	_build_inventory_panel()
 
 
-func _open_shop() -> void:
+## Muestra un panel modal (tienda o inventario) con el fondo oscurecido.
+func _show_modal(panel: Control) -> void:
 	_cancel_placement()
-	if _inventory_panel != null:
-		_inventory_panel.visible = false
-	_shop_panel.visible = true
+	for child in _modal_center.get_children():
+		child.visible = child == panel
+	panel.visible = true
+	_modal_dim.visible = true
+
+
+func _close_modals() -> void:
+	if _modal_dim != null:
+		_modal_dim.visible = false
+	if _modal_center != null:
+		for child in _modal_center.get_children():
+			child.visible = false
+
+
+func _open_shop() -> void:
+	_show_modal(_shop_panel)
 	_shop_panel.refresh()
 
 
 func _open_inventory() -> void:
-	_cancel_placement()
-	if _shop_panel != null:
-		_shop_panel.visible = false
-	_inventory_panel.visible = true
+	_show_modal(_inventory_panel)
 	_refresh_inventory()
 
 
@@ -288,25 +298,23 @@ func _on_remove_slot_pressed(slot: Button) -> void:
 func _build_inventory_panel() -> void:
 	_inventory_panel = PanelContainer.new()
 	_inventory_panel.visible = false
-	_inventory_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	_inventory_panel.custom_minimum_size = Vector2(620, 390)
-	_inventory_panel.position = Vector2(-310, -195)
-	MenuTheme.style_panel(_inventory_panel, MenuTheme.CYAN, Color(0.06, 0.055, 0.05, 0.96))
-	add_child(_inventory_panel)
+	_inventory_panel.custom_minimum_size = Vector2(640, 400)
+	MenuTheme.style_panel(_inventory_panel, MenuTheme.CYAN, Color(0.06, 0.055, 0.05, 0.97))
+	_modal_center.add_child(_inventory_panel)
 
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 10)
+	col.add_theme_constant_override("separation", MenuTheme.GAP_M)
 	_inventory_panel.add_child(col)
 	var head := HBoxContainer.new()
-	head.add_theme_constant_override("separation", 10)
+	head.add_theme_constant_override("separation", MenuTheme.GAP_M)
 	col.add_child(head)
-	var title := MenuTheme.make_title("Inventario", 24, MenuTheme.CYAN)
+	var title := MenuTheme.make_title("Inventario", MenuTheme.FS_H2, MenuTheme.CYAN)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
-	var close_btn := _small_icon_button("×", "Cerrar")
-	close_btn.custom_minimum_size = Vector2(38, 34)
-	close_btn.pressed.connect(func() -> void: _inventory_panel.visible = false)
+	var close_btn := MenuTheme.make_icon_button(&"close", "Cerrar", MenuTheme.TEXT_DIM, 38)
+	close_btn.pressed.connect(_close_modals)
 	head.add_child(close_btn)
 
 	var scroll := ScrollContainer.new()
@@ -393,9 +401,7 @@ func _small_icon_button(text: String, tooltip: String) -> Button:
 
 func _start_placement(item_id: StringName) -> void:
 	_placing_item_id = item_id
-	_shop_panel.visible = false
-	if _inventory_panel != null:
-		_inventory_panel.visible = false
+	_close_modals()
 	var item = _shelter.get_item(item_id)
 	_placing_hint.text = "Elige un slot verde"
 	_placing_hint.tooltip_text = item.display_name if item != null else ""
@@ -446,7 +452,8 @@ func _refresh_all() -> void:
 
 
 func _refresh_chips() -> void:
-	_sardines_chip.text = "🐟 %d" % (_save.get_sardines() if _save != null else 0)
+	if _sardines_label != null:
+		_sardines_label.text = str(_save.get_sardines() if _save != null else 0)
 
 
 func _refresh_bonuses() -> void:
@@ -488,35 +495,30 @@ func _refresh_bonuses() -> void:
 # --- Tutorial de primera visita ----------------------------------------------------
 
 func _show_tutorial() -> void:
-	_tutorial_overlay = Control.new()
-	_tutorial_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(_tutorial_overlay)
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.6)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_tutorial_overlay.add_child(dim)
-	var panel := PanelContainer.new()
-	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	panel.custom_minimum_size = Vector2(480, 0)
-	panel.position = Vector2(-240, -80)
-	MenuTheme.style_panel(panel, MenuTheme.ACCENT)
-	_tutorial_overlay.add_child(panel)
+	var panel := MenuTheme.make_overlay(self, MenuTheme.ACCENT, Vector2(480, 0))
+	_tutorial_overlay = panel
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 12)
+	col.add_theme_constant_override("separation", MenuTheme.GAP_M)
 	panel.add_child(col)
-	col.add_child(MenuTheme.make_title("Bienvenida al Refugio", 24, MenuTheme.ACCENT))
-	var body := Label.new()
-	body.text = "Compra. Coloca. Solo lo equipado da bonus."
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", MenuTheme.GAP_S)
+	col.add_child(head)
+	var shelter_icon := IconDrawer.new()
+	shelter_icon.icon_type = &"shelter"
+	shelter_icon.accent = MenuTheme.ACCENT
+	shelter_icon.custom_minimum_size = Vector2(28, 28)
+	shelter_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	head.add_child(shelter_icon)
+	head.add_child(MenuTheme.make_title("Bienvenida al Refugio", MenuTheme.FS_H2, MenuTheme.ACCENT))
+	var body := MenuTheme.make_label("Compra. Coloca. Solo lo equipado da bonus.", MenuTheme.FS_H3, MenuTheme.TEXT)
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.add_theme_font_size_override("font_size", 16)
-	body.add_theme_color_override("font_color", MenuTheme.TEXT)
 	col.add_child(body)
-	var ok := MenuTheme.make_button("Entendido", MenuTheme.ZOMBIE)
+	var ok := MenuTheme.make_button("Entendido", MenuTheme.ZOMBIE, &"primary")
 	ok.custom_minimum_size = Vector2(200, 44)
 	ok.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	ok.pressed.connect(func() -> void:
 		_shelter.mark_tutorial_seen()
-		_tutorial_overlay.queue_free())
+		MenuTheme.close_overlay(panel))
 	col.add_child(ok)
 
 

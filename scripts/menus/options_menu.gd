@@ -1,16 +1,31 @@
 extends Control
-## Pantalla de opciones basicas (Fase 08). Lee y escribe en el autoload Settings
-## (pantalla completa, screen shake + intensidad, numeros de dano, FPS y audio) y
-## permite resetear el progreso con DOBLE confirmacion.
+## Pantalla de opciones (rediseño Steam). Reorganizada en pestañas por grupo
+## (Vídeo · Juego · Audio · Datos) con barra superior de retorno y contenido en
+## scroll para que nunca se recorte. Interruptores y sliders reales desde la
+## fábrica de MenuTheme. Lee/escribe el autoload Settings; el reset conserva la
+## doble confirmación.
 
 const MenuTheme = preload("res://scripts/menus/menu_theme.gd")
-const SHAKE_ORDER: Array[String] = ["bajo", "medio", "alto"]
-const QUALITY_ORDER: Array[String] = ["baja", "media", "alta"]
+const SHAKE_OPTIONS: Array[Dictionary] = [
+	{"id": "bajo", "label": "Bajo"}, {"id": "medio", "label": "Medio"}, {"id": "alto", "label": "Alto"},
+]
+const QUALITY_OPTIONS: Array[Dictionary] = [
+	{"id": "baja", "label": "Baja"}, {"id": "media", "label": "Media"}, {"id": "alta", "label": "Alta"},
+]
+const TABS: Array[Dictionary] = [
+	{"id": &"video", "label": "Vídeo", "color": Color(0.45, 0.85, 1.0)},
+	{"id": &"juego", "label": "Juego", "color": Color(1.0, 0.6, 0.2)},
+	{"id": &"audio", "label": "Audio", "color": Color(0.62, 0.44, 0.88)},
+	{"id": &"datos", "label": "Datos", "color": Color(0.95, 0.42, 0.42)},
+]
 
 var _settings: Node
 var _save: Node
+var _tab: StringName = &"video"
+var _tab_row: HBoxContainer
+var _content_box: VBoxContainer
 var _reset_button: Button
-var _reset_stage: int = 0  # 0 normal, 1 esperando confirmacion final
+var _reset_stage: int = 0
 
 
 func _ready() -> void:
@@ -32,154 +47,108 @@ func _build_ui() -> void:
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
-	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
-
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(560, 680)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	center.add_child(scroll)
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", MenuTheme.GAP_XL + 12)
+	margin.add_theme_constant_override("margin_right", MenuTheme.GAP_XL + 12)
+	margin.add_theme_constant_override("margin_top", MenuTheme.GAP_L)
+	margin.add_theme_constant_override("margin_bottom", MenuTheme.GAP_L)
+	add_child(margin)
 
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 10)
-	col.custom_minimum_size = Vector2(520, 0)
-	scroll.add_child(col)
+	col.add_theme_constant_override("separation", MenuTheme.GAP_L)
+	margin.add_child(col)
 
-	col.add_child(MenuTheme.make_title("Opciones", 40, MenuTheme.PURPLE))
-	col.add_child(_spacer(8))
+	col.add_child(MenuTheme.make_top_bar("Opciones", func() -> void: GameFlow.return_to_main_menu(), MenuTheme.PURPLE))
 
-	col.add_child(_toggle_row("Pantalla completa", "fullscreen"))
-	col.add_child(_toggle_row("Screen shake", "shake_enabled"))
-	col.add_child(_shake_level_row())
-	col.add_child(_toggle_row("Numeros de dano", "damage_numbers"))
-	col.add_child(_quality_row())
-	col.add_child(_toggle_row("Efectos intensos", "visual_effects"))
-	col.add_child(_toggle_row("Sombras", "shadows"))
-	col.add_child(_toggle_row("Mostrar FPS", "show_fps"))
-	col.add_child(_toggle_row("Omitir cinematicas", "skip_cinematics"))
-	col.add_child(_spacer(8))
-	col.add_child(MenuTheme.make_title("Audio", 24, MenuTheme.CYAN))
-	col.add_child(_volume_row("Master", "audio_master"))
-	col.add_child(_volume_row("Musica", "audio_music"))
-	col.add_child(_volume_row("Efectos", "audio_sfx"))
-	col.add_child(_volume_row("UI", "audio_ui"))
-	col.add_child(_toggle_row("Silenciar todo", "audio_mute"))
+	_tab_row = MenuTheme.make_segmented(TABS, _tab, _on_tab_selected, MenuTheme.PURPLE)
+	col.add_child(_tab_row)
 
-	col.add_child(_spacer(14))
-	_reset_button = MenuTheme.make_button("Resetear progreso", Color(0.85, 0.35, 0.35))
-	_reset_button.pressed.connect(_on_reset_pressed)
-	col.add_child(_reset_button)
+	# Panel de contenido, envuelto en scroll para no recortar nunca.
+	var panel := PanelContainer.new()
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	MenuTheme.style_panel(panel, MenuTheme.PURPLE, MenuTheme.PANEL_BG_SOFT)
+	col.add_child(panel)
+	_content_box = VBoxContainer.new()
+	_content_box.add_theme_constant_override("separation", MenuTheme.GAP_M)
+	panel.add_child(MenuTheme.wrap_scrollable(_content_box))
 
-	col.add_child(_spacer(6))
-	var back := MenuTheme.make_button("Volver  (ESC)", MenuTheme.TEXT_DIM)
-	back.pressed.connect(func() -> void: GameFlow.return_to_main_menu())
-	col.add_child(back)
+	_rebuild_content()
 
 
-## Fila con etiqueta + boton que alterna un booleano de Settings.
-func _toggle_row(title: String, key: String) -> Control:
-	var hb := HBoxContainer.new()
-	var label := Label.new()
-	label.text = title
-	label.add_theme_font_size_override("font_size", 19)
-	label.add_theme_color_override("font_color", MenuTheme.TEXT)
+func _on_tab_selected(id: Variant) -> void:
+	_tab = id
+	MenuTheme.refresh_segmented(_tab_row, _tab)
+	_rebuild_content()
+
+
+func _rebuild_content() -> void:
+	_reset_stage = 0
+	for child in _content_box.get_children():
+		child.queue_free()
+	match _tab:
+		&"video":
+			_content_box.add_child(MenuTheme.make_setting_toggle("Pantalla completa", "fullscreen"))
+			_content_box.add_child(_choice_row("Calidad visual", "visual_quality", QUALITY_OPTIONS, "media"))
+			_content_box.add_child(MenuTheme.make_setting_toggle("Efectos intensos", "visual_effects"))
+			_content_box.add_child(MenuTheme.make_setting_toggle("Sombras", "shadows"))
+			_content_box.add_child(MenuTheme.make_setting_toggle("Mostrar FPS", "show_fps"))
+		&"juego":
+			_content_box.add_child(MenuTheme.make_setting_toggle("Screen shake", "shake_enabled"))
+			_content_box.add_child(_choice_row("Intensidad de shake", "shake_level", SHAKE_OPTIONS, "medio"))
+			_content_box.add_child(MenuTheme.make_setting_toggle("Números de daño", "damage_numbers"))
+			_content_box.add_child(MenuTheme.make_setting_toggle("Omitir cinemáticas", "skip_cinematics"))
+		&"audio":
+			_content_box.add_child(MenuTheme.make_setting_slider("Master", "audio_master", MenuTheme.PURPLE))
+			_content_box.add_child(MenuTheme.make_setting_slider("Música", "audio_music", MenuTheme.PURPLE))
+			_content_box.add_child(MenuTheme.make_setting_slider("Efectos", "audio_sfx", MenuTheme.PURPLE))
+			_content_box.add_child(MenuTheme.make_setting_slider("UI", "audio_ui", MenuTheme.PURPLE))
+			_content_box.add_child(MenuTheme.make_setting_toggle("Silenciar todo", "audio_mute"))
+		&"datos":
+			var warn := MenuTheme.make_label("El reinicio borra partidas, sardinas y desbloqueos. No se puede deshacer.", MenuTheme.FS_BODY, MenuTheme.TEXT_DIM)
+			warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			_content_box.add_child(warn)
+			_content_box.add_child(_spacer(MenuTheme.GAP_S))
+			_reset_button = MenuTheme.make_button("Resetear progreso", MenuTheme.DANGER, &"danger")
+			_reset_button.custom_minimum_size = Vector2(280, 48)
+			_reset_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			_reset_button.pressed.connect(_on_reset_pressed)
+			_content_box.add_child(_reset_button)
+
+
+## Fila etiqueta + control segmentado ligado a una clave de texto de Settings.
+func _choice_row(title: String, key: String, options: Array, default_value: String) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", MenuTheme.GAP_M)
+	var label := MenuTheme.make_label(title, MenuTheme.FS_H3, MenuTheme.TEXT)
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hb.add_child(label)
-
-	var button := MenuTheme.make_button(_on_off(key), MenuTheme.CYAN)
-	button.custom_minimum_size = Vector2(140, 42)
-	button.pressed.connect(func() -> void:
-		var current: bool = bool(_settings.get_value(key, false))
-		_settings.set_value(key, not current)
-		button.text = _on_off(key))
-	hb.add_child(button)
-	return hb
-
-
-func _shake_level_row() -> Control:
-	var hb := HBoxContainer.new()
-	var label := Label.new()
-	label.text = "Intensidad de shake"
-	label.add_theme_font_size_override("font_size", 19)
-	label.add_theme_color_override("font_color", MenuTheme.TEXT)
-	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hb.add_child(label)
-
-	var button := MenuTheme.make_button(_shake_label(), MenuTheme.ACCENT)
-	button.custom_minimum_size = Vector2(140, 42)
-	button.pressed.connect(func() -> void:
-		var current: String = str(_settings.get_value("shake_level", "medio"))
-		var idx: int = SHAKE_ORDER.find(current)
-		idx = (idx + 1) % SHAKE_ORDER.size()
-		_settings.set_value("shake_level", SHAKE_ORDER[idx])
-		button.text = _shake_label())
-	hb.add_child(button)
-	return hb
-
-
-func _quality_row() -> Control:
-	var hb := HBoxContainer.new()
-	var label := Label.new()
-	label.text = "Calidad visual"
-	label.add_theme_font_size_override("font_size", 19)
-	label.add_theme_color_override("font_color", MenuTheme.TEXT)
-	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hb.add_child(label)
-
-	var button := MenuTheme.make_button(_quality_label(), MenuTheme.PURPLE)
-	button.custom_minimum_size = Vector2(140, 42)
-	button.pressed.connect(func() -> void:
-		var current: String = str(_settings.get_value("visual_quality", "media"))
-		var idx: int = QUALITY_ORDER.find(current)
-		idx = (idx + 1) % QUALITY_ORDER.size()
-		_settings.set_value("visual_quality", QUALITY_ORDER[idx])
-		button.text = _quality_label())
-	hb.add_child(button)
-	return hb
-
-
-func _volume_row(title: String, key: String) -> Control:
-	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 10)
-	var label := Label.new()
-	label.text = title
-	label.add_theme_font_size_override("font_size", 19)
-	label.add_theme_color_override("font_color", MenuTheme.TEXT)
-	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hb.add_child(label)
-
-	var value_label := Label.new()
-	value_label.custom_minimum_size = Vector2(54, 0)
-	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	value_label.add_theme_font_size_override("font_size", 17)
-	value_label.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
-	hb.add_child(value_label)
-
-	var slider := HSlider.new()
-	slider.custom_minimum_size = Vector2(210, 34)
-	slider.min_value = 0.0
-	slider.max_value = 1.0
-	slider.step = 0.05
-	slider.value = float(_settings.get_value(key, 0.75))
-	value_label.text = "%d%%" % int(round(slider.value * 100.0))
-	slider.value_changed.connect(func(value: float) -> void:
-		value_label.text = "%d%%" % int(round(value * 100.0))
-		_settings.set_value(key, value))
-	hb.add_child(slider)
-	return hb
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(label)
+	var current: String = str(_settings.get_value(key, default_value)) if _settings != null else default_value
+	# holder guarda la referencia al segmentado para refrescarlo desde el callback
+	# (las lambdas de GDScript capturan los locales por valor al crearse).
+	var holder: Array = []
+	var seg := MenuTheme.make_segmented(options, current, func(id: Variant) -> void:
+		if _settings != null and _settings.has_method("set_value"):
+			_settings.set_value(key, id)
+		if not holder.is_empty():
+			MenuTheme.refresh_segmented(holder[0], id), MenuTheme.PURPLE)
+	holder.append(seg)
+	seg.custom_minimum_size = Vector2(240, 0)
+	seg.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(seg)
+	return row
 
 
 func _on_reset_pressed() -> void:
-	# Doble confirmacion para no borrar progreso por accidente.
+	# Doble confirmación para no borrar el progreso por accidente.
 	_reset_stage += 1
 	match _reset_stage:
 		1:
 			var audio_warn: Node = get_node_or_null("/root/AudioManager")
 			if audio_warn != null and audio_warn.has_method("play_ui"):
 				audio_warn.play_ui(&"ui_error")
-			_reset_button.text = "Esto borrara todo tu progreso. Confirmar borrado definitivo"
-			_reset_button.add_theme_color_override("font_color", Color(1.0, 0.7, 0.4))
+			_reset_button.text = "Confirmar borrado definitivo"
 		_:
 			if _save != null and _save.has_method("reset_progress"):
 				_save.reset_progress()
@@ -187,24 +156,12 @@ func _on_reset_pressed() -> void:
 			if audio_done != null and audio_done.has_method("play_ui"):
 				audio_done.play_ui(&"ui_buy")
 			_reset_button.text = "Progreso borrado"
-			_reset_button.add_theme_color_override("font_color", MenuTheme.ZOMBIE)
+			MenuTheme.style_button(_reset_button, MenuTheme.ZOMBIE, &"secondary")
 			_reset_button.disabled = true
 			_reset_stage = 0
 
 
-func _on_off(key: String) -> String:
-	return "Si" if bool(_settings.get_value(key, false)) else "No"
-
-
-func _shake_label() -> String:
-	return str(_settings.get_value("shake_level", "medio")).capitalize()
-
-
-func _quality_label() -> String:
-	return str(_settings.get_value("visual_quality", "media")).capitalize()
-
-
-func _spacer(h: float) -> Control:
+func _spacer(h: int) -> Control:
 	var s := Control.new()
 	s.custom_minimum_size = Vector2(0, h)
 	return s

@@ -1,4 +1,4 @@
-[gd_scene load_steps=32 format=3 uid="uid://bvc01mainlevel01"]
+[gd_scene load_steps=33 format=3 uid="uid://bvc01mainlevel01"]
 
 [ext_resource type="PackedScene" uid="uid://bvc01hud01" path="res://scenes/ui/HUD.tscn" id="1_hud"]
 [ext_resource type="PackedScene" uid="uid://bvc01player01" path="res://scenes/player/Player.tscn" id="2_player"]
@@ -32,6 +32,7 @@
 [ext_resource type="Resource" path="res://data/maps/industrial_alley_map.tres" id="28_industrial"]
 [ext_resource type="Script" path="res://scripts/maps/obstacle_spawner.gd" id="29_obst_spawner"]
 [ext_resource type="PackedScene" path="res://scenes/maps/Obstacle.tscn" id="30_obstacle"]
+[ext_resource type="Script" path="res://scripts/systems/player_manager.gd" id="31_playermgr"]
 
 [node name="MainLevel" type="Node2D"]
 
@@ -119,6 +120,12 @@ hud_path = NodePath("../HUD")
 
 [node name="UpgradeManager" type="Node" parent="."]
 script = ExtResource("6_upgrades")
+player_path = NodePath("../Player")
+hud_path = NodePath("../HUD")
+
+[node name="PlayerManager" type="Node2D" parent="."]
+script = ExtResource("31_playermgr")
+player_scene = ExtResource("2_player")
 player_path = NodePath("../Player")
 hud_path = NodePath("../HUD")
 

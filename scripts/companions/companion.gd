@@ -165,13 +165,11 @@ func _update_passive_regen(delta: float) -> void:
 	var healed_any: bool = false
 	var range_sq: float = companion_data.passive_regen_range * companion_data.passive_regen_range
 
-	if is_instance_valid(_player) and _player.has_method("heal"):
-		var p_cur = _player.get("current_health")
-		var p_max = _player.get("max_health")
-		if p_cur != null and p_max != null and int(p_cur) < int(p_max):
-			if global_position.distance_squared_to(_player.global_position) <= range_sq:
-				_player.heal(amount)
-				healed_any = true
+	var needy := _neediest_player()
+	if needy != null and needy.has_method("heal"):
+		if global_position.distance_squared_to(needy.global_position) <= range_sq:
+			needy.heal(amount)
+			healed_any = true
 
 	for ally in get_tree().get_nodes_in_group("companions"):
 		if ally == self or not is_instance_valid(ally):
@@ -219,13 +217,30 @@ func _update_role() -> void:
 				_action_cooldown = _effective_attack_cooldown()
 
 
+## Jugador ACTIVO mas herido (P1 o P2 en coop; el unico en solo). Ignora derribados
+## (a los jugadores los revive el otro jugador, no el medico) y a quien esta lleno.
+func _neediest_player() -> Node2D:
+	var best: Node2D = null
+	var lowest_ratio: float = 1.0
+	for p in get_tree().get_nodes_in_group("players"):
+		if not is_instance_valid(p):
+			continue
+		if p.has_method("is_active") and not p.is_active():
+			continue
+		var cur = p.get("current_health")
+		var mx = p.get("max_health")
+		if cur == null or mx == null or int(mx) <= 0:
+			continue
+		var ratio: float = float(cur) / float(mx)
+		if ratio < 1.0 and ratio < lowest_ratio:
+			lowest_ratio = ratio
+			best = p
+	return best
+
+
 func _try_heal_target() -> void:
-	var heal_target: Node = null
-	if is_instance_valid(_player):
-		var player_current = _player.get("current_health")
-		var player_max = _player.get("max_health")
-		if player_current != null and player_max != null and int(player_current) < int(player_max):
-			heal_target = _player
+	# Coop: cura al jugador ACTIVO mas herido (no solo a P1).
+	var heal_target: Node = _neediest_player()
 
 	if heal_target == null:
 		var lowest_ratio: float = 1.1
@@ -589,14 +604,19 @@ func _complete_revive() -> void:
 
 
 func _on_revive_area_body_entered(body: Node) -> void:
-	if not body.is_in_group("player") or not is_downed():
+	# Coop: cualquier jugador (grupo "players") puede revivir al compañero. En solo
+	# el unico jugador tambien esta en ese grupo, asi que el comportamiento es igual.
+	if not body.is_in_group("players") or not is_downed():
 		return
 	_reviver_inside = true
 	_revive_progress = 0.0
 
 
 func _on_revive_area_body_exited(body: Node) -> void:
-	if not body.is_in_group("player"):
+	if not body.is_in_group("players"):
+		return
+	# Aun queda otro jugador dentro del area? Entonces no cancelar el revive.
+	if _any_player_in_revive_area(body):
 		return
 	_reviver_inside = false
 	_revive_progress = 0.0
@@ -605,6 +625,18 @@ func _on_revive_area_body_exited(body: Node) -> void:
 		state = &"downed"
 		_update_state_visuals()
 		_emit_snapshot()
+
+
+## Coop: ¿queda algun otro jugador dentro del area de revive al salir uno?
+func _any_player_in_revive_area(exiting: Node) -> bool:
+	if not is_instance_valid(_revive_area):
+		return false
+	for b in _revive_area.get_overlapping_bodies():
+		if b == exiting or not is_instance_valid(b):
+			continue
+		if b.is_in_group("players"):
+			return true
+	return false
 
 
 func _player_is_dead() -> bool:

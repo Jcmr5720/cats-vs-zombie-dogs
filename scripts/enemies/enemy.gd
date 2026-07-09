@@ -99,8 +99,9 @@ func _ready() -> void:
 	_randomize_movement()
 	_apply_config()
 	_last_position = global_position
-	# El jugador se localiza por grupo para no acoplar referencias en la escena.
-	_player = get_tree().get_first_node_in_group("player")
+	# El jugador objetivo se localiza por grupo. En coop hay 2 jugadores: se elige
+	# el vivo mas cercano; en solo devuelve al unico jugador (comportamiento igual).
+	_player = _resolve_target_player()
 	# Pop de aparición: el cuerpo crece desde pequeño (la colisión no se toca).
 	_spawn_scale = 0.25
 	var pop := create_tween()
@@ -112,8 +113,9 @@ func _physics_process(delta: float) -> void:
 	if _is_dead:
 		return
 
+	# Reevalua el jugador objetivo (coop: el vivo mas cercano puede cambiar).
+	_player = _resolve_target_player()
 	if not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player")
 		velocity = Vector2.ZERO
 		return
 
@@ -293,6 +295,25 @@ func _randomize_movement() -> void:
 	_wobble_phase = randf() * TAU
 	_wobble_strength = randf_range(0.12, 0.35)
 	_wobble_speed = randf_range(2.5, 4.5)
+
+
+## Jugador objetivo: en coop, el jugador ACTIVO (ni muerto ni derribado) mas
+## cercano; en solo, el unico jugador. Fallback al grupo "player" por compatibilidad.
+func _resolve_target_player() -> Node2D:
+	var best: Node2D = null
+	var best_distance: float = INF
+	for p in get_tree().get_nodes_in_group("players"):
+		if not is_instance_valid(p) or not (p is Node2D):
+			continue
+		if p.has_method("is_active") and not p.is_active():
+			continue
+		var d: float = global_position.distance_squared_to((p as Node2D).global_position)
+		if d < best_distance:
+			best_distance = d
+			best = p
+	if best == null:
+		best = get_tree().get_first_node_in_group("player") as Node2D
+	return best
 
 
 func _pick_chase_target() -> Node2D:

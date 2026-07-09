@@ -53,20 +53,28 @@ func _ready() -> void:
 	_player = get_node_or_null(player_path)
 	_companion_manager = get_node_or_null(companion_manager_path)
 	_hud = get_node_or_null(hud_path)
-	var mp: Node = get_node_or_null("/root/MetaProgression")
-	if mp != null and mp.has_method("first_rescue_seconds_reduction"):
-		_first_rescue_seconds_reduction = float(mp.first_rescue_seconds_reduction())
-	# Refugio Felino (Fase 10): Radio de Maullidos (primer rescate antes; el piso
-	# de 15 s ya lo garantiza _schedule_next_spawn) y Mapa de Refugios (mas cerca).
-	var shelter: Node = get_node_or_null("/root/Shelter")
-	if shelter != null and shelter.has_method("get_bonuses"):
-		var bonuses: Dictionary = shelter.get_bonuses()
-		_first_rescue_seconds_reduction += float(bonuses.get("rescue_first_spawn_reduction", 0.0))
-		var closer: float = clampf(float(bonuses.get("rescue_distance_modifier", 0.0)), 0.0, 0.15)
-		if closer > 0.0:
-			min_spawn_distance = maxf(220.0, min_spawn_distance * (1.0 - closer))
-			max_spawn_distance = maxf(min_spawn_distance + 60.0, max_spawn_distance * (1.0 - closer))
+	# Mejoras permanentes y Refugio SOLO en Modo Historia (Partida libre = reto puro).
+	if _is_story_run():
+		var mp: Node = get_node_or_null("/root/MetaProgression")
+		if mp != null and mp.has_method("first_rescue_seconds_reduction"):
+			_first_rescue_seconds_reduction = float(mp.first_rescue_seconds_reduction())
+		# Refugio Felino (Fase 10): Radio de Maullidos (primer rescate antes; el piso
+		# de 15 s ya lo garantiza _schedule_next_spawn) y Mapa de Refugios (mas cerca).
+		var shelter: Node = get_node_or_null("/root/Shelter")
+		if shelter != null and shelter.has_method("get_bonuses"):
+			var bonuses: Dictionary = shelter.get_bonuses()
+			_first_rescue_seconds_reduction += float(bonuses.get("rescue_first_spawn_reduction", 0.0))
+			var closer: float = clampf(float(bonuses.get("rescue_distance_modifier", 0.0)), 0.0, 0.15)
+			if closer > 0.0:
+				min_spawn_distance = maxf(220.0, min_spawn_distance * (1.0 - closer))
+				max_spawn_distance = maxf(min_spawn_distance + 60.0, max_spawn_distance * (1.0 - closer))
 	_schedule_next_spawn()
+
+
+## True solo en Modo Historia (donde aplican mejoras permanentes y Refugio).
+func _is_story_run() -> bool:
+	var gf: Node = get_node_or_null("/root/GameFlow")
+	return gf != null and gf.has_method("is_story_run") and gf.is_story_run()
 
 
 func _process(delta: float) -> void:

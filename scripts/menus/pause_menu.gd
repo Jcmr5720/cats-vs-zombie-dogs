@@ -1,18 +1,21 @@
 extends Control
-## Pausa durante la partida (Fase 08). ESC pausa/reanuda y muestra Continuar, Opciones
-## (ajustes rapidos) y Volver al menu (con confirmacion). Se instancia dentro del HUD.
-## No se activa si la partida ya termino (lo maneja MapManager) ni durante la seleccion
-## de cartas de mejora.
+## Pausa durante la partida (rediseño Steam). ESC pausa/reanuda y muestra Continuar,
+## Opciones rápidas y Volver al menú (con confirmación). La info de la run se muestra
+## como chips/tarjetas en vez de un bloque de texto. Se instancia dentro del HUD.
+## No se activa si la partida ya terminó (lo maneja MapManager) ni durante la
+## selección de cartas de mejora.
 
 const MenuTheme = preload("res://scripts/menus/menu_theme.gd")
-const SHAKE_ORDER: Array[String] = ["bajo", "medio", "alto"]
 
 var _settings: Node
 var _root_box: VBoxContainer
 var _options_box: VBoxContainer
 var _confirm_box: VBoxContainer
-var _info_label: Label
+var _info_header: Label
+var _info_chips: HFlowContainer
 var _is_open: bool = false
+## Primer boton (Continuar): recibe el foco al abrir para navegar con gamepad (P2).
+var _continue_button: Button
 
 
 func _ready() -> void:
@@ -25,19 +28,19 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not event.is_action_pressed("ui_cancel"):
+	# ESC (P1) o Start/Options del gamepad (P2) abren/cierran la pausa.
+	if not (event.is_action_pressed("ui_cancel") or event.is_action_pressed("p2_pause")):
 		return
-	# Si la partida termino, deja que el MapManager maneje ESC (volver al menu).
+	# Si la partida terminó, deja que el MapManager maneje ESC (volver al menú).
 	var mm: Node = get_tree().get_first_node_in_group("map_manager")
 	if mm != null and mm.has_method("is_run_ended") and mm.is_run_ended():
 		return
-	# No interferir con la seleccion de cartas (el arbol ya esta en pausa por eso).
+	# No interferir con la selección de cartas (el árbol ya está en pausa por eso).
 	var hud: Node = get_tree().get_first_node_in_group("hud")
 	if hud != null and hud.has_method("is_selecting_upgrade") and hud.is_selecting_upgrade():
 		return
 
 	if _is_open:
-		# Si hay un sub-panel abierto, ESC vuelve al panel raiz; si no, reanuda.
 		if _options_box.visible or _confirm_box.visible:
 			_show_root()
 		else:
@@ -54,48 +57,41 @@ func _open() -> void:
 	get_tree().paused = true
 	_refresh_info()
 	_show_root()
+	# Foco al primer boton para que el P2 navegue la pausa con el gamepad.
+	if is_instance_valid(_continue_button):
+		_continue_button.call_deferred("grab_focus")
 
 
-## Centro de informacion: vuelca el detalle de la run (que el HUD ya no muestra).
+## Centro de información: vuelca el detalle de la run como chips en vez de texto.
 func _refresh_info() -> void:
-	if _info_label == null:
+	if _info_chips == null:
 		return
 	var hud: Node = get_tree().get_first_node_in_group("hud")
 	if hud == null or not hud.has_method("get_run_info"):
-		_info_label.text = ""
+		_info_header.text = ""
 		return
 	var info: Dictionary = hud.get_run_info()
+	_info_header.text = "%s  ·  %s" % [info.get("map_name", "Mapa"), info.get("objective", "Sobrevive")]
+	for child in _info_chips.get_children():
+		child.queue_free()
 	var total: int = int(info.get("time", 0.0))
-	var lines: Array[String] = [
-		"%s  ·  %s" % [info.get("map_name", "Mapa"), info.get("objective", "Sobrevive")],
-		"Tiempo %02d:%02d   Nivel %d   Eliminados %d" % [total / 60, total % 60, int(info.get("level", 1)), int(info.get("kills", 0))],
-		"Gatos rescatados: %d/%d   Intensidad: %s" % [int(info.get("cats", 0)), int(info.get("max_cats", 4)), _intensity_tier(float(info.get("difficulty", 0.0)))],
-	]
+	_info_chips.add_child(MenuTheme.make_chip("%02d:%02d" % [total / 60, total % 60], MenuTheme.CYAN, &"clock"))
+	_info_chips.add_child(MenuTheme.make_chip("Nivel %d" % int(info.get("level", 1)), MenuTheme.CYAN, &"upgrade"))
+	_info_chips.add_child(MenuTheme.make_chip("%d bajas" % int(info.get("kills", 0)), MenuTheme.DANGER, &"boss"))
+	_info_chips.add_child(MenuTheme.make_chip("%d/%d" % [int(info.get("cats", 0)), int(info.get("max_cats", 4))], MenuTheme.PURPLE, &"companion"))
+	_info_chips.add_child(MenuTheme.make_chip(_intensity_tier(float(info.get("difficulty", 0.0))), MenuTheme.ACCENT, &"shield"))
 	var mm: Node = get_tree().get_first_node_in_group("map_manager")
 	if mm != null and mm.has_method("get_world_seed"):
 		var seed_value: int = int(mm.get_world_seed())
 		if seed_value != 0:
-			lines.append("Semilla del mundo: %d" % seed_value)
-	var weapons: Array = info.get("weapons", [])
-	if not weapons.is_empty():
-		var parts: Array[String] = []
-		for w in weapons:
-			parts.append("%s Nv.%d" % [w.get("display_name", "Arma"), int(w.get("level", 1))])
-		lines.append("Armas: %s" % ", ".join(parts))
-	var synergies: Array = info.get("synergies", [])
-	var active_syn: Array[String] = []
-	for s in synergies:
+			_info_chips.add_child(MenuTheme.make_chip("Semilla %d" % seed_value, MenuTheme.TEXT_DIM, &"map"))
+	for w in info.get("weapons", []):
+		_info_chips.add_child(MenuTheme.make_chip("%s Nv.%d" % [w.get("display_name", "Arma"), int(w.get("level", 1))], MenuTheme.ACCENT, &"upgrade"))
+	for s in info.get("synergies", []):
 		if bool(s.get("active", false)):
-			active_syn.append(str(s.get("name", "")))
-	if not active_syn.is_empty():
-		lines.append("Sinergias activas: %s" % ", ".join(active_syn))
-	var companions: Array = info.get("companions", [])
-	if not companions.is_empty():
-		var cparts: Array[String] = []
-		for c in companions:
-			cparts.append(str(c.get("display_name", "Companero")))
-		lines.append("Companeros: %s" % ", ".join(cparts))
-	_info_label.text = "\n".join(lines)
+			_info_chips.add_child(MenuTheme.make_chip(str(s.get("name", "")), MenuTheme.ZOMBIE, &"star"))
+	for c in info.get("companions", []):
+		_info_chips.add_child(MenuTheme.make_chip(str(c.get("display_name", "Compañero")), MenuTheme.PURPLE, &"companion"))
 
 
 func _intensity_tier(difficulty: float) -> String:
@@ -107,7 +103,7 @@ func _intensity_tier(difficulty: float) -> String:
 		return "Medio"
 	if difficulty < 18.0:
 		return "Peligroso"
-	return "Caotico"
+	return "Caótico"
 
 
 func _resume() -> void:
@@ -123,11 +119,11 @@ func _show_root() -> void:
 	_confirm_box.visible = false
 
 
-# --- Construccion ------------------------------------------------------------
+# --- Construcción ------------------------------------------------------------
 
 func _build_ui() -> void:
 	var bg := ColorRect.new()
-	bg.color = Color(0.03, 0.04, 0.06, 0.85)
+	bg.color = Color(0.03, 0.04, 0.06, 0.86)
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
@@ -148,33 +144,43 @@ func _build_ui() -> void:
 
 func _build_root() -> VBoxContainer:
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 12)
+	v.add_theme_constant_override("separation", MenuTheme.GAP_M)
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
-	v.add_child(MenuTheme.make_title("Pausa", 44, MenuTheme.CYAN))
+	v.add_child(MenuTheme.make_title("Pausa", MenuTheme.FS_H1 + 6, MenuTheme.CYAN))
 
-	# Centro de informacion: detalle de la run que el HUD mantiene oculto.
+	# Centro de información: cabecera + chips de la run.
 	var info_panel := PanelContainer.new()
 	MenuTheme.style_panel(info_panel, MenuTheme.CYAN, MenuTheme.PANEL_BG_SOFT)
-	info_panel.custom_minimum_size = Vector2(520, 0)
-	_info_label = Label.new()
-	_info_label.add_theme_font_size_override("font_size", 15)
-	_info_label.add_theme_color_override("font_color", MenuTheme.TEXT)
-	_info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	info_panel.add_child(_info_label)
+	info_panel.custom_minimum_size = Vector2(560, 0)
+	var info_col := VBoxContainer.new()
+	info_col.add_theme_constant_override("separation", MenuTheme.GAP_S)
+	info_panel.add_child(info_col)
+	_info_header = MenuTheme.make_label("", MenuTheme.FS_H3, MenuTheme.TEXT)
+	_info_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	info_col.add_child(_info_header)
+	_info_chips = HFlowContainer.new()
+	_info_chips.add_theme_constant_override("h_separation", MenuTheme.GAP_S)
+	_info_chips.add_theme_constant_override("v_separation", MenuTheme.GAP_S)
+	info_col.add_child(_info_chips)
 	v.add_child(info_panel)
-	v.add_child(_spacer(4))
+	v.add_child(_spacer(MenuTheme.GAP_XS))
 
-	var cont := MenuTheme.make_button("Continuar", MenuTheme.ZOMBIE)
+	var cont := MenuTheme.make_button("Continuar", MenuTheme.ZOMBIE, &"primary")
+	cont.custom_minimum_size = Vector2(360, 52)
+	cont.focus_mode = Control.FOCUS_ALL
 	cont.pressed.connect(_resume)
 	v.add_child(cont)
+	_continue_button = cont
 
-	var opt := MenuTheme.make_button("Opciones", MenuTheme.PURPLE)
+	var opt := MenuTheme.make_button("Opciones", MenuTheme.PURPLE, &"secondary")
+	opt.custom_minimum_size = Vector2(360, 46)
 	opt.pressed.connect(func() -> void:
 		_root_box.visible = false
 		_options_box.visible = true)
 	v.add_child(opt)
 
-	var menu := MenuTheme.make_button("Volver al menu principal", Color(0.85, 0.45, 0.45))
+	var menu := MenuTheme.make_button("Volver al menú principal", MenuTheme.DANGER, &"ghost")
+	menu.custom_minimum_size = Vector2(360, 44)
 	menu.pressed.connect(func() -> void:
 		_root_box.visible = false
 		_confirm_box.visible = true)
@@ -184,20 +190,20 @@ func _build_root() -> VBoxContainer:
 
 func _build_options() -> VBoxContainer:
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
+	v.add_theme_constant_override("separation", MenuTheme.GAP_M)
 	v.visible = false
-	v.add_child(MenuTheme.make_title("Opciones rapidas", 28, MenuTheme.PURPLE))
-	v.add_child(_toggle_row("Pantalla completa", "fullscreen"))
-	v.add_child(_toggle_row("Screen shake", "shake_enabled"))
-	v.add_child(_shake_row())
-	v.add_child(_toggle_row("Numeros de dano", "damage_numbers"))
-	v.add_child(_toggle_row("Mostrar FPS", "show_fps"))
-	v.add_child(_volume_row("Master", "audio_master"))
-	v.add_child(_volume_row("Musica", "audio_music"))
-	v.add_child(_volume_row("Efectos", "audio_sfx"))
-	v.add_child(_volume_row("UI", "audio_ui"))
-	v.add_child(_toggle_row("Silenciar todo", "audio_mute"))
-	var back := MenuTheme.make_button("Atras", MenuTheme.TEXT_DIM)
+	v.custom_minimum_size = Vector2(460, 0)
+	v.add_child(MenuTheme.make_title("Opciones rápidas", MenuTheme.FS_H2, MenuTheme.PURPLE))
+	v.add_child(MenuTheme.make_setting_toggle("Pantalla completa", "fullscreen"))
+	v.add_child(MenuTheme.make_setting_toggle("Screen shake", "shake_enabled"))
+	v.add_child(MenuTheme.make_setting_toggle("Números de daño", "damage_numbers"))
+	v.add_child(MenuTheme.make_setting_toggle("Mostrar FPS", "show_fps"))
+	v.add_child(MenuTheme.make_setting_slider("Master", "audio_master", MenuTheme.PURPLE))
+	v.add_child(MenuTheme.make_setting_slider("Música", "audio_music", MenuTheme.PURPLE))
+	v.add_child(MenuTheme.make_setting_slider("Efectos", "audio_sfx", MenuTheme.PURPLE))
+	v.add_child(MenuTheme.make_setting_slider("UI", "audio_ui", MenuTheme.PURPLE))
+	v.add_child(MenuTheme.make_setting_toggle("Silenciar todo", "audio_mute"))
+	var back := MenuTheme.make_button("Atrás", MenuTheme.TEXT_DIM, &"ghost")
 	back.pressed.connect(_show_root)
 	v.add_child(back)
 	return v
@@ -205,93 +211,26 @@ func _build_options() -> VBoxContainer:
 
 func _build_confirm() -> VBoxContainer:
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 12)
+	v.add_theme_constant_override("separation", MenuTheme.GAP_M)
 	v.visible = false
-	v.add_child(MenuTheme.make_title("Perderas el progreso de esta partida. Salir?", 22, Color(1.0, 0.7, 0.5)))
-	v.add_child(_spacer(6))
-	var yes := MenuTheme.make_button("Si, volver al menu", Color(0.85, 0.45, 0.45))
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	var warn := MenuTheme.make_title("Perderás el progreso de esta partida. ¿Salir?", MenuTheme.FS_H2, Color(1.0, 0.7, 0.5))
+	warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	warn.custom_minimum_size = Vector2(460, 0)
+	v.add_child(warn)
+	v.add_child(_spacer(MenuTheme.GAP_XS))
+	var yes := MenuTheme.make_button("Sí, volver al menú", MenuTheme.DANGER, &"danger")
+	yes.custom_minimum_size = Vector2(360, 48)
 	yes.pressed.connect(func() -> void: GameFlow.return_to_main_menu())
 	v.add_child(yes)
-	var no := MenuTheme.make_button("No, seguir jugando", MenuTheme.ZOMBIE)
+	var no := MenuTheme.make_button("No, seguir jugando", MenuTheme.ZOMBIE, &"primary")
+	no.custom_minimum_size = Vector2(360, 48)
 	no.pressed.connect(_show_root)
 	v.add_child(no)
 	return v
 
 
-func _toggle_row(title: String, key: String) -> Control:
-	var hb := HBoxContainer.new()
-	var label := Label.new()
-	label.text = title
-	label.add_theme_font_size_override("font_size", 18)
-	label.add_theme_color_override("font_color", MenuTheme.TEXT)
-	label.custom_minimum_size = Vector2(260, 0)
-	hb.add_child(label)
-	var button := MenuTheme.make_button(_on_off(key), MenuTheme.CYAN)
-	button.custom_minimum_size = Vector2(120, 40)
-	button.pressed.connect(func() -> void:
-		_settings.set_value(key, not bool(_settings.get_value(key, false)))
-		button.text = _on_off(key))
-	hb.add_child(button)
-	return hb
-
-
-func _shake_row() -> Control:
-	var hb := HBoxContainer.new()
-	var label := Label.new()
-	label.text = "Intensidad de shake"
-	label.add_theme_font_size_override("font_size", 18)
-	label.add_theme_color_override("font_color", MenuTheme.TEXT)
-	label.custom_minimum_size = Vector2(260, 0)
-	hb.add_child(label)
-	var button := MenuTheme.make_button(_shake_label(), MenuTheme.ACCENT)
-	button.custom_minimum_size = Vector2(120, 40)
-	button.pressed.connect(func() -> void:
-		var idx: int = SHAKE_ORDER.find(str(_settings.get_value("shake_level", "medio")))
-		idx = (idx + 1) % SHAKE_ORDER.size()
-		_settings.set_value("shake_level", SHAKE_ORDER[idx])
-		button.text = _shake_label())
-	hb.add_child(button)
-	return hb
-
-
-func _volume_row(title: String, key: String) -> Control:
-	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 10)
-	var label := Label.new()
-	label.text = title
-	label.add_theme_font_size_override("font_size", 18)
-	label.add_theme_color_override("font_color", MenuTheme.TEXT)
-	label.custom_minimum_size = Vector2(160, 0)
-	hb.add_child(label)
-	var value_label := Label.new()
-	value_label.custom_minimum_size = Vector2(50, 0)
-	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	value_label.add_theme_font_size_override("font_size", 15)
-	value_label.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
-	hb.add_child(value_label)
-	var slider := HSlider.new()
-	slider.custom_minimum_size = Vector2(190, 32)
-	slider.min_value = 0.0
-	slider.max_value = 1.0
-	slider.step = 0.05
-	slider.value = float(_settings.get_value(key, 0.75))
-	value_label.text = "%d%%" % int(round(slider.value * 100.0))
-	slider.value_changed.connect(func(value: float) -> void:
-		value_label.text = "%d%%" % int(round(value * 100.0))
-		_settings.set_value(key, value))
-	hb.add_child(slider)
-	return hb
-
-
-func _on_off(key: String) -> String:
-	return "Si" if bool(_settings.get_value(key, false)) else "No"
-
-
-func _shake_label() -> String:
-	return str(_settings.get_value("shake_level", "medio")).capitalize()
-
-
-func _spacer(h: float) -> Control:
+func _spacer(h: int) -> Control:
 	var s := Control.new()
 	s.custom_minimum_size = Vector2(0, h)
 	return s

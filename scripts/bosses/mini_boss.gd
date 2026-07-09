@@ -13,6 +13,8 @@ signal died(data: BossData)
 const MAX_HEALTH_CAP: int = 4000
 
 @export var contact_range: float = 52.0
+## Multiplicador de vida del mini-jefe en coop local (Fase Coop 1.5). 1.0 en solo.
+@export var coop_health_mult: float = 1.45
 
 var data: BossData
 var max_health: int = 320
@@ -38,7 +40,7 @@ var _stuck_check_timer: float = 0.0
 func _ready() -> void:
 	add_to_group("enemies")
 	add_to_group("miniboss")
-	_player = get_tree().get_first_node_in_group("player")
+	_player = _resolve_target_player()
 	set_collision_mask_value(5, true)
 	_last_position = global_position
 	_update_bar()
@@ -50,6 +52,8 @@ func _ready() -> void:
 func configure(boss_data: BossData, difficulty_score: float) -> void:
 	data = boss_data
 	var scaled: float = data.max_health * (1.0 + max(0.0, difficulty_score) * data.difficulty_multiplier)
+	if _is_coop():
+		scaled *= coop_health_mult
 	max_health = clampi(int(round(scaled)), data.max_health, MAX_HEALTH_CAP)
 	current_health = max_health
 	if is_node_ready():
@@ -76,10 +80,9 @@ func _apply_visuals() -> void:
 func _physics_process(delta: float) -> void:
 	if _is_dead or data == null:
 		return
+	# Objetivo: en coop el jugador ACTIVO mas cercano; en solo el unico jugador.
+	_player = _resolve_target_player()
 	if not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player")
-		return
-	if _player.has_method("is_dead") and _player.is_dead():
 		velocity = Vector2.ZERO
 		return
 
@@ -215,6 +218,29 @@ func _drop_reward() -> void:
 		orb.global_position = global_position
 		orb.set("pop_velocity", Vector2.RIGHT.rotated(randf() * TAU) * randf_range(70.0, 160.0))
 		get_parent().add_child.call_deferred(orb)
+
+
+## Jugador objetivo: en coop el ACTIVO mas cercano; en solo el unico jugador.
+func _resolve_target_player() -> Node2D:
+	var best: Node2D = null
+	var best_distance: float = INF
+	for p in get_tree().get_nodes_in_group("players"):
+		if not is_instance_valid(p) or not (p is Node2D):
+			continue
+		if p.has_method("is_active") and not p.is_active():
+			continue
+		var d: float = global_position.distance_squared_to((p as Node2D).global_position)
+		if d < best_distance:
+			best_distance = d
+			best = p
+	if best == null:
+		best = get_tree().get_first_node_in_group("player") as Node2D
+	return best
+
+
+func _is_coop() -> bool:
+	var gf: Node = get_node_or_null("/root/GameFlow")
+	return gf != null and gf.has_method("is_coop") and gf.is_coop()
 
 
 func _update_bar() -> void:

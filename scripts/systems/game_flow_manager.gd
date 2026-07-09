@@ -18,6 +18,53 @@ const SHELTER_MENU := "res://scenes/shelter/ShelterMenu.tscn"
 ## MapData de la partida actual/seleccionada. La lee MapManager al iniciar MainLevel.
 var selected_map: Resource = null
 
+## --- Modo de juego (Fase Coop Local) ---
+## "solo" (por defecto, comportamiento clasico) o "local_coop" (2 jugadores en la
+## misma pantalla). Lo elige el jugador en el selector de mapas y lo leen MainLevel,
+## PlayerManager, la camara, el HUD y la dificultad. NUNCA se activa en historia.
+const MODE_SOLO := "solo"
+const MODE_LOCAL_COOP := "local_coop"
+var game_mode: String = MODE_SOLO
+
+
+func is_coop() -> bool:
+	return game_mode == MODE_LOCAL_COOP
+
+
+func get_game_mode() -> String:
+	return game_mode
+
+
+func set_game_mode(mode: String) -> void:
+	game_mode = MODE_LOCAL_COOP if mode == MODE_LOCAL_COOP else MODE_SOLO
+
+
+## --- Regulador de dificultad de Partida libre (Coop 1.5) ---
+## Tier 0-3 (Facil/Intermedio/Dificil/Extremo), analogo al de Historia. Multiplica
+## presion/vida/velocidad/dano de los enemigos y la recompensa de sardinas. Se elige
+## en el selector de mapas y persiste en el save. Es independiente del Nivel de Plaga
+## (que sigue siendo el eje de rejugabilidad/desbloqueo).
+var free_play_difficulty: int = 1
+
+
+func get_free_play_difficulty() -> int:
+	return clampi(free_play_difficulty, 0, 3)
+
+
+func set_free_play_difficulty(tier: int) -> void:
+	free_play_difficulty = clampi(tier, 0, 3)
+	var save: Node = get_node_or_null("/root/SaveManager")
+	if save != null and save.has_method("set_value"):
+		save.set_value("free_play_difficulty", free_play_difficulty)
+
+
+func _ready() -> void:
+	# Carga la ultima dificultad de Partida libre elegida (SaveManager ya esta listo:
+	# va antes que GameFlow en el orden de autoloads).
+	var save: Node = get_node_or_null("/root/SaveManager")
+	if save != null and save.has_method("get_value"):
+		free_play_difficulty = clampi(int(save.get_value("free_play_difficulty", 1)), 0, 3)
+
 ## Semilla del mundo de la partida actual (estilo Minecraft): se genera nueva en cada
 ## start_run/restart_run y todo el mundo procedural deriva de ella. Nunca 0 (0 significa
 ## "sin seed" y activa el fallback determinista de WorldSeedManager).
@@ -75,6 +122,7 @@ func open_shelter() -> void:
 func start_story_chapter(chapter: Resource, tier: int = -1) -> void:
 	if chapter == null or chapter.map == null:
 		return
+	game_mode = MODE_SOLO  # el Modo Historia siempre es de un jugador
 	story_chapter = chapter
 	var save: Node = get_node_or_null("/root/SaveManager")
 	var resolved_tier: int = tier

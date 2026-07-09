@@ -37,6 +37,9 @@ var _external_damage: float = 1.0  # bono del jugador (p.ej. Vinculo felino)
 # Multiplicadores de mejoras permanentes (Fase 07), fijados al iniciar la partida.
 var _permanent_damage: float = 1.0
 var _permanent_cooldown: float = 1.0
+# Multiplicador de dano coop (Fase Coop 1.5): con 2 jugadores disparando el dano
+# total no debe duplicarse; se reduce el dano por jugador (~0.85). 1.0 = solo.
+var _coop_damage: float = 1.0
 
 # Estado de sinergias, recalculado por frame.
 var _has_police: bool = false
@@ -52,14 +55,19 @@ func _ready() -> void:
 	add_to_group("weapon_manager")
 	_player = get_parent() as Node2D
 	_player_ref = _player
-	# El HUD se localiza por grupo para no depender de rutas fragiles.
-	var hud := get_tree().get_first_node_in_group("hud")
-	if hud != null:
-		if hud.has_method("on_weapons_changed"):
-			weapons_changed.connect(hud.on_weapons_changed)
-		if hud.has_method("on_synergies_changed"):
-			synergies_changed.connect(hud.on_synergies_changed)
-	_hud = hud
+	# Coop: SOLO el WeaponManager del jugador principal (P1) se conecta al HUD, para
+	# que la barra de armas no la pise el P2 (que tambien tiene su propio manager).
+	# player_id ya esta fijado (P1=1 por defecto; P2=2 antes de entrar al arbol).
+	var is_primary: bool = int(_player.get("player_id")) <= 1 if _player != null else true
+	if is_primary:
+		# El HUD se localiza por grupo para no depender de rutas fragiles.
+		var hud := get_tree().get_first_node_in_group("hud")
+		if hud != null:
+			if hud.has_method("on_weapons_changed"):
+				weapons_changed.connect(hud.on_weapons_changed)
+			if hud.has_method("on_synergies_changed"):
+				synergies_changed.connect(hud.on_synergies_changed)
+		_hud = hud
 	# Arma inicial.
 	var starting: WeaponData = load(STARTING_WEAPON)
 	if starting != null:
@@ -187,8 +195,14 @@ func set_permanent_cooldown_mult(multiplier: float) -> void:
 	_permanent_cooldown = clampf(multiplier, 0.5, 1.0)
 
 
+## Multiplicador de dano coop por jugador (Fase Coop 1.5). Lo fija PlayerManager en
+## coop (0.85); en solo nunca se llama y queda en 1.0.
+func set_coop_damage_mult(multiplier: float) -> void:
+	_coop_damage = clampf(multiplier, 0.5, 1.0)
+
+
 func global_damage_mult() -> float:
-	return _global_damage * _external_damage * _permanent_damage
+	return _global_damage * _external_damage * _permanent_damage * _coop_damage
 
 
 func global_cooldown_mult() -> float:

@@ -12,6 +12,7 @@ const MapData = preload("res://scripts/maps/map_data.gd")
 const WorldSeedManager = preload("res://scripts/maps/world_seed_manager.gd")
 const RunSummary = preload("res://scripts/systems/run_summary.gd")
 const StoryCampaign = preload("res://scripts/story/story_campaign.gd")
+const FreePlayScore = preload("res://scripts/systems/free_play_score.gd")
 
 ## Mapa que se desbloquea al asegurar cada zona (progresion simple, Fase 07).
 const NEXT_MAP_UNLOCK: Dictionary = {
@@ -36,6 +37,12 @@ static var _selected_map_index: int = -1
 @export var boss_spawner_path: NodePath
 @export var companion_manager_path: NodePath
 @export var obstacle_spawner_path: NodePath
+
+@export_group("Balance coop (Fase Coop 1.5)")
+## Multiplicadores aplicados a los enemigos en coop local (partida libre).
+@export var coop_pressure_multiplier: float = 1.25
+@export var coop_enemy_health_multiplier: float = 1.45
+@export var coop_enemy_damage_multiplier: float = 1.15
 
 var _map: MapData
 ## Semilla efectiva del mundo de esta run (de GameFlow o fallback determinista).
@@ -177,11 +184,19 @@ func _apply_spawner_modifiers() -> void:
 	var plague_pressure: float = 1.0 + 0.35 * float(plague - 1)
 	var plague_health: float = 1.0 + 0.15 * float(plague - 1)
 	var plague_speed: float = 1.0 + 0.05 * float(plague - 1)
+	# Coop local (Fase Coop 1.5): mas vida/dano/presion para compensar 2 jugadores.
+	var coop: bool = _is_coop()
+	var coop_pressure: float = coop_pressure_multiplier if coop else 1.0
+	var coop_health: float = coop_enemy_health_multiplier if coop else 1.0
+	var coop_damage: float = coop_enemy_damage_multiplier if coop else 1.0
+	# Regulador de dificultad de Partida libre (Coop 1.5): Facil..Extremo, como Historia.
+	var diff: Dictionary = StoryCampaign.get_difficulty(_free_play_difficulty())
 	_enemy_spawner.set_map_modifiers(
-		_map.difficulty_modifier * plague_pressure,
+		_map.difficulty_modifier * plague_pressure * coop_pressure * float(diff["pressure"]),
 		_map.runner_probability_modifier,
-		_map.enemy_health_modifier * plague_health,
-		_map.enemy_speed_modifier * plague_speed
+		_map.enemy_health_modifier * plague_health * coop_health * float(diff["health"]),
+		_map.enemy_speed_modifier * plague_speed * float(diff["speed"]),
+		coop_damage * float(diff["damage"])
 	)
 
 
@@ -202,6 +217,16 @@ func _game_flow() -> Node:
 func _is_story_run() -> bool:
 	var gf: Node = _game_flow()
 	return gf != null and gf.has_method("is_story_run") and gf.is_story_run()
+
+
+func _is_coop() -> bool:
+	var gf: Node = _game_flow()
+	return gf != null and gf.has_method("is_coop") and gf.is_coop()
+
+
+func _free_play_difficulty() -> int:
+	var gf: Node = _game_flow()
+	return int(gf.get_free_play_difficulty()) if gf != null and gf.has_method("get_free_play_difficulty") else 1
 
 
 func _story_chapter() -> Resource:
@@ -326,25 +351,25 @@ func _finish_run(victory: bool) -> void:
 	var dict: Dictionary = summary.to_dict()
 	var earned: int = 0
 	var breakdown: Dictionary = {}
-	if meta != null and meta.has_method("compute_sardine_breakdown"):
-		breakdown = meta.compute_sardine_breakdown(dict)
-		earned = int(breakdown.get("total", 0))
-	elif meta != null and meta.has_method("compute_sardines"):
-		earned = int(meta.compute_sardines(dict))
-	# Refugio Felino (Fase 10): Almacen de Sardinas (+% sobre lo ganado, antes de
-	# los multiplicadores de modo). Solo objetos colocados aportan.
-	var shelter: Node = get_node_or_null("/root/Shelter")
-	if shelter != null and shelter.has_method("get_bonus") and earned > 0:
-		var shelter_pct: float = float(shelter.get_bonus("sardines_reward_bonus"))
-		if shelter_pct > 0.0:
-			var shelter_bonus: int = int(round(earned * shelter_pct))
-			earned += shelter_bonus
-			if not breakdown.is_empty():
-				breakdown["refugio"] = shelter_bonus
-				breakdown["total"] = earned
-
 	var plague: int = _plague_level()
+
 	if _is_story_run():
+		# --- HISTORIA: economia de Sardinas (mejoras permanentes + Refugio) ---
+		if meta != null and meta.has_method("compute_sardine_breakdown"):
+			breakdown = meta.compute_sardine_breakdown(dict)
+			earned = int(breakdown.get("total", 0))
+		elif meta != null and meta.has_method("compute_sardines"):
+			earned = int(meta.compute_sardines(dict))
+		# Refugio Felino: Almacen de Sardinas (+% sobre lo ganado). Solo colocados.
+		var shelter: Node = get_node_or_null("/root/Shelter")
+		if shelter != null and shelter.has_method("get_bonus") and earned > 0:
+			var shelter_pct: float = float(shelter.get_bonus("sardines_reward_bonus"))
+			if shelter_pct > 0.0:
+				var shelter_bonus: int = int(round(earned * shelter_pct))
+				earned += shelter_bonus
+				if not breakdown.is_empty():
+					breakdown["refugio"] = shelter_bonus
+					breakdown["total"] = earned
 		# Historia con victoria: multiplicador de dificultad + first-clear por tier.
 		# En derrota no se aplica el mult (evita farmear derrotas en Extremo).
 		if victory:
@@ -376,15 +401,24 @@ func _finish_run(victory: bool) -> void:
 							gf.story_ending_pending = true
 			if not breakdown.is_empty():
 				breakdown["total"] = earned
-	elif plague > 1 and earned > 0:
-		# Partida libre: bonus por Nivel de Plaga (+50% por nivel sobre el 1).
-		var bonus: int = int(round(earned * 0.5 * float(plague - 1)))
-		earned += bonus
-		if not breakdown.is_empty():
-			breakdown["plaga"] = bonus
-			breakdown["total"] = earned
-	summary.sardines_earned = earned
-	summary.sardine_breakdown = breakdown
+		summary.sardines_earned = earned
+		summary.sardine_breakdown = breakdown
+	else:
+		# --- PARTIDA LIBRE: sin Sardinas. Puntuacion arcade + record local ---
+		# El reto es puro (sin bonos de mejoras/refugio); la motivacion es superar
+		# tu propio record (o el de un amigo) en el mismo mapa y dificultad.
+		summary.sardines_earned = 0
+		summary.sardine_breakdown = {}
+		var fp_tier: int = _free_play_difficulty()
+		var result: Dictionary = FreePlayScore.compute(dict, fp_tier, plague)
+		summary.score = int(result["total"])
+		summary.score_breakdown = result["breakdown"]
+		var prev_best: int = FreePlayScore.get_best(save, _map.id, fp_tier)
+		summary.best_score = maxi(prev_best, summary.score)
+		summary.is_new_record = save != null and summary.score > prev_best
+		if summary.is_new_record and save != null and save.has_method("set_value"):
+			save.set_value(FreePlayScore.record_key(_map.id, fp_tier), summary.score)
+
 	dict = summary.to_dict()
 
 	# Misiones persistentes: victorias, mayor Plaga y progreso de la campaña.

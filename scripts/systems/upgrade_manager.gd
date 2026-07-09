@@ -185,12 +185,21 @@ func _rarity_weight(card: Dictionary) -> float:
 
 
 func _shelter_rarity_bonus() -> float:
+	# El Refugio solo mejora la rareza de cartas en Modo Historia (Partida libre = puro).
+	if not _is_story_run():
+		return 0.0
 	if _shelter_rarity_cached < 0.0:
 		_shelter_rarity_cached = 0.0
 		var shelter: Node = get_node_or_null("/root/Shelter")
 		if shelter != null and shelter.has_method("get_bonus"):
 			_shelter_rarity_cached = clampf(float(shelter.get_bonus("upgrade_rarity_bonus")), 0.0, 0.10)
 	return _shelter_rarity_cached
+
+
+## True solo en Modo Historia (donde aplican mejoras permanentes y Refugio).
+func _is_story_run() -> bool:
+	var gf: Node = get_node_or_null("/root/GameFlow")
+	return gf != null and gf.has_method("is_story_run") and gf.is_story_run()
 
 
 func _on_upgrade_card_selected(card_index: int) -> void:
@@ -216,18 +225,30 @@ func _on_upgrade_card_selected(card_index: int) -> void:
 
 func _apply_card(card: Dictionary) -> void:
 	var weapon_manager: Node = _get_weapon_manager()
+	# Coop: las cartas de arma aplican al EQUIPO (P1 y P2) via PlayerManager. En solo
+	# se aplican al unico WeaponManager como siempre.
+	var pm: Node = _player_manager_if_coop()
 	match card.get("card_type", &"stat"):
 		&"new_weapon":
-			if weapon_manager != null:
+			if pm != null and pm.has_method("add_weapon_to_team"):
+				pm.add_weapon_to_team(card.get("weapon_data"))
+			elif weapon_manager != null:
 				weapon_manager.add_weapon(card.get("weapon_data"))
 			_note_upgrade(&"new_weapon")
 		&"weapon_upgrade":
-			if weapon_manager != null:
+			if pm != null and pm.has_method("apply_weapon_upgrade_to_team"):
+				pm.apply_weapon_upgrade_to_team(card.get("weapon_id", &""))
+			elif weapon_manager != null:
 				weapon_manager.level_up_weapon(card.get("weapon_id", &""))
 			_note_upgrade(&"weapon_upgrade")
 		_:
+			# Stats generales y companeros: aplican a todo el equipo (cada jugador se
+			# buffea a si mismo). apply_upgrade en P1 tambien afecta al manager de
+			# companeros (compartido); a P2 solo le importan los stats propios.
 			if _player != null and _player.has_method("apply_upgrade"):
 				_player.apply_upgrade(card.get("id", &""))
+			if pm != null and pm.has_method("apply_stat_upgrade_to_secondaries"):
+				pm.apply_stat_upgrade_to_secondaries(card.get("id", &""))
 
 
 func _note_upgrade(id: StringName) -> void:
@@ -240,6 +261,14 @@ func _get_weapon_manager() -> Node:
 	if _player != null and _player.has_method("get_weapon_manager"):
 		return _player.get_weapon_manager()
 	return null
+
+
+## PlayerManager solo si estamos en coop; si no, null (para conservar el flujo solo).
+func _player_manager_if_coop() -> Node:
+	var gf: Node = get_node_or_null("/root/GameFlow")
+	if gf == null or not gf.has_method("is_coop") or not gf.is_coop():
+		return null
+	return get_tree().get_first_node_in_group("player_manager")
 
 
 func _has_any_companion() -> bool:

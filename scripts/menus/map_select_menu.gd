@@ -5,6 +5,8 @@ extends Control
 ## completado), mejor tiempo y boton Jugar. Respeta el desbloqueo guardado.
 
 const MenuTheme = preload("res://scripts/menus/menu_theme.gd")
+const StoryCampaign = preload("res://scripts/story/story_campaign.gd")
+const FreePlayScore = preload("res://scripts/systems/free_play_score.gd")
 
 const MAP_PATHS: Array[String] = [
 	"res://data/maps/neighborhood_map.tres",
@@ -32,6 +34,17 @@ var _save: Node
 var _anim_time: float = 0.0
 ## Nivel de Plaga elegido por mapa en esta visita al menu (map_id -> 1..5).
 var _selected_plague: Dictionary = {}
+## Modo de juego elegido (Fase Coop Local): false = Solo, true = Cooperativo local.
+var _coop_selected: bool = false
+var _mode_solo_btn: Button
+var _mode_coop_btn: Button
+var _mode_hint: Label
+## Dificultad de Partida libre (Coop 1.5): tier 0-3, analogo al de Historia.
+var _selected_difficulty: int = 1
+var _diff_buttons: Array[Button] = []
+var _diff_desc: Label
+## Etiqueta de "Récord" por mapa (map_id -> Label), para refrescar al cambiar dificultad.
+var _record_labels: Dictionary = {}
 
 
 func _ready() -> void:
@@ -87,42 +100,19 @@ func _build_ui() -> void:
 	add_child(margin)
 
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 20)
+	col.add_theme_constant_override("separation", MenuTheme.GAP_L)
 	margin.add_child(col)
 
-	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 18)
+	# Barra superior: retorno + título + chips de estado.
+	var top := MenuTheme.make_top_bar("Elige una zona", func() -> void: GameFlow.return_to_main_menu(), MenuTheme.ACCENT)
 	col.add_child(top)
+	var actions: HBoxContainer = top.get_node("Actions")
+	actions.add_child(MenuTheme.make_chip(_sardines_text(), MenuTheme.GOLD, &"sardine"))
+	actions.add_child(MenuTheme.make_chip("%d/%d" % [_completed_count(), MAP_PATHS.size()], MenuTheme.ZOMBIE, &"check"))
 
-	var title_block := VBoxContainer.new()
-	title_block.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_block.add_theme_constant_override("separation", 4)
-	top.add_child(title_block)
-	var title := MenuTheme.make_title("Elige una zona", 40, MenuTheme.ACCENT)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	title_block.add_child(title)
-	var subtitle := Label.new()
-	subtitle.text = "Cada zona esconde una colonia por rescatar."
-	subtitle.add_theme_font_size_override("font_size", 16)
-	subtitle.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
-	title_block.add_child(subtitle)
-
-	# Estado resumido como chips (sardinas y zonas aseguradas).
-	var status_box := HBoxContainer.new()
-	status_box.add_theme_constant_override("separation", 8)
-	status_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	status_box.add_child(_make_chip("🐟 %s" % _sardines_text(), MenuTheme.ACCENT))
-	status_box.add_child(_make_chip("Zonas %d/%d" % [_completed_count(), MAP_PATHS.size()], MenuTheme.ZOMBIE))
-	top.add_child(status_box)
-
-	# Separador de acento bajo el titulo.
-	var rule := Panel.new()
-	rule.custom_minimum_size = Vector2(0, 2)
-	var rule_box := StyleBoxFlat.new()
-	rule_box.bg_color = Color(MenuTheme.ACCENT.r, MenuTheme.ACCENT.g, MenuTheme.ACCENT.b, 0.22)
-	rule_box.set_corner_radius_all(2)
-	rule.add_theme_stylebox_override("panel", rule_box)
-	col.add_child(rule)
+	# Barra de ajustes: Modo (Solo / Coop) + Dificultad. Se aplican al pulsar Jugar.
+	_selected_difficulty = GameFlow.get_free_play_difficulty()
+	col.add_child(_build_settings_bar())
 
 	var cards := GridContainer.new()
 	cards.columns = 3
@@ -135,12 +125,164 @@ func _build_ui() -> void:
 		var map_data: Resource = load(path)
 		if map_data != null:
 			cards.add_child(_build_card(map_data))
+	# Récords ya reflejan la dificultad seleccionada (las tarjetas ya existen).
+	_refresh_records()
 
-	var back := MenuTheme.make_button("Volver  (ESC)", MenuTheme.TEXT_DIM)
-	back.custom_minimum_size = Vector2(220, 48)
-	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	back.pressed.connect(func() -> void: GameFlow.return_to_main_menu())
-	col.add_child(back)
+
+## Barra de ajustes previa a jugar: fila de Modo (segmentado Solo/Coop) + aviso de
+## gamepad, y fila de Dificultad (segmentado Facil..Extremo) + descripcion. Ambos
+## ajustes se envian a GameFlow al pulsar Jugar. Estilo consistente con el menu.
+func _build_settings_bar() -> Control:
+	var panel := PanelContainer.new()
+	MenuTheme.style_panel(panel, MenuTheme.CYAN, MenuTheme.PANEL_BG_SOFT)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", MenuTheme.GAP_S)
+	panel.add_child(col)
+
+	# --- Fila Modo ---
+	var mode_row := HBoxContainer.new()
+	mode_row.add_theme_constant_override("separation", MenuTheme.GAP_M)
+	col.add_child(mode_row)
+	var mode_label := MenuTheme.make_label("Modo", MenuTheme.FS_BODY, MenuTheme.TEXT)
+	mode_label.custom_minimum_size = Vector2(84, 0)
+	mode_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	mode_row.add_child(mode_label)
+
+	var mode_seg := HBoxContainer.new()
+	mode_seg.add_theme_constant_override("separation", 2)
+	mode_row.add_child(mode_seg)
+	_mode_solo_btn = _make_segment_button("Solo", MenuTheme.CYAN, 160.0)
+	_mode_solo_btn.pressed.connect(func() -> void:
+		_coop_selected = false
+		_play_ui(&"ui_click")
+		_refresh_mode_buttons())
+	mode_seg.add_child(_mode_solo_btn)
+	_mode_coop_btn = _make_segment_button("Cooperativo local", MenuTheme.GOLD, 200.0)
+	_mode_coop_btn.pressed.connect(func() -> void:
+		_coop_selected = true
+		_play_ui(&"ui_click")
+		_refresh_mode_buttons())
+	mode_seg.add_child(_mode_coop_btn)
+
+	_mode_hint = MenuTheme.make_label("", MenuTheme.FS_CAPTION, Color(1.0, 0.78, 0.5))
+	_mode_hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_mode_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mode_row.add_child(_mode_hint)
+
+	# --- Fila Dificultad ---
+	var diff_row := HBoxContainer.new()
+	diff_row.add_theme_constant_override("separation", MenuTheme.GAP_M)
+	col.add_child(diff_row)
+	var diff_label := MenuTheme.make_label("Dificultad", MenuTheme.FS_BODY, MenuTheme.TEXT)
+	diff_label.custom_minimum_size = Vector2(84, 0)
+	diff_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	diff_row.add_child(diff_label)
+
+	var diff_seg := HBoxContainer.new()
+	diff_seg.add_theme_constant_override("separation", 2)
+	diff_row.add_child(diff_seg)
+	_diff_buttons.clear()
+	for tier in StoryCampaign.DIFFICULTIES.size():
+		var d: Dictionary = StoryCampaign.DIFFICULTIES[tier]
+		var btn := _make_segment_button(str(d["name"]), d["color"], 118.0)
+		btn.pressed.connect(func() -> void:
+			_selected_difficulty = tier
+			GameFlow.set_free_play_difficulty(tier)
+			_play_ui(&"ui_click")
+			_refresh_difficulty_buttons())
+		diff_seg.add_child(btn)
+		_diff_buttons.append(btn)
+
+	_diff_desc = MenuTheme.make_label("", MenuTheme.FS_CAPTION, MenuTheme.TEXT_DIM)
+	_diff_desc.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_diff_desc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	diff_row.add_child(_diff_desc)
+
+	# --- Identidad del modo Partida libre ---
+	var identity := MenuTheme.make_label(
+		"Partida libre: sin bonos de mejoras ni refugio — puntuación pura para competir.",
+		MenuTheme.FS_CAPTION, Color(0.7, 0.8, 0.95))
+	identity.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(identity)
+
+	_refresh_mode_buttons()
+	_refresh_difficulty_buttons()
+	return panel
+
+
+## Boton segmentado reutilizable con estilo propio (para resaltar el seleccionado).
+func _make_segment_button(text: String, color: Color, width: float) -> Button:
+	var btn := Button.new()
+	btn.text = text
+	btn.custom_minimum_size = Vector2(width, 40)
+	btn.focus_mode = Control.FOCUS_ALL
+	btn.set_meta("seg_color", color)
+	_style_segment(btn, color, false)
+	return btn
+
+
+func _style_segment(btn: Button, color: Color, selected: bool) -> void:
+	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var box := StyleBoxFlat.new()
+		var hovered: bool = state == "hover" or state == "focus"
+		if selected:
+			box.bg_color = color.lerp(Color(0.08, 0.09, 0.13), 0.55)
+			box.border_color = color
+			box.set_border_width_all(2)
+		else:
+			box.bg_color = Color(0.10, 0.11, 0.15, 0.9).lerp(color, 0.10 if hovered else 0.0)
+			box.border_color = Color(color.r, color.g, color.b, 0.45)
+			box.set_border_width_all(1)
+		box.set_corner_radius_all(8)
+		box.set_content_margin_all(6)
+		btn.add_theme_stylebox_override(state, box)
+	btn.add_theme_color_override("font_color", MenuTheme.TEXT if selected else MenuTheme.TEXT_DIM)
+
+
+func _refresh_mode_buttons() -> void:
+	if is_instance_valid(_mode_solo_btn):
+		_style_segment(_mode_solo_btn, MenuTheme.CYAN, not _coop_selected)
+	if is_instance_valid(_mode_coop_btn):
+		_style_segment(_mode_coop_btn, MenuTheme.GOLD, _coop_selected)
+	if is_instance_valid(_mode_hint):
+		if _coop_selected:
+			if Input.get_connected_joypads().is_empty():
+				_mode_hint.text = "Conecta un control para el Jugador 2 (o usa IJKL)."
+				_mode_hint.add_theme_color_override("font_color", Color(1.0, 0.6, 0.5))
+			else:
+				_mode_hint.text = "Jugador 2: control detectado. Stick izq. para moverse."
+				_mode_hint.add_theme_color_override("font_color", MenuTheme.ZOMBIE)
+		else:
+			_mode_hint.text = ""
+
+
+func _play_ui(name: StringName) -> void:
+	var audio: Node = get_node_or_null("/root/AudioManager")
+	if audio != null and audio.has_method("play_ui"):
+		audio.play_ui(name)
+
+
+func _refresh_difficulty_buttons() -> void:
+	for i in _diff_buttons.size():
+		var d: Dictionary = StoryCampaign.DIFFICULTIES[i]
+		_style_segment(_diff_buttons[i], d["color"], i == _selected_difficulty)
+	if is_instance_valid(_diff_desc):
+		var sel: Dictionary = StoryCampaign.get_difficulty(_selected_difficulty)
+		_diff_desc.text = "Enemigos: vida x%.2f · daño x%.2f · presión x%.2f  ·  Puntuación x%.1f" % [
+			float(sel["health"]), float(sel["damage"]), float(sel["pressure"]), float(sel["reward"])]
+		_diff_desc.add_theme_color_override("font_color", sel["color"])
+	_refresh_records()
+
+
+## Actualiza las etiquetas de "Récord" de cada tarjeta a la dificultad seleccionada.
+func _refresh_records() -> void:
+	var tier_name: String = str(StoryCampaign.get_difficulty(_selected_difficulty)["name"])
+	for map_id in _record_labels:
+		var label: Label = _record_labels[map_id]
+		if not is_instance_valid(label):
+			continue
+		var best: int = FreePlayScore.get_best(_save, map_id, _selected_difficulty)
+		label.text = "Récord (%s): %d" % [tier_name, best] if best > 0 else "Sin récord en %s" % tier_name
 
 
 func _build_card(map_data: Resource) -> Control:
@@ -207,18 +349,46 @@ func _build_card(map_data: Resource) -> Control:
 	v.add_child(objective)
 
 	if not unlocked:
-		var req := Label.new()
-		req.add_theme_font_size_override("font_size", 14)
-		req.add_theme_color_override("font_color", Color(1.0, 0.78, 0.5))
+		var req_row := HBoxContainer.new()
+		req_row.add_theme_constant_override("separation", MenuTheme.GAP_XS + 2)
+		var lock := IconDrawer.new()
+		lock.icon_type = &"lock"
+		lock.accent = Color(1.0, 0.78, 0.5)
+		lock.custom_minimum_size = Vector2(16, 16)
+		lock.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		req_row.add_child(lock)
+		var req := MenuTheme.make_label(str(UNLOCK_REQUIREMENT.get(map_data.id, "Asegura la zona anterior")), MenuTheme.FS_CAPTION, Color(1.0, 0.78, 0.5))
 		req.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		req.text = "🔒 %s" % UNLOCK_REQUIREMENT.get(map_data.id, "Asegura la zona anterior")
-		v.add_child(req)
+		req.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		req_row.add_child(req)
+		v.add_child(req_row)
 	elif best_time > 0.0:
-		var bt := Label.new()
-		bt.text = "⏱ Mejor tiempo: %s" % _format_time(best_time)
-		bt.add_theme_font_size_override("font_size", 14)
-		bt.add_theme_color_override("font_color", MenuTheme.ZOMBIE)
-		v.add_child(bt)
+		var bt_row := HBoxContainer.new()
+		bt_row.add_theme_constant_override("separation", MenuTheme.GAP_XS + 2)
+		var clock := IconDrawer.new()
+		clock.icon_type = &"clock"
+		clock.accent = MenuTheme.ZOMBIE
+		clock.custom_minimum_size = Vector2(16, 16)
+		clock.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		bt_row.add_child(clock)
+		bt_row.add_child(MenuTheme.make_label("Mejor tiempo: %s" % _format_time(best_time), MenuTheme.FS_CAPTION, MenuTheme.ZOMBIE))
+		v.add_child(bt_row)
+
+	# Récord de puntuación (Partida libre) del mapa en la dificultad seleccionada.
+	# Se refresca al cambiar el segmentado de dificultad.
+	if unlocked:
+		var rec_row := HBoxContainer.new()
+		rec_row.add_theme_constant_override("separation", MenuTheme.GAP_XS + 2)
+		var star := IconDrawer.new()
+		star.icon_type = &"star"
+		star.accent = MenuTheme.GOLD
+		star.custom_minimum_size = Vector2(16, 16)
+		star.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		rec_row.add_child(star)
+		var rec_label := MenuTheme.make_label("", MenuTheme.FS_CAPTION, MenuTheme.GOLD)
+		rec_row.add_child(rec_label)
+		_record_labels[map_data.id] = rec_label
+		v.add_child(rec_row)
 
 	# Selector de Nivel de Plaga (rejugabilidad): visible cuando ya ganaste el nivel 1.
 	if unlocked and completed:
@@ -228,13 +398,14 @@ func _build_card(map_data: Resource) -> Control:
 	v_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	v.add_child(v_spacer)
 
-	var play := MenuTheme.make_button("Jugar", map_data.accent_color)
+	var play := MenuTheme.make_button("Jugar", map_data.accent_color, &"primary" if unlocked else &"secondary")
 	play.custom_minimum_size = Vector2(260, 46)
 	var can_play: bool = unlocked or DEBUG_PLAY_LOCKED
 	play.disabled = not can_play
 	play.text = "Jugar" if unlocked else ("Jugar (debug)" if DEBUG_PLAY_LOCKED else "Bloqueado")
 	play.pressed.connect(func() -> void:
 		if unlocked or DEBUG_PLAY_LOCKED:
+			GameFlow.set_game_mode(GameFlow.MODE_LOCAL_COOP if _coop_selected else GameFlow.MODE_SOLO)
 			GameFlow.start_run(map_data, 0, int(_selected_plague.get(map_data.id, 1))))
 	v.add_child(play)
 
@@ -400,24 +571,6 @@ func _biome_tag(biome: StringName) -> String:
 			return "INDUSTRIAL"
 		_:
 			return "URBANO"
-
-
-func _make_chip(text: String, accent: Color) -> Control:
-	var label := Label.new()
-	label.text = text
-	label.add_theme_font_size_override("font_size", 15)
-	label.add_theme_color_override("font_color", MenuTheme.TEXT)
-	var box := StyleBoxFlat.new()
-	box.bg_color = accent.lerp(Color(0.10, 0.12, 0.15, 1.0), 0.78)
-	box.border_color = Color(accent.r, accent.g, accent.b, 0.6)
-	box.set_border_width_all(1)
-	box.set_corner_radius_all(999)
-	box.content_margin_left = 14
-	box.content_margin_right = 14
-	box.content_margin_top = 7
-	box.content_margin_bottom = 7
-	label.add_theme_stylebox_override("normal", box)
-	return label
 
 
 func _sardines_text() -> String:

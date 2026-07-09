@@ -69,6 +69,12 @@ const WEAPON_TYPE_STYLE: Dictionary = {
 @onready var _defeat_summary: Label = $GameOverPanel/Center/Content/Summary
 @onready var _defeat_details: Label = $GameOverPanel/Center/Content/Details
 @onready var _defeat_details_button: Button = $GameOverPanel/Center/Content/DetailsButton
+## Mosaicos de estadísticas de fin de partida (reemplazan el resumen de texto).
+var _victory_tiles: GridContainer
+var _defeat_tiles: GridContainer
+## Botón "Reintentar" de cada panel (foco inicial para navegación con gamepad).
+var _victory_retry: Button
+var _defeat_retry: Button
 @onready var _upgrade_buttons: Array[Button] = [
 	$UpgradePanel/Center/Content/Cards/Card1,
 	$UpgradePanel/Center/Content/Cards/Card2,
@@ -168,32 +174,39 @@ func _ready() -> void:
 	_perf = get_node_or_null("/root/Performance")
 	_build_combo_label()
 	_build_debug_overlay()
-	_build_run_end_buttons($VictoryPanel/Center/Content)
-	_build_run_end_buttons($GameOverPanel/Center/Content)
+	_victory_retry = _build_run_end_buttons($VictoryPanel/Center/Content)
+	_defeat_retry = _build_run_end_buttons($GameOverPanel/Center/Content)
+	_victory_tiles = _make_summary_tiles($VictoryPanel/Center/Content, _victory_summary)
+	_defeat_tiles = _make_summary_tiles($GameOverPanel/Center/Content, _defeat_summary)
 
 
-## Botones clicables de fin de partida (además de los atajos R/M/ESC).
-func _build_run_end_buttons(content: Node) -> void:
+## Botones clicables de fin de partida (además de los atajos R/M/ESC). Devuelve el
+## primer boton (Reintentar) para poder darle el foco al mostrar el panel (gamepad P2).
+func _build_run_end_buttons(content: Node) -> Button:
 	if content == null:
-		return
+		return null
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 12)
 	var retry := MenuTheme.make_button("Reintentar", MenuTheme.ZOMBIE)
 	retry.custom_minimum_size = Vector2(190, 46)
+	retry.focus_mode = Control.FOCUS_ALL
 	retry.pressed.connect(_on_run_end_retry)
 	row.add_child(retry)
 	var meta := MenuTheme.make_button("Mejoras", MenuTheme.ACCENT)
 	meta.custom_minimum_size = Vector2(190, 46)
+	meta.focus_mode = Control.FOCUS_ALL
 	meta.pressed.connect(func() -> void:
 		_play_ui(&"ui_click")
 		toggle_meta_panel())
 	row.add_child(meta)
 	var menu := MenuTheme.make_button("Menu", MenuTheme.TEXT_DIM)
 	menu.custom_minimum_size = Vector2(190, 46)
+	menu.focus_mode = Control.FOCUS_ALL
 	menu.pressed.connect(_on_run_end_menu)
 	row.add_child(menu)
 	content.add_child(row)
+	return retry
 
 
 func _on_run_end_retry() -> void:
@@ -635,24 +648,67 @@ func show_run_end(summary: Dictionary) -> void:
 func show_victory(summary: Dictionary) -> void:
 	hide_boss_bar()
 	_victory_title.text = summary.get("victory_message", "ZONA ASEGURADA").to_upper()
-	_victory_subtitle.text = summary.get("map_name", "")
-	_victory_summary.text = _summary_core(summary)
+	_victory_subtitle.text = summary.get("map_name", "") + _mode_suffix() + _record_suffix(summary)
+	_fill_summary_tiles(_victory_tiles, summary)
 	_victory_details.text = _summary_details(summary)
 	_victory_details.visible = false
 	_victory_details_button.text = "Detalles"
 	_victory_panel.visible = true
 	_animate_victory_panel()
+	if is_instance_valid(_victory_retry):
+		_victory_retry.call_deferred("grab_focus")
 
 
 func show_defeat(summary: Dictionary) -> void:
 	hide_boss_bar()
 	_defeat_title.text = summary.get("victory_message", _game_over_title).to_upper()
-	_defeat_subtitle.text = summary.get("map_name", _map_name)
-	_defeat_summary.text = _summary_core(summary)
+	_defeat_subtitle.text = summary.get("map_name", _map_name) + _mode_suffix() + _record_suffix(summary)
+	_fill_summary_tiles(_defeat_tiles, summary)
 	_defeat_details.text = _summary_details(summary)
 	_defeat_details.visible = false
 	_defeat_details_button.text = "Detalles"
 	game_over_panel.visible = true
+	if is_instance_valid(_defeat_retry):
+		_defeat_retry.call_deferred("grab_focus")
+
+
+## Crea el mosaico de estadísticas y lo coloca donde estaba el resumen de texto
+## (que se oculta). Se rellena en cada fin de partida con _fill_summary_tiles.
+func _make_summary_tiles(content: Node, summary_label: Label) -> GridContainer:
+	if content == null:
+		return null
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", MenuTheme.GAP_S)
+	grid.add_theme_constant_override("v_separation", MenuTheme.GAP_S)
+	content.add_child(grid)
+	if summary_label != null:
+		summary_label.visible = false
+		content.move_child(grid, summary_label.get_index())
+	return grid
+
+
+## Rellena el mosaico con las cifras clave de la partida como tarjetas con icono.
+func _fill_summary_tiles(grid: GridContainer, summary: Dictionary) -> void:
+	if grid == null:
+		return
+	for child in grid.get_children():
+		child.queue_free()
+	var total: int = int(summary.get("time", 0.0))
+	# Partida libre (score >= 0): Puntuacion en vez de Sardinas.
+	var score: int = int(summary.get("score", -1))
+	if score >= 0:
+		var label: String = "%d" % score
+		if bool(summary.get("is_new_record", false)):
+			label = "★ %d" % score
+		grid.add_child(MenuTheme.make_stat_card(label, "Puntuación", MenuTheme.GOLD, &"star"))
+	else:
+		grid.add_child(MenuTheme.make_stat_card("+%d" % int(summary.get("sardines_earned", 0)), "Sardinas", MenuTheme.GOLD, &"sardine"))
+	grid.add_child(MenuTheme.make_stat_card("%02d:%02d" % [total / 60, total % 60], "Tiempo", MenuTheme.CYAN, &"clock"))
+	grid.add_child(MenuTheme.make_stat_card(str(int(summary.get("kills", 0))), "Enemigos", MenuTheme.DANGER, &"boss"))
+	grid.add_child(MenuTheme.make_stat_card(str(int(summary.get("cats", 0))), "Gatos", MenuTheme.PURPLE, &"companion"))
+	grid.add_child(MenuTheme.make_stat_card(str(int(summary.get("level", 1))), "Nivel", MenuTheme.CYAN, &"upgrade"))
+	grid.add_child(MenuTheme.make_stat_card(str(int(summary.get("bosses", 0))), "Jefes", MenuTheme.ACCENT, &"shield"))
 
 
 ## Resumen limpio: solo los datos clave.
@@ -673,9 +729,35 @@ func _summary_core(summary: Dictionary) -> String:
 func _summary_details(summary: Dictionary) -> String:
 	var lines: Array[String] = []
 	lines.append("Arsenal: %s" % _weapon_loadout_text())
+	# Partida libre (score >= 0): semilla + desglose de puntuacion (sin Sardinas).
+	if int(summary.get("score", -1)) >= 0:
+		var seed_value: int = int(summary.get("world_seed", 0))
+		if seed_value != 0:
+			lines.append("Semilla: %d  (rejuega la misma para competir)" % seed_value)
+		lines.append_array(_score_breakdown_lines(summary))
+		lines.append("Mejor puntuación de esta zona/dificultad: %d" % int(summary.get("best_score", 0)))
+		return "\n".join(lines)
 	lines.append_array(_sardine_breakdown_lines(summary))
 	lines.append("Sardinas totales: %d" % int(summary.get("total_sardines", 0)))
 	return "\n".join(lines)
+
+
+## Desglose de la puntuacion de Partida libre.
+func _score_breakdown_lines(summary: Dictionary) -> Array[String]:
+	var b: Dictionary = summary.get("score_breakdown", {})
+	if b.is_empty():
+		return ["Puntuación: %d" % int(summary.get("score", 0))]
+	var lines: Array[String] = ["Desglose de puntuación:"]
+	for entry in [["Enemigos", "kills"], ["Nivel", "level"], ["Gatos", "cats"], ["Mini-jefes", "minibosses"], ["Jefes", "bosses"], ["Tiempo", "time"], ["Bonus victoria", "victory"]]:
+		var value: int = int(b.get(entry[1], 0))
+		if value > 0:
+			lines.append("- %s: +%d" % [entry[0], value])
+	lines.append("- Multiplicador dificultad: x%.2f" % float(b.get("difficulty_mult", 1.0)))
+	var plague_mult: float = float(b.get("plague_mult", 1.0))
+	if plague_mult > 1.001:
+		lines.append("- Multiplicador Plaga: x%.2f" % plague_mult)
+	lines.append("Total: %d" % int(b.get("total", summary.get("score", 0))))
+	return lines
 
 
 func _toggle_victory_details() -> void:
@@ -736,6 +818,21 @@ func is_selecting_upgrade() -> bool:
 	return is_instance_valid(upgrade_panel) and upgrade_panel.visible
 
 
+func _is_coop() -> bool:
+	var gf: Node = get_node_or_null("/root/GameFlow")
+	return gf != null and gf.has_method("is_coop") and gf.is_coop()
+
+
+## Sufijo de modo para el resumen de fin de partida.
+func _mode_suffix() -> String:
+	return "  ·  Coop local" if _is_coop() else ""
+
+
+## Sufijo de nuevo record (Partida libre).
+func _record_suffix(summary: Dictionary) -> String:
+	return "   ·   ¡NUEVO RÉCORD!" if bool(summary.get("is_new_record", false)) else ""
+
+
 
 
 func _animate_victory_panel() -> void:
@@ -770,6 +867,13 @@ func _spawn_victory_confetti() -> void:
 func show_upgrade_selection(cards: Array[Dictionary]) -> void:
 	upgrade_panel.visible = true
 	_animate_panel_entrance()
+	# Coop: da foco a la primera carta para que el P2 pueda navegar con el gamepad
+	# (ui_left/ui_right = dpad/stick) y confirmar con A (ui_accept). El P1 sigue
+	# usando el raton. Cualquiera elige UNA carta para el equipo; el UpgradeManager
+	# evita la doble aplicacion. En solo no se toca el foco (comportamiento clasico).
+	if _is_coop() and _upgrade_buttons.size() > 0 and is_instance_valid(_upgrade_buttons[0]):
+		_upgrade_buttons[0].focus_mode = Control.FOCUS_ALL
+		_upgrade_buttons[0].call_deferred("grab_focus")
 
 	for index in _upgrade_buttons.size():
 		var card: Dictionary = cards[index]

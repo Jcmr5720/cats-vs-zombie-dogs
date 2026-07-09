@@ -9,6 +9,14 @@ signal level_changed(level: int)
 signal level_up_requested(level: int)
 signal damaged(amount: int)
 signal died
+## Fase Coop Local: el jugador cae DERRIBADO (no muere) en coop mientras quede otro
+## en pie. El PlayerManager escucha estas señales para el revive y el Game Over.
+signal downed(player_id: int)
+signal revived(player_id: int)
+
+## Identidad del jugador (1 = teclado/principal, 2 = gamepad en coop). En solo
+## siempre es 1 y el comportamiento es idéntico al clásico.
+@export var player_id: int = 1
 
 @export var speed: float = 250.0
 @export var max_health: int = 100
@@ -43,6 +51,13 @@ var _xp_multiplier: float = 1.0
 ## Impulso externo (empuje de jefes/mini-jefes) que decae y se suma al movimiento.
 var _knockback: Vector2 = Vector2.ZERO
 var _is_dead: bool = false
+## Coop: derribado (0 vida pero revivible). No se mueve, no dispara, no recoge XP.
+var _is_downed: bool = false
+## Nombres de acciones de input segun el jugador (P1 teclado, P2 gamepad/IJKL).
+var _act_left: StringName = &"move_left"
+var _act_right: StringName = &"move_right"
+var _act_up: StringName = &"move_up"
+var _act_down: StringName = &"move_down"
 var _last_facing: Vector2 = Vector2.RIGHT
 var _anim_time: float = 0.0
 var _is_moving: bool = false
@@ -62,14 +77,47 @@ var _dust_timer: float = 0.0
 func _ready() -> void:
 	# Colisiona con los obstaculos de mapa (capa 5, Fase 08.75) sin atravesarlos.
 	set_collision_mask_value(5, true)
+	_configure_input_profile()
 	_apply_permanent_upgrades()
 	current_health = max_health
 	experience_to_level = starting_experience_to_level
-	add_to_group("player")
+	# Grupo "players" = todos los jugadores (targeting coop). El grupo "player"
+	# (singular) lo conserva SOLO el jugador principal para no romper los sistemas
+	# clasicos que esperan un unico jugador (spawner, camara solo, companeros).
+	add_to_group("players")
+	if player_id <= 1:
+		add_to_group("player")
+	else:
+		_apply_second_player_look()
 	# Emite el estado inicial para que el HUD arranque sincronizado.
 	health_changed.emit(current_health, max_health)
 	experience_changed.emit(experience, experience_to_level)
 	level_changed.emit(level)
+
+
+## Elige las acciones de movimiento segun el jugador. P1 usa el input clasico;
+## P2 usa el mapa p2_* (stick izquierdo del gamepad + IJKL como respaldo).
+func _configure_input_profile() -> void:
+	if player_id >= 2:
+		_act_left = &"p2_move_left"
+		_act_right = &"p2_move_right"
+		_act_up = &"p2_move_up"
+		_act_down = &"p2_move_down"
+
+
+## Look distintivo del Jugador 2: tinte frio + etiqueta "P2" flotante para que se
+## distinga del P1 de un vistazo. Solo cosmetico; no toca colision ni gameplay.
+func _apply_second_player_look() -> void:
+	if is_instance_valid(_visual):
+		_visual.modulate = Color(0.62, 0.78, 1.15, 1.0)
+	var label := Label.new()
+	label.text = "P2"
+	label.position = Vector2(-10, -52)
+	label.add_theme_font_size_override("font_size", 16)
+	label.add_theme_color_override("font_color", Color(0.6, 0.85, 1.0))
+	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	label.add_theme_constant_override("outline_size", 4)
+	add_child(label)
 
 
 func _physics_process(delta: float) -> void:
@@ -79,7 +127,10 @@ func _physics_process(delta: float) -> void:
 	if _damage_timer > 0.0:
 		_damage_timer -= delta
 
-	var direction: Vector2 = Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	# Derribado (coop): no responde a input, pero el knockback residual aun decae.
+	var direction: Vector2 = Vector2.ZERO
+	if not _is_downed:
+		direction = Input.get_vector(_act_left, _act_right, _act_up, _act_down)
 	velocity = direction * speed + _knockback
 	move_and_slide()
 
@@ -141,9 +192,9 @@ func _animate_visual(delta: float) -> void:
 		_eye_right.position = _eye_right.position.lerp(Vector2(6.5, -11) + glance, 0.18)
 
 
-## Recibe daño de un enemigo. Ignora golpes durante el cooldown.
+## Recibe daño de un enemigo. Ignora golpes durante el cooldown o si esta derribado.
 func take_damage(amount: int) -> void:
-	if _is_dead or _damage_timer > 0.0:
+	if _is_dead or _is_downed or _damage_timer > 0.0:
 		return
 
 	_damage_timer = damage_cooldown
@@ -162,7 +213,10 @@ func take_damage(amount: int) -> void:
 	Feedback.shake(0.35)
 
 	if current_health <= 0:
-		_die()
+		if _is_coop():
+			_go_downed()
+		else:
+			_die()
 
 
 ## Parpadeo rojo breve al recibir daño (sobre el nodo Visual).
@@ -186,8 +240,17 @@ func get_pickup_radius() -> float:
 
 ## Llamado por XPOrb al ser recogido.
 func add_experience(amount: int) -> void:
-	if _is_dead:
+	if _is_dead or _is_downed:
 		return
+
+	# Coop: la XP es COMPARTIDA. Cualquier orbe que recoja el P2 se suma al
+	# portador de nivel del equipo (el jugador principal, unico que emite las
+	# cartas de mejora). Asi nivel y cartas nunca se duplican.
+	if not is_in_group("player"):
+		var primary := _primary_player()
+		if primary != null and primary != self and primary.has_method("add_experience"):
+			primary.add_experience(amount)
+			return
 
 	experience += max(1, int(round(amount * _xp_multiplier)))
 	while experience >= experience_to_level:
@@ -199,14 +262,18 @@ func add_experience(amount: int) -> void:
 
 ## Conectado a PickupArea.area_entered: recoge orbes de experiencia.
 func _on_pickup_area_area_entered(area: Area2D) -> void:
-	if _is_dead:
+	if _is_dead or _is_downed:
 		return
 	if area.is_in_group("xp_orbs") and area.has_method("collect"):
 		area.collect(self)
 
 
-func apply_upgrade(upgrade_id: StringName) -> void:
-	var companion_manager: Node = get_tree().get_first_node_in_group("companion_manager")
+## Aplica una carta de mejora. include_shared=false lo usa el PlayerManager en coop
+## para el P2: aplica solo los efectos PROPIOS del jugador (velocidad, vida, armas)
+## y NO toca al CompanionManager (bono de equipo que ya aplico el P1), para no
+## duplicar los bonos compartidos.
+func apply_upgrade(upgrade_id: StringName, include_shared: bool = true) -> void:
+	var companion_manager: Node = get_tree().get_first_node_in_group("companion_manager") if include_shared else null
 	# Magnitudes comunes reducidas en Fase 2.8 para que el escalado no sea tan
 	# brusco; las mejoras raras/épicas mantienen más impacto (salen menos).
 	match upgrade_id:
@@ -287,7 +354,11 @@ func get_weapon_manager() -> Node:
 
 ## Aplica las mejoras permanentes (Fase 07) al iniciar la partida. Lee los valores
 ## del autoload MetaProgression; si no existe (p.ej. en tests), no hace nada.
+## Fase Partida libre arcade: las mejoras permanentes y el Refugio SOLO afectan al
+## Modo Historia. En Partida libre el reto es puro (todos en igualdad de condiciones).
 func _apply_permanent_upgrades() -> void:
+	if not _is_story_run():
+		return
 	var mp: Node = get_node_or_null("/root/MetaProgression")
 	if mp == null:
 		return
@@ -345,6 +416,86 @@ func get_last_facing_direction() -> Vector2:
 
 func is_dead() -> bool:
 	return _is_dead
+
+
+func is_downed() -> bool:
+	return _is_downed
+
+
+func get_player_id() -> int:
+	return player_id
+
+
+## True mientras esta activo (ni muerto ni derribado): puede moverse, disparar y
+## recoger XP. Lo usan enemigos y camara para elegir jugadores validos.
+func is_active() -> bool:
+	return not _is_dead and not _is_downed
+
+
+func _is_coop() -> bool:
+	var gf: Node = get_node_or_null("/root/GameFlow")
+	return gf != null and gf.has_method("is_coop") and gf.is_coop()
+
+
+## True solo en Modo Historia. En Partida libre (o sin GameFlow: F6/tests) es false,
+## y las mejoras permanentes/refugio no se aplican.
+func _is_story_run() -> bool:
+	var gf: Node = get_node_or_null("/root/GameFlow")
+	return gf != null and gf.has_method("is_story_run") and gf.is_story_run()
+
+
+## Jugador principal (portador de XP/nivel del equipo). En coop, el P1 en grupo
+## "player"; en solo, este mismo.
+func _primary_player() -> Node:
+	var p: Node = get_tree().get_first_node_in_group("player")
+	return p if p != null else self
+
+
+## Coop: cae derribado. Detiene movimiento, apaga las armas y avisa al
+## PlayerManager (que decide revive o Game Over). No emite "died".
+func _go_downed() -> void:
+	if _is_downed or _is_dead:
+		return
+	_is_downed = true
+	velocity = Vector2.ZERO
+	_knockback = Vector2.ZERO
+	_set_weapons_enabled(false)
+	if is_instance_valid(_visual):
+		_visual.modulate = Color(0.45, 0.45, 0.5, 0.85)
+		_visual.rotation = PI * 0.5  # tumbado de lado
+	downed.emit(player_id)
+
+
+## Coop: revive con un porcentaje de vida. Reactiva movimiento y armas.
+func revive_player(health_percent: float = 0.4) -> void:
+	if _is_dead or not _is_downed:
+		return
+	_is_downed = false
+	current_health = max(1, int(round(max_health * clampf(health_percent, 0.05, 1.0))))
+	_damage_timer = damage_cooldown  # breve invulnerabilidad al levantarse
+	_set_weapons_enabled(true)
+	if is_instance_valid(_visual):
+		_visual.rotation = 0.0
+		_visual.modulate = Color(0.62, 0.78, 1.15, 1.0) if player_id >= 2 else Color(1, 1, 1, 1)
+	health_changed.emit(current_health, max_health)
+	Feedback.hit_effect(global_position, Color(0.5, 1.0, 0.7, 0.9), 0.4, 2.2)
+	revived.emit(player_id)
+
+
+## Muerte definitiva del equipo (la fuerza el PlayerManager cuando TODOS estan
+## derribados). Emite "died" para disparar el Game Over clasico (GameManager/MapManager).
+func force_team_death() -> void:
+	if _is_dead:
+		return
+	_is_downed = false
+	_die()
+
+
+## Enciende/apaga el WeaponManager (y sus armas hijas) sin destruirlo, para que un
+## jugador derribado deje de disparar y vuelva a hacerlo intacto al revivir.
+func _set_weapons_enabled(enabled: bool) -> void:
+	if is_instance_valid(_weapons):
+		_weapons.process_mode = Node.PROCESS_MODE_INHERIT if enabled else Node.PROCESS_MODE_DISABLED
 
 
 func _die() -> void:

@@ -99,6 +99,46 @@ para debug.
 
 El disparo es **automatico**: el gato dispara solo al enemigo mas cercano dentro de rango.
 
+## Modo Cooperativo local (2 jugadores en la misma pantalla)
+
+Nuevo modo **cooperativo local** (sin red, sin Steam). En el selector de zonas elige
+**Modo: Cooperativo local** antes de pulsar *Jugar*. El **Modo Solo funciona igual que
+siempre**; todo lo coop se activa solo cuando eliges ese modo.
+
+- **Jugador 1 (teclado):** `WASD` / flechas. Pausa: `ESC`.
+- **Jugador 2 (gamepad):** stick izquierdo. Respaldo de teclado: `I` `J` `K` `L`.
+  Pausa: **Start/Options**. Elegir carta de nivel: dpad/stick + **A**.
+- Requisito: **un control conectado** para el P2 (el menú avisa si falta; hay respaldo IJKL).
+- **XP, nivel y armas compartidos**: las cartas de arma mejoran a **ambos** jugadores;
+  cualquiera puede elegir la carta del equipo (P1 con ratón, P2 con gamepad).
+- **Revive:** si un jugador cae, queda *DERRIBADO*; el otro se le acerca **2 s** y lo
+  revive al 40% de vida. Si **ambos** caen → **Game Over**.
+- **Cámara** cooperativa con **correa (leash)**: sigue el punto medio, avisa si se
+  separan (~700 px) y los frena suavemente al límite (~950 px). Si un jugador queda
+  fuera de cámara, aparece una **flecha con su color** en el borde.
+- **Balance coop:** daño por jugador ×0.85 (no se duplica), enemigos/jefes con más vida
+  y presión. Las **Sardinas no se duplican** (save único).
+
+Guía completa en [`docs/FASE_COOP_LOCAL.md`](docs/FASE_COOP_LOCAL.md) y el pulido en
+[`docs/FASE_COOP_1_5_POLISH.md`](docs/FASE_COOP_1_5_POLISH.md).
+
+### Partida libre: modo arcade competitivo (sin bonos, con puntuación)
+
+**Historia y Partida libre están separadas por diseño.** Las **mejoras permanentes** y el
+**Refugio** afectan **solo al Modo Historia** (progresión). **Partida libre** es un modo
+**arcade puro**: todos parten en igualdad de condiciones, **no da Sardinas**, y en su
+lugar produce una **Puntuación** por partida y **récords locales** por mapa y dificultad
+— para superarte o competir con un amigo en la misma máquina (comparte la **semilla** que
+aparece en el resumen para jugar el mismo mundo).
+
+Partida libre (Solo o Coop) tiene además un **regulador de dificultad** en el menú de
+mapas, igual que Historia: **Fácil / Intermedio / Difícil / Extremo** (ajusta vida, daño,
+presión y velocidad de los enemigos, y multiplica la puntuación). Es independiente del
+**Nivel de Plaga** (que sigue desbloqueando y escalando por rejugar). Tu récord y tu
+última dificultad se guardan; los ves en el selector de mapas y en Estadísticas.
+
+Detalle en [`docs/FASE_FREE_PLAY_ARCADE.md`](docs/FASE_FREE_PLAY_ARCADE.md).
+
 ## Que muestra el HUD (minimalista, Fase 08.5)
 
 Durante el combate el HUD solo muestra lo esencial:

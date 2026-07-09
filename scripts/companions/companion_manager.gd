@@ -40,22 +40,24 @@ func _ready() -> void:
 			companions_changed.connect(_hud.on_companions_changed)
 		if _hud.has_method("update_companion_roster"):
 			companion_states_changed.connect(_hud.update_companion_roster)
-	# Mejora permanente "Corazon de Leon" (Fase 09): +daño de compañeros.
-	var mp: Node = get_node_or_null("/root/MetaProgression")
-	if mp != null and mp.has_method("companion_damage_mult"):
-		var mult: float = float(mp.companion_damage_mult())
-		if mult > 1.001:
-			multiply_damage(mult)
-	# Refugio Felino (Fase 10): vida plana, cura del medico y daño por tipo.
-	var shelter: Node = get_node_or_null("/root/Shelter")
-	if shelter != null and shelter.has_method("get_bonuses"):
-		var bonuses: Dictionary = shelter.get_bonuses()
-		_shelter_health_bonus = int(round(float(bonuses.get("companion_health_bonus", 0.0))))
-		_shelter_police_mult = 1.0 + float(bonuses.get("companion_police_damage_bonus", 0.0))
-		_shelter_engineer_mult = 1.0 + float(bonuses.get("companion_engineer_damage_bonus", 0.0))
-		var medic_bonus: int = int(round(float(bonuses.get("medic_heal_bonus", 0.0))))
-		if medic_bonus > 0:
-			increase_medic_heal(medic_bonus)
+	# Mejoras permanentes y Refugio SOLO en Modo Historia (Partida libre = reto puro).
+	if _is_story_run():
+		# Mejora permanente "Corazon de Leon" (Fase 09): +daño de compañeros.
+		var mp: Node = get_node_or_null("/root/MetaProgression")
+		if mp != null and mp.has_method("companion_damage_mult"):
+			var mult: float = float(mp.companion_damage_mult())
+			if mult > 1.001:
+				multiply_damage(mult)
+		# Refugio Felino (Fase 10): vida plana, cura del medico y daño por tipo.
+		var shelter: Node = get_node_or_null("/root/Shelter")
+		if shelter != null and shelter.has_method("get_bonuses"):
+			var bonuses: Dictionary = shelter.get_bonuses()
+			_shelter_health_bonus = int(round(float(bonuses.get("companion_health_bonus", 0.0))))
+			_shelter_police_mult = 1.0 + float(bonuses.get("companion_police_damage_bonus", 0.0))
+			_shelter_engineer_mult = 1.0 + float(bonuses.get("companion_engineer_damage_bonus", 0.0))
+			var medic_bonus: int = int(round(float(bonuses.get("medic_heal_bonus", 0.0))))
+			if medic_bonus > 0:
+				increase_medic_heal(medic_bonus)
 	companions_changed.emit(_companions.size(), max_companions)
 	_emit_roster_changed()
 
@@ -211,9 +213,15 @@ func _update_formation() -> void:
 	if count == 0:
 		return
 
+	# Coop: los companeros siguen al lider ACTIVO (no se quedan pegados a un P1
+	# derribado). En solo el lider es siempre el unico jugador.
+	var leader: Node2D = _active_leader()
+	if not is_instance_valid(leader):
+		return
+
 	var facing: Vector2 = Vector2.DOWN
-	if _player.has_method("get_last_facing_direction"):
-		facing = _player.get_last_facing_direction()
+	if leader.has_method("get_last_facing_direction"):
+		facing = leader.get_last_facing_direction()
 	if facing == Vector2.ZERO:
 		facing = Vector2.DOWN
 
@@ -230,8 +238,24 @@ func _update_formation() -> void:
 		if companion.has_method("get_follow_distance"):
 			radius = max(radius, float(companion.get_follow_distance()))
 		radius += max(0, count - 2) * companion_spacing * 0.25
-		var target: Vector2 = _player.global_position + Vector2.RIGHT.rotated(base_angle + angle_offset) * radius
+		var target: Vector2 = leader.global_position + Vector2.RIGHT.rotated(base_angle + angle_offset) * radius
 		companion.call("set_formation_target", target, follow_smoothness)
+
+
+## Lider de formacion: el jugador ACTIVO (prefiere P1). En solo es siempre _player.
+func _active_leader() -> Node2D:
+	if is_instance_valid(_player) and (not _player.has_method("is_active") or _player.is_active()):
+		return _player
+	for p in get_tree().get_nodes_in_group("players"):
+		if is_instance_valid(p) and p.has_method("is_active") and p.is_active():
+			return p
+	return _player
+
+
+## True solo en Modo Historia (donde aplican mejoras permanentes y Refugio).
+func _is_story_run() -> bool:
+	var gf: Node = get_node_or_null("/root/GameFlow")
+	return gf != null and gf.has_method("is_story_run") and gf.is_story_run()
 
 
 func _emit_roster_changed() -> void:
@@ -264,9 +288,14 @@ func _on_companion_revived(data: CompanionData) -> void:
 
 
 func _update_player_companion_bonus() -> void:
-	if not is_instance_valid(_player) or not _player.has_method("set_external_damage_multiplier"):
-		return
 	var multiplier: float = 1.0
 	if _colony_bond_bonus > 0.0 and get_active_companion_count() >= 2:
 		multiplier += _colony_bond_bonus
-	_player.set_external_damage_multiplier(multiplier)
+	# Coop: el Vinculo felino es un bono de EQUIPO; se aplica a todos los jugadores
+	# (cada uno a su propio arma), no solo al P1. En solo solo existe el P1.
+	var players := get_tree().get_nodes_in_group("players")
+	if players.is_empty() and is_instance_valid(_player):
+		players = [_player]
+	for p in players:
+		if is_instance_valid(p) and p.has_method("set_external_damage_multiplier"):
+			p.set_external_damage_multiplier(multiplier)

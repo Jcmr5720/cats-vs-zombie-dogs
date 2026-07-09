@@ -42,49 +42,65 @@ func _build_ui() -> void:
 	subtitle.position = Vector2(0, 104)
 	add_child(subtitle)
 
-	# Columna central simple: solo los botones del menu.
+	# Columna central con jerarquía: acción primaria destacada, luego secundarias
+	# y un grupo compacto de progresión/sistema.
 	var center := CenterContainer.new()
 	center.anchor_left = 0.0
-	center.anchor_top = 0.30
+	center.anchor_top = 0.32
 	center.anchor_right = 1.0
 	center.anchor_bottom = 0.98
 	add_child(center)
 
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 12)
+	col.add_theme_constant_override("separation", MenuTheme.GAP_M)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	center.add_child(col)
 
-	var b_story := MenuTheme.make_button("Historia", MenuTheme.ACCENT)
+	# Acción primaria: continuar la campaña.
+	var b_story := MenuTheme.make_button("Historia", MenuTheme.ACCENT, &"primary")
+	b_story.custom_minimum_size = Vector2(380, 64)
+	b_story.add_theme_font_size_override("font_size", MenuTheme.FS_H2)
 	b_story.pressed.connect(func() -> void: GameFlow.open_story())
 	col.add_child(b_story)
-	b_story.grab_focus.call_deferred()
 
-	var b_play := MenuTheme.make_button("Partida libre", MenuTheme.CYAN)
+	# Secundarias: partida libre y refugio (lado a lado).
+	var secondary := HBoxContainer.new()
+	secondary.add_theme_constant_override("separation", MenuTheme.GAP_M)
+	secondary.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_child(secondary)
+	var b_play := MenuTheme.make_button("Partida libre", MenuTheme.CYAN, &"secondary")
+	b_play.custom_minimum_size = Vector2(184, 52)
 	b_play.pressed.connect(func() -> void: GameFlow.open_map_select())
-	col.add_child(b_play)
-
-	var b_shelter := MenuTheme.make_button("Refugio", MenuTheme.PURPLE)
+	secondary.add_child(b_play)
+	var b_shelter := MenuTheme.make_button("Refugio", MenuTheme.PURPLE, &"secondary")
+	b_shelter.custom_minimum_size = Vector2(184, 52)
 	b_shelter.pressed.connect(func() -> void: GameFlow.open_shelter())
-	col.add_child(b_shelter)
+	secondary.add_child(b_shelter)
 
-	var b_meta := MenuTheme.make_button("Mejoras", MenuTheme.ZOMBIE)
+	# Grupo de progresión/sistema (bajo perfil).
+	var tertiary := HBoxContainer.new()
+	tertiary.add_theme_constant_override("separation", MenuTheme.GAP_S)
+	tertiary.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_child(tertiary)
+	var b_meta := MenuTheme.make_button("Mejoras", MenuTheme.ZOMBIE, &"ghost")
+	b_meta.custom_minimum_size = Vector2(120, 44)
 	b_meta.pressed.connect(func() -> void: GameFlow.open_meta_progression())
-	col.add_child(b_meta)
-
-	var b_stats := MenuTheme.make_button("Progreso", MenuTheme.CYAN)
+	tertiary.add_child(b_meta)
+	var b_stats := MenuTheme.make_button("Progreso", MenuTheme.CYAN, &"ghost")
+	b_stats.custom_minimum_size = Vector2(120, 44)
 	b_stats.pressed.connect(func() -> void: GameFlow.open_stats())
-	col.add_child(b_stats)
-
-	var b_options := MenuTheme.make_button("Opciones", MenuTheme.PURPLE)
+	tertiary.add_child(b_stats)
+	var b_options := MenuTheme.make_button("Opciones", MenuTheme.PURPLE, &"ghost")
+	b_options.custom_minimum_size = Vector2(120, 44)
 	b_options.pressed.connect(func() -> void: GameFlow.open_options())
-	col.add_child(b_options)
+	tertiary.add_child(b_options)
 
-	var b_quit := MenuTheme.make_button("Salir", Color(0.8, 0.4, 0.4))
+	var b_quit := MenuTheme.make_button("Salir", MenuTheme.DANGER, &"ghost")
+	b_quit.custom_minimum_size = Vector2(120, 40)
 	b_quit.pressed.connect(func() -> void: GameFlow.quit_game())
 	col.add_child(b_quit)
 
-	b_play.grab_focus()
+	b_story.grab_focus.call_deferred()
 
 
 ## Fondo decorativo: degradado, luna, silueta de gato y huellas. Solo formas.

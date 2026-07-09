@@ -23,6 +23,12 @@ var sardines_total_after: int = 0
 var sardine_breakdown: Dictionary = {}
 ## Semilla del mundo de la run (para mostrar/rejugar mundos concretos).
 var world_seed: int = 0
+## Puntuacion de Partida libre (Fase Arcade). -1 = no aplica (Modo Historia), y el HUD
+## muestra Sardinas en su lugar. En Partida libre es >= 0 y sustituye a las Sardinas.
+var score: int = -1
+var score_breakdown: Dictionary = {}
+var best_score: int = 0
+var is_new_record: bool = false
 
 
 func to_dict() -> Dictionary:
@@ -45,4 +51,8 @@ func to_dict() -> Dictionary:
 		"total_sardines": sardines_total_after,
 		"sardine_breakdown": sardine_breakdown,
 		"world_seed": world_seed,
+		"score": score,
+		"score_breakdown": score_breakdown,
+		"best_score": best_score,
+		"is_new_record": is_new_record,
 	}

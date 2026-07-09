@@ -90,6 +90,13 @@ signal stats_updated(kills: int, difficulty: float)
 ## Sesgo direccional de horda: fraccion de spawns que llegan desde un mismo lado.
 @export_range(0.0, 1.0, 0.05) var horde_bias_strength: float = 0.6
 
+@export_group("Balance coop (Fase Coop 1.5)")
+## Bono de presion constante al difficulty_score con 2 jugadores.
+@export var coop_score_bonus: float = 3.0
+## Enemigos vivos extra permitidos en coop (base y topes).
+@export var coop_max_enemies_bonus: int = 25
+@export var coop_cap_bonus: int = 30
+
 var _alive_count: int = 0
 ## Backpressure suavizado (1.0 = ritmo pleno; <1 = reducido por saturacion/FPS).
 var _spawn_multiplier: float = 1.0
@@ -121,6 +128,9 @@ var _map_runner_mult: float = 1.0
 var _map_health_mult: float = 1.0
 var _map_speed_mult: float = 1.0
 var _map_damage_mult: float = 1.0
+## Bono de dificultad por jugadores extra en coop (Fase Coop, seccion 13). Suma
+## presion constante al score para compensar el doble de dano/coberturua del equipo.
+var _coop_bonus: float = 0.0
 ## Presion extra por mejoras permanentes (Fase 07). Se lee una vez al iniciar.
 var _permanent_power: float = 0.0
 ## Presion extra por el poder del Refugio (Fase 10): objetos colocados.
@@ -130,16 +140,20 @@ var _obstacle_cache_timer: float = 0.0
 
 
 func _ready() -> void:
+	add_to_group("enemy_spawner")
 	_player = get_tree().get_first_node_in_group("player")
 	_perf = get_node_or_null("/root/Performance")
-	# Las mejoras permanentes suben un poco la presion (Fase 07).
-	var mp: Node = get_node_or_null("/root/MetaProgression")
-	if mp != null and mp.has_method("get_permanent_power_score"):
-		_permanent_power = float(mp.get_permanent_power_score())
-	# El Refugio tambien (Fase 10): solo los objetos COLOCADOS cuentan.
-	var shelter: Node = get_node_or_null("/root/Shelter")
-	if shelter != null and shelter.has_method("get_power_score"):
-		_shelter_power = float(shelter.get_power_score())
+	# Mejoras permanentes / Refugio solo cuentan en Historia. En Partida libre no hay
+	# bonos, asi que tampoco su presion compensatoria (_permanent_power/_shelter_power=0).
+	if _is_story_run():
+		# Las mejoras permanentes suben un poco la presion (Fase 07).
+		var mp: Node = get_node_or_null("/root/MetaProgression")
+		if mp != null and mp.has_method("get_permanent_power_score"):
+			_permanent_power = float(mp.get_permanent_power_score())
+		# El Refugio tambien (Fase 10): solo los objetos COLOCADOS cuentan.
+		var shelter: Node = get_node_or_null("/root/Shelter")
+		if shelter != null and shelter.has_method("get_power_score"):
+			_shelter_power = float(shelter.get_power_score())
 
 	_spawn_timer = Timer.new()
 	_spawn_timer.wait_time = base_spawn_interval
@@ -265,6 +279,25 @@ func start_runner_pack(duration: float, weight_bonus: float = 3.0) -> void:
 	_runner_timer = max(0.0, duration)
 
 
+## True solo en Modo Historia (donde aplican mejoras permanentes y Refugio).
+func _is_story_run() -> bool:
+	var gf: Node = get_node_or_null("/root/GameFlow")
+	return gf != null and gf.has_method("is_story_run") and gf.is_story_run()
+
+
+## Activa el escalado cooperativo (Fase Coop, seccion 13): bono de presion constante
+## y mas techo de enemigos, porque el equipo cubre mas terreno y hace mas dano.
+func set_coop_players(count: int) -> void:
+	if count >= 2:
+		_coop_bonus = coop_score_bonus
+		base_max_enemies += coop_max_enemies_bonus
+		soft_enemy_cap += coop_cap_bonus
+		hard_enemy_cap += coop_cap_bonus
+		absolute_enemy_cap += coop_cap_bonus
+	else:
+		_coop_bonus = 0.0
+
+
 func get_difficulty_score() -> float:
 	return _difficulty_score
 
@@ -295,7 +328,8 @@ func _recalculate_difficulty() -> void:
 		+ _get_companion_count() * companion_weight \
 		+ _get_downed_companion_count() * downed_companion_weight \
 		+ _get_weapon_count() * weapon_weight \
-		+ _get_total_weapon_levels() * weapon_level_weight
+		+ _get_total_weapon_levels() * weapon_level_weight \
+		+ _coop_bonus
 
 	# Modificador del mapa activo (Fase 06): escala la presion global.
 	_difficulty_score *= _map_difficulty_mult
