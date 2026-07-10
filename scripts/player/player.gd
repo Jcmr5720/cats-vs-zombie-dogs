@@ -478,7 +478,10 @@ func revive_player(health_percent: float = 0.4) -> void:
 		_visual.rotation = 0.0
 		_visual.modulate = Color(0.62, 0.78, 1.15, 1.0) if player_id >= 2 else Color(1, 1, 1, 1)
 	health_changed.emit(current_health, max_health)
+	# FASE VISUAL 2: doble onda de revive (verde + blanca) para que el momento
+	# se lea claro en medio del combate coop.
 	Feedback.hit_effect(global_position, Color(0.5, 1.0, 0.7, 0.9), 0.4, 2.2)
+	Feedback.hit_effect(global_position, Color(0.9, 1.0, 0.95, 0.7), 0.2, 1.3)
 	revived.emit(player_id)
 
 

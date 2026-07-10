@@ -447,7 +447,19 @@ func _apply_visuals() -> void:
 	_role_hat.color = companion_data.accent_color.darkened(0.08)
 	_health_bar.modulate = companion_data.visual_color.lightened(0.1)
 	if is_instance_valid(_outline):
-		_outline.color = companion_data.visual_color.darkened(0.58)
+		_outline.color = companion_data.visual_color.darkened(0.68)
+	# Chaleco de rol (FASE VISUAL 1): color fijo por rol, refuerza la lectura
+	# del uniforme junto al gorro. Nodo opcional (get_node_or_null: no rompe
+	# escenas antiguas sin chaleco).
+	var vest := get_node_or_null("Visual/Vest") as Polygon2D
+	if vest != null:
+		match companion_data.role:
+			&"police":
+				vest.color = Color(0.14, 0.23, 0.44, 0.92)
+			&"medic":
+				vest.color = Color(0.94, 0.96, 0.93, 0.92)
+			_:
+				vest.color = Color(0.98, 0.62, 0.14, 0.92)
 	# Uniforme por rol: gorra de policia con placa dorada, gorro blanco de medico
 	# con cruz roja y casco amarillo de ingeniero. Colores fijos para que los tres
 	# se distingan de un vistazo aunque cambien los datos.

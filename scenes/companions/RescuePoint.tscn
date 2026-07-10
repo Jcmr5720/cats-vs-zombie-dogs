@@ -1,12 +1,37 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/companions/rescue_point.gd" id="1_rescue"]
+[ext_resource type="PackedScene" path="res://scenes/visual/BlobShadow.tscn" id="2_blob"]
 
 [sub_resource type="CircleShape2D" id="1"]
 radius = 38.0
 
+[sub_resource type="StyleBoxFlat" id="2_bar_bg"]
+bg_color = Color(0.04, 0.05, 0.075, 0.85)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.17, 0.1, 0.06, 0.9)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="3_bar_fill"]
+bg_color = Color(1, 0.88, 0.45, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
 [node name="RescuePoint" type="Node2D"]
 script = ExtResource("1_rescue")
+
+[node name="BlobShadow" parent="." instance=ExtResource("2_blob")]
+radius = 30.0
+opacity = 0.24
+shadow_offset = Vector2(0, 24)
 
 [node name="Visual" type="Node2D" parent="."]
 
@@ -43,6 +68,9 @@ offset_top = -74.0
 offset_right = 52.0
 offset_bottom = -52.0
 theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(1, 0.94, 0.72, 1)
+theme_override_colors/font_outline_color = Color(0.03, 0.04, 0.06, 0.85)
+theme_override_constants/outline_size = 5
 horizontal_alignment = 1
 text = "Rescate!"
 
@@ -53,6 +81,9 @@ offset_right = 80.0
 offset_bottom = -30.0
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.9, 0.94, 1, 1)
+theme_override_colors/font_outline_color = Color(0.03, 0.04, 0.06, 0.85)
+theme_override_constants/outline_size = 4
 text = "Gato sobreviviente"
 
 [node name="Prompt" type="Label" parent="."]
@@ -63,6 +94,9 @@ offset_right = 60.0
 offset_bottom = 52.0
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.7, 1, 0.82, 1)
+theme_override_colors/font_outline_color = Color(0.03, 0.04, 0.06, 0.85)
+theme_override_constants/outline_size = 4
 text = "Rescatando..."
 
 [node name="ProgressBar" type="ProgressBar" parent="."]
@@ -70,6 +104,8 @@ visible = false
 offset_left = -56.0
 offset_top = 54.0
 offset_right = 56.0
-offset_bottom = 70.0
+offset_bottom = 63.0
+theme_override_styles/background = SubResource("2_bar_bg")
+theme_override_styles/fill = SubResource("3_bar_fill")
 max_value = 100.0
 show_percentage = false

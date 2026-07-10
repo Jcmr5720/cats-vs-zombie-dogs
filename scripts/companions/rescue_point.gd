@@ -27,12 +27,18 @@ var _pulse_time: float = 0.0
 @onready var _float_label: Label = $FloatLabel
 
 
+var _light: GlowLight
+
+
 func _ready() -> void:
 	add_to_group("rescue_points")
 	_progress_bar.visible = false
 	_prompt.visible = false
 	_area.body_entered.connect(_on_area_body_entered)
 	_area.body_exited.connect(_on_area_body_exited)
+	# FASE VISUAL 2: aro de luz pulsante; el rescate se ve desde lejos incluso
+	# con el ambiente oscurecido. Null si las luces estan desactivadas.
+	_light = GlowLight.attach(self, Color(0.75, 1.0, 0.85), 130.0, 0.65, 1.6, 0.0, true)
 	_update_visuals()
 
 
@@ -119,3 +125,5 @@ func _update_visuals() -> void:
 	_crate.color = companion_data.visual_color.darkened(0.5)
 	_glow.color = companion_data.visual_color.lightened(0.12)
 	_pulse_ring.color = companion_data.projectile_color
+	if is_instance_valid(_light):
+		_light.color = companion_data.projectile_color

@@ -24,6 +24,15 @@ var damage_numbers_enabled: bool = true
 var visual_quality: StringName = &"media"
 var effects_intensity: bool = true
 var shadows_enabled: bool = true
+## FASE VISUAL 2: interruptores de luces dinamicas (PointLight2D) y vignette.
+## Los fija Settings; en calidad baja se apagan las luces automaticamente.
+var lights_enabled: bool = true
+var vignette_enabled: bool = true
+## FASE VISUAL 2.5: niebla de ambiente y tope global de luces dinamicas vivas
+## (las luces IMPORTANTES —jefes, rescates— no cuentan para el tope; las de
+## decoracion —farolas, neones— si). GlowLight.attach consulta este valor.
+var fog_enabled: bool = true
+var max_active_lights: int = 16
 
 var _active_effects: int = 0
 
@@ -171,17 +180,47 @@ func _on_effect_freed() -> void:
 	_active_effects = max(_active_effects - 1, 0)
 
 
-func apply_visual_quality(quality: StringName, intense_effects: bool, show_shadows: bool) -> void:
+func apply_visual_quality(
+	quality: StringName,
+	intense_effects: bool,
+	show_shadows: bool,
+	dynamic_lights: bool = true,
+	vignette: bool = true,
+	fog: bool = true
+) -> void:
 	visual_quality = quality
 	effects_intensity = intense_effects
 	shadows_enabled = show_shadows
+	lights_enabled = dynamic_lights
+	vignette_enabled = vignette
+	fog_enabled = fog
 	match visual_quality:
 		&"baja":
 			max_active_effects = 36
 			effects_enabled = intense_effects
+			# Preset manda: en calidad baja no hay luces, ni vignette, ni niebla
+			# aunque sus toggles esten activos.
+			lights_enabled = false
+			vignette_enabled = false
+			fog_enabled = false
+			max_active_lights = 0
 		&"alta":
 			max_active_effects = 90
 			effects_enabled = true
+			max_active_lights = 28
 		_:
 			max_active_effects = 70
 			effects_enabled = true
+			max_active_lights = 16
+	_apply_to_live_nodes()
+
+
+## FASE VISUAL 2.5: aplica los toggles EN VIVO a los nodos ya creados, para que
+## cambiar opciones no requiera reiniciar. Las luces se apagan (enabled), las
+## sombras blob se ocultan y la niebla se reconstruye via su controlador.
+func _apply_to_live_nodes() -> void:
+	if not is_inside_tree():
+		return
+	get_tree().call_group("glow_lights", "set", "enabled", lights_enabled)
+	get_tree().call_group("blob_shadows", "set", "visible", shadows_enabled)
+	get_tree().call_group("ambient_controller", "refresh_settings")

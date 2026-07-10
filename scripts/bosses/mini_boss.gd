@@ -35,6 +35,8 @@ var _stuck_check_timer: float = 0.0
 @onready var _visual: Node2D = $Visual
 @onready var _health_bar: ProgressBar = $HealthBar
 @onready var _aura: Polygon2D = get_node_or_null("Aura")
+## Luz dinamica (FASE VISUAL 2). Puede ser null (luces desactivadas).
+var _light: GlowLight
 
 
 func _ready() -> void:
@@ -47,6 +49,9 @@ func _ready() -> void:
 	# Entrada con presencia: destello grande + shake para anunciar al "elite".
 	Feedback.hit_effect(global_position, Color(1.0, 0.7, 0.25, 0.9), 0.6, 3.0)
 	Feedback.shake(0.3)
+	# FASE VISUAL 2: luz ambarina propia, mas pequena que la del jefe principal.
+	var mb_accent: Color = data.accent_color if data != null else Color(1.0, 0.7, 0.25)
+	_light = GlowLight.attach(self, mb_accent, 150.0, 0.75, 2.6, 0.0, true)
 
 
 func configure(boss_data: BossData, difficulty_score: float) -> void:
@@ -200,6 +205,10 @@ func _die() -> void:
 	if missions != null:
 		missions.add(&"boss_kills")
 	died.emit(data)
+	# La luz se apaga con el cuerpo (el modulate no afecta a las Light2D).
+	if is_instance_valid(_light):
+		var light_out := create_tween()
+		light_out.tween_method(_light.set_base_energy, 1.4, 0.0, 0.3)
 	var tween := create_tween()
 	tween.set_parallel(true)
 	tween.tween_property(self, "scale", scale * 0.2, 0.3)

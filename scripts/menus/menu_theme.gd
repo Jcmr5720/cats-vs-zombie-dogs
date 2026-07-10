@@ -91,7 +91,7 @@ static func _apply_button_variant(button: Button, accent: Color, variant: String
 				box.shadow_size = 10
 				fg = _readable_on(accent)
 			&"ghost":
-				box.bg_color = Color(1, 1, 1, 0.03) if state != "hover" else Color(accent.r, accent.g, accent.b, 0.14)
+				box.bg_color = Color(1, 1, 1, 0.03) if state not in ["hover", "focus"] else Color(accent.r, accent.g, accent.b, 0.14)
 				box.border_color = Color(accent.r, accent.g, accent.b, 0.45)
 				box.set_border_width_all(1)
 				box.shadow_size = 0
@@ -104,6 +104,11 @@ static func _apply_button_variant(button: Button, accent: Color, variant: String
 					box.bg_color = Color(0.09, 0.09, 0.12, 0.9)
 				box.border_color = accent if state != "disabled" else HAIRLINE
 				box.set_border_width_all(2)
+		# FASE VISUAL 3: el foco de teclado/gamepad SIEMPRE se ve — borde claro
+		# extra en cualquier variante (el hover del mouse ya tiene su tinte).
+		if state == "focus":
+			box.set_border_width_all(2)
+			box.border_color = accent.lightened(0.35)
 		button.add_theme_stylebox_override(state, box)
 	button.add_theme_color_override("font_color", fg)
 	button.add_theme_color_override("font_hover_color", fg)

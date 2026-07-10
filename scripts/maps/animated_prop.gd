@@ -22,6 +22,24 @@ func configure(prop_kind: StringName, world_seed: int, cell_key: String, accent:
 	z_index = 2
 	set_process(kind in [&"traffic_light", &"neon_sign", &"crane"])
 	_update_state(true)
+	_attach_light()
+
+
+## FASE VISUAL 2: luz real en props que la merecen. Farolas: charco de luz
+## calida con parpadeo electrico sutil. Neones: luz del color de acento.
+## GlowLight.attach ya respeta el ajuste global (null si estan apagadas);
+## ademas los neones solo iluminan en calidad alta para acotar el numero
+## de luces por chunk.
+func _attach_light() -> void:
+	match kind:
+		&"street_lamp":
+			var lamp := GlowLight.attach(self, Color(1.0, 0.82, 0.5), 120.0, 0.55, 0.0, 0.25)
+			if is_instance_valid(lamp):
+				lamp.position = Vector2(31, -42)  # el cabezal de la farola
+		&"neon_sign":
+			var fb: Node = get_node_or_null("/root/Feedback")
+			if fb != null and fb.get("visual_quality") == &"alta":
+				GlowLight.attach(self, _accent, 90.0, 0.5, 0.0, 0.4)
 
 
 func _process(_delta: float) -> void:

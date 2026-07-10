@@ -4,7 +4,41 @@ Juego 2D top-down tipo **bullet heaven / survivor** para PC. Un gato lider
 rescata otros gatos sobrevivientes mientras combate oleadas de perros zombis
 mutantes en una ciudad abandonada. Tono arcade, caricaturesco y no realista.
 
-> **Estado: FASE 10 — Refugio Felino (tienda + colocación + bonificaciones).**
+> **Estado: FASE VISUAL 3 — UI premium.** Auditoría completa del stack de UI
+> contra estándar Steam: logo compuesto de tres tonos con marca de garra en el
+> menú principal, foco de gamepad visible en todas las variantes de botón,
+> pestaña **Controles** en Opciones (referencia P1/P2/atajos) y foco inicial
+> en selector de mapas y opciones. Cartas, HUD, resumen, refugio y selector ya
+> cumplían el estándar (verificado). Detalle en
+> [`docs/FASE_VISUAL_3_UI_PREMIUM.md`](docs/FASE_VISUAL_3_UI_PREMIUM.md).
+>
+> **FASE VISUAL 2.5 — QA visual, rendimiento y opciones.** Las opciones
+> visuales ya se controlan desde **Opciones → Vídeo**: calidad (Baja/Media/Alta),
+> luces dinámicas, viñeta, niebla, sombras y efectos, con aplicación en vivo.
+> **Baja** apaga luces/viñeta/niebla y reduce efectos (36); **Media** usa tope
+> de 16 luces de decoración y 70 efectos; **Alta** habilita neones con luz,
+> 28 luces y 90 efectos. Números de daño e indicadores siempre por encima de
+> niebla y viñeta; verificado reinicio sin efectos duplicados. Detalle en
+> [`docs/FASE_VISUAL_2_5_QA_PERFORMANCE.md`](docs/FASE_VISUAL_2_5_QA_PERFORMANCE.md).
+>
+> **FASE VISUAL 2 — Iluminación, sombras y VFX.** Ambiente global por
+> mapa (noche azul del Barrio, verdín con niebla del Parque, óxido con vapor
+> del Callejón), luces dinámicas reales en jefes, rescates y farolas (textura
+> radial generada por código, sin assets), vignette dramática con estados
+> (poca vida, jefe vivo), sombra blob reutilizable y UI de compañeros pulida.
+> Nuevos ajustes `dynamic_lights` y `vignette` en settings.json; en calidad
+> baja todo se apaga solo. Detalle en
+> [`docs/FASE_VISUAL_2_LIGHTING_VFX.md`](docs/FASE_VISUAL_2_LIGHTING_VFX.md).
+>
+> **FASE VISUAL 1 — Base artística y mundo.** Rediseño visual profundo
+> sin tocar gameplay: volumen aparente en todos los personajes (rim light,
+> sombreado direccional y sombras en dos capas), siluetas más fuertes (golilla
+> y mechones del gato, púas dorsales en jefes, heridas/mordiscos en zombis),
+> chalecos de rol en compañeros y suelos con identidad por bioma (hojarasca,
+> marcas de garra felina, chatarra industrial). Detalle en
+> [`docs/FASE_VISUAL_1_BASE_ARTISTICA.md`](docs/FASE_VISUAL_1_BASE_ARTISTICA.md).
+>
+> **FASE 10 — Refugio Felino (tienda + colocación + bonificaciones).**
 > Nuevo botón **Refugio** en el menú principal: compra objetos con **Sardinas**
 > en la **tienda** (12 objetos en 5 categorías, mejorables a nivel 5), colócalos
 > en los **slots** del refugio y obtén **bonificaciones permanentes** al iniciar

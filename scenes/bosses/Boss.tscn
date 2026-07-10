@@ -10,6 +10,10 @@ collision_layer = 2
 collision_mask = 0
 script = ExtResource("1_boss")
 
+[node name="AuraOuter" type="Polygon2D" parent="."]
+color = Color(1, 0.85, 0.25, 0.07)
+polygon = PackedVector2Array(118, 0, 102, 59, 59, 102, 0, 118, -59, 102, -102, 59, -118, 0, -102, -59, -59, -102, 0, -118, 59, -102, 102, -59)
+
 [node name="Aura" type="Polygon2D" parent="."]
 color = Color(1, 0.85, 0.25, 0.16)
 polygon = PackedVector2Array(95, 0, 82, 47, 47, 82, 0, 95, -47, 82, -82, 47, -95, 0, -82, -47, -47, -82, 0, -95, 47, -82, 82, -47)
@@ -18,9 +22,14 @@ polygon = PackedVector2Array(95, 0, 82, 47, 47, 82, 0, 95, -47, 82, -82, 47, -95
 color = Color(1, 0.6, 0.15, 0.1)
 polygon = PackedVector2Array(64, 0, 55, 32, 32, 55, 0, 64, -32, 55, -55, 32, -64, 0, -55, -32, -32, -55, 0, -64, 32, -55, 55, -32)
 
+[node name="SoftShadow" type="Polygon2D" parent="."]
+position = Vector2(0, 38)
+color = Color(0, 0, 0, 0.13)
+polygon = PackedVector2Array(-82, -16, -41, -28, 51, -26, 100, -10, 95, 15, 43, 30, -56, 28, -100, 10)
+
 [node name="Shadow" type="Polygon2D" parent="."]
 position = Vector2(0, 38)
-color = Color(0, 0, 0, 0.28)
+color = Color(0, 0, 0, 0.30)
 polygon = PackedVector2Array(-64, -12, -32, -22, 40, -20, 80, -8, 76, 12, 34, 24, -44, 22, -80, 8)
 
 [node name="Visual" type="Node2D" parent="."]
@@ -37,6 +46,23 @@ polygon = PackedVector2Array(-44, 26, -34, 56, -18, 28, 6, 28, 16, 56, 30, 28, 4
 color = Color(0.32, 0.2, 0.42, 1)
 polygon = PackedVector2Array(-52, -32, -36, -40, 34, -40, 52, -30, 52, 30, 36, 40, -36, 40, -52, 30)
 
+[node name="BodyShade" type="Polygon2D" parent="Visual/Body"]
+color = Color(0.03, 0.02, 0.05, 0.30)
+polygon = PackedVector2Array(52, 30, 36, 40, -36, 40, -52, 30, -49, 22, -34, 32.5, 34, 32.5, 48, 21)
+
+[node name="BodyRim" type="Polygon2D" parent="Visual/Body"]
+color = Color(0.85, 0.75, 1, 0.16)
+polygon = PackedVector2Array(-52, -32, -36, -40, 10, -40, 10, -34.5, -33, -34.5, -46.6, -27.4, -46.6, 10, -52, 8)
+
+[node name="Claws" type="Polygon2D" parent="Visual/Legs"]
+color = Color(0.88, 0.86, 0.78, 1)
+polygon = PackedVector2Array(-38, 52, -34, 60, -30, 52, -28, 52, -34, 56, 12, 52, 16, 60, 20, 52, 22, 52, 16, 56)
+polygons = [PackedInt32Array(0, 1, 2), PackedInt32Array(5, 6, 7)]
+
+[node name="BackSpikesFar" type="Polygon2D" parent="Visual"]
+color = Color(0.10, 0.05, 0.14, 1)
+polygon = PackedVector2Array(-50, -34, -40, -64, -28, -36, -14, -68, 0, -36, 14, -64, 28, -35, 40, -60, 48, -33)
+
 [node name="BackSpikes" type="Polygon2D" parent="Visual"]
 color = Color(0.16, 0.09, 0.22, 1)
 polygon = PackedVector2Array(-42, -36, -30, -58, -18, -38, -6, -60, 8, -38, 22, -56, 34, -36)
@@ -52,6 +78,15 @@ polygon = PackedVector2Array(20, -34, 30, -64, 44, -36, 58, -36, 72, -64, 80, -3
 [node name="Head" type="Polygon2D" parent="Visual"]
 color = Color(0.38, 0.25, 0.48, 1)
 polygon = PackedVector2Array(34, -34, 78, -28, 90, -10, 90, 14, 78, 30, 34, 34)
+
+[node name="HeadShade" type="Polygon2D" parent="Visual/Head"]
+color = Color(0.03, 0.02, 0.05, 0.24)
+polygon = PackedVector2Array(90, 14, 78, 30, 34, 34, 34, 27, 74, 23.5, 84, 11)
+
+[node name="FlankScar" type="Polygon2D" parent="Visual/Body"]
+color = Color(0.62, 0.20, 0.16, 0.7)
+polygon = PackedVector2Array(-34, -18, -20, -6, -23, -4, -37, -15.5, -28, 2, -14, 12, -17, 14, -31, 5)
+polygons = [PackedInt32Array(0, 1, 2, 3), PackedInt32Array(4, 5, 6, 7)]
 
 [node name="Snout" type="Polygon2D" parent="Visual"]
 color = Color(0.26, 0.16, 0.34, 1)

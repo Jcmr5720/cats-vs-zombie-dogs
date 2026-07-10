@@ -3,6 +3,7 @@
 [ext_resource type="Script" path="res://scripts/effects/hit_effect.gd" id="1_hit"]
 
 [node name="HitEffect" type="Node2D"]
+z_index = 55
 script = ExtResource("1_hit")
 
 [node name="Flash" type="Polygon2D" parent="."]

@@ -3,6 +3,7 @@
 [ext_resource type="Script" path="res://scripts/effects/damage_number.gd" id="1_dmg"]
 
 [node name="DamageNumber" type="Node2D"]
+z_index = 60
 script = ExtResource("1_dmg")
 
 [node name="Label" type="Label" parent="."]

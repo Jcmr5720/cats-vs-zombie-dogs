@@ -16,7 +16,20 @@ const TABS: Array[Dictionary] = [
 	{"id": &"video", "label": "Vídeo", "color": Color(0.45, 0.85, 1.0)},
 	{"id": &"juego", "label": "Juego", "color": Color(1.0, 0.6, 0.2)},
 	{"id": &"audio", "label": "Audio", "color": Color(0.62, 0.44, 0.88)},
+	{"id": &"controles", "label": "Controles", "color": Color(0.48, 0.82, 0.42)},
 	{"id": &"datos", "label": "Datos", "color": Color(0.95, 0.42, 0.42)},
+]
+
+## Referencia de controles (solo lectura; el remapeo queda para otra fase).
+const CONTROL_ROWS: Array[Array] = [
+	["Jugador 1 — mover", "WASD  /  Flechas"],
+	["Jugador 2 — mover (coop)", "Stick izq. del mando  /  IJKL"],
+	["Pausa", "ESC"],
+	["Elegir carta de mejora", "Clic  /  Mando (P2)"],
+	["Reintentar (fin de partida)", "R"],
+	["Mejoras permanentes (fin de partida)", "M"],
+	["Cambiar zona (pruebas)", "F1 · F2 · F3"],
+	["Panel de rendimiento", "F8"],
 ]
 
 var _settings: Node
@@ -86,13 +99,22 @@ func _rebuild_content() -> void:
 	_reset_stage = 0
 	for child in _content_box.get_children():
 		child.queue_free()
+	_focus_first_control.call_deferred()
 	match _tab:
 		&"video":
 			_content_box.add_child(MenuTheme.make_setting_toggle("Pantalla completa", "fullscreen"))
 			_content_box.add_child(_choice_row("Calidad visual", "visual_quality", QUALITY_OPTIONS, "media"))
+			# FASE VISUAL 2.5: toggles de la capa de iluminacion/atmosfera. La calidad
+			# Baja los apaga todos aunque esten activos (preset manda sobre toggle).
+			_content_box.add_child(MenuTheme.make_setting_toggle("Luces dinámicas", "dynamic_lights"))
+			_content_box.add_child(MenuTheme.make_setting_toggle("Viñeta de cámara", "vignette"))
+			_content_box.add_child(MenuTheme.make_setting_toggle("Niebla de ambiente", "fog"))
 			_content_box.add_child(MenuTheme.make_setting_toggle("Efectos intensos", "visual_effects"))
 			_content_box.add_child(MenuTheme.make_setting_toggle("Sombras", "shadows"))
 			_content_box.add_child(MenuTheme.make_setting_toggle("Mostrar FPS", "show_fps"))
+			var hint := MenuTheme.make_label("Luces y niebla nuevas se aplican al instante; las luces ya encendidas se apagan/encienden en vivo.", MenuTheme.FS_BODY, MenuTheme.TEXT_DIM)
+			hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			_content_box.add_child(hint)
 		&"juego":
 			_content_box.add_child(MenuTheme.make_setting_toggle("Screen shake", "shake_enabled"))
 			_content_box.add_child(_choice_row("Intensidad de shake", "shake_level", SHAKE_OPTIONS, "medio"))
@@ -104,6 +126,14 @@ func _rebuild_content() -> void:
 			_content_box.add_child(MenuTheme.make_setting_slider("Efectos", "audio_sfx", MenuTheme.PURPLE))
 			_content_box.add_child(MenuTheme.make_setting_slider("UI", "audio_ui", MenuTheme.PURPLE))
 			_content_box.add_child(MenuTheme.make_setting_toggle("Silenciar todo", "audio_mute"))
+		&"controles":
+			# Referencia de controles en pares titulo/valor (FASE VISUAL 3).
+			for row in CONTROL_ROWS:
+				_content_box.add_child(MenuTheme.make_info_pair(row[0], row[1]))
+			_content_box.add_child(_spacer(MenuTheme.GAP_S))
+			var note := MenuTheme.make_label("El remapeo de teclas llegará en una fase futura.", MenuTheme.FS_CAPTION, MenuTheme.TEXT_DIM)
+			note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			_content_box.add_child(note)
 		&"datos":
 			var warn := MenuTheme.make_label("El reinicio borra partidas, sardinas y desbloqueos. No se puede deshacer.", MenuTheme.FS_BODY, MenuTheme.TEXT_DIM)
 			warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -159,6 +189,20 @@ func _on_reset_pressed() -> void:
 			MenuTheme.style_button(_reset_button, MenuTheme.ZOMBIE, &"secondary")
 			_reset_button.disabled = true
 			_reset_stage = 0
+
+
+## Foco inicial para teclado/gamepad (FASE VISUAL 3): primer boton util de la
+## pestaña activa. Ignora los nodos viejos pendientes de liberarse.
+func _focus_first_control() -> void:
+	var stack: Array = _content_box.get_children()
+	while not stack.is_empty():
+		var n: Node = stack.pop_front()
+		if n.is_queued_for_deletion():
+			continue
+		if n is Button and not (n as Button).disabled and (n as Button).focus_mode != Control.FOCUS_NONE:
+			(n as Button).grab_focus()
+			return
+		stack.append_array(n.get_children())
 
 
 func _spacer(h: int) -> Control:

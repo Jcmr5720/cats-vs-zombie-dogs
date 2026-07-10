@@ -127,6 +127,9 @@ func _build_ui() -> void:
 			cards.add_child(_build_card(map_data))
 	# Récords ya reflejan la dificultad seleccionada (las tarjetas ya existen).
 	_refresh_records()
+	# Foco inicial para teclado/gamepad (FASE VISUAL 3): el segmento de modo.
+	if is_instance_valid(_mode_solo_btn):
+		_mode_solo_btn.grab_focus.call_deferred()
 
 
 ## Barra de ajustes previa a jugar: fila de Modo (segmentado Solo/Coop) + aviso de

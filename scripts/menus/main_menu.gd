@@ -6,7 +6,7 @@ extends Control
 const MenuTheme = preload("res://scripts/menus/menu_theme.gd")
 
 var _anim_time: float = 0.0
-var _title_label: Label
+var _title_box: Control
 
 
 func _ready() -> void:
@@ -21,25 +21,37 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_anim_time += delta
 	queue_redraw()
-	if _title_label != null:
-		_title_label.position.y = 34.0 + sin(_anim_time * 1.6) * 4.0
+	if _title_box != null:
+		_title_box.position.y = 26.0 + sin(_anim_time * 1.6) * 4.0
 
 
+## Logo compuesto (FASE VISUAL 3): tres piezas con color propio — "Cats" en
+## naranja gato, "vs" pequeno en rojo y "Zombie Dogs" en verde pútrido — sobre
+## una marca de garra dibujada en _draw(). Se lee como capsule de Steam, no
+## como un Label plano.
 func _build_ui() -> void:
-	_title_label = MenuTheme.make_title("Cats vs Zombie Dogs", 56, MenuTheme.ACCENT)
-	_title_label.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	_title_label.position = Vector2(0, 34)
-	# Contorno oscuro + sombra: el titulo se separa del fondo como logo.
-	_title_label.add_theme_color_override("font_outline_color", Color(0.16, 0.09, 0.03, 1.0))
-	_title_label.add_theme_constant_override("outline_size", 10)
-	_title_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
-	_title_label.add_theme_constant_override("shadow_offset_y", 5)
-	_title_label.add_theme_constant_override("shadow_offset_x", 0)
-	add_child(_title_label)
+	_title_box = CenterContainer.new()
+	_title_box.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	_title_box.position = Vector2(0, 26)
+	add_child(_title_box)
+
+	var title_row := HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", 14)
+	title_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_title_box.add_child(title_row)
+
+	title_row.add_child(_logo_word("Cats", 60, MenuTheme.ACCENT, Color(0.16, 0.09, 0.03)))
+	var vs := _logo_word("vs", 30, MenuTheme.DANGER, Color(0.1, 0.02, 0.02))
+	vs.size_flags_vertical = Control.SIZE_SHRINK_END
+	# Ligera rotacion del "vs": rompe la rigidez tipografica del logo.
+	vs.rotation = -0.12
+	vs.pivot_offset = Vector2(18, 30)
+	title_row.add_child(vs)
+	title_row.add_child(_logo_word("Zombie Dogs", 60, MenuTheme.ZOMBIE, Color(0.04, 0.10, 0.04)))
 
 	var subtitle := MenuTheme.make_title("Rescata la colonia.", 22, MenuTheme.CYAN)
 	subtitle.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	subtitle.position = Vector2(0, 104)
+	subtitle.position = Vector2(0, 108)
 	add_child(subtitle)
 
 	# Columna central con jerarquía: acción primaria destacada, luego secundarias
@@ -103,6 +115,17 @@ func _build_ui() -> void:
 	b_story.grab_focus.call_deferred()
 
 
+## Palabra del logo con contorno grueso y sombra propios.
+func _logo_word(text: String, size: int, color: Color, outline: Color) -> Label:
+	var label := MenuTheme.make_title(text, size, color)
+	label.add_theme_color_override("font_outline_color", outline)
+	label.add_theme_constant_override("outline_size", 10)
+	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
+	label.add_theme_constant_override("shadow_offset_y", 5)
+	label.add_theme_constant_override("shadow_offset_x", 0)
+	return label
+
+
 ## Fondo decorativo: degradado, luna, silueta de gato y huellas. Solo formas.
 func _draw() -> void:
 	var size: Vector2 = get_viewport_rect().size
@@ -120,6 +143,15 @@ func _draw() -> void:
 		var twinkle: float = 0.22 + 0.18 * sin(_anim_time * (1.0 + fposmod(float(i) * 0.37, 1.0)) + float(i))
 		var star_radius: float = 2.1 if i % 5 == 0 else 1.3
 		draw_circle(Vector2(sx, sy), star_radius, Color(0.82, 0.88, 1.0, maxf(0.06, twinkle)))
+
+	# Marca de garra tras el logo: tres tajos diagonales tenues (identidad felina).
+	var claw_center := Vector2(size.x * 0.5, 74.0)
+	for k in 3:
+		var off := Vector2(float(k - 1) * 52.0, float(abs(k - 1)) * 6.0)
+		var a: Vector2 = claw_center + off + Vector2(-42, -50)
+		var b: Vector2 = claw_center + off + Vector2(28, 56)
+		draw_line(a, b, Color(MenuTheme.DANGER.r, MenuTheme.DANGER.g, MenuTheme.DANGER.b, 0.08), 13.0)
+		draw_line(a, b, Color(MenuTheme.DANGER.r, MenuTheme.DANGER.g, MenuTheme.DANGER.b, 0.14), 4.5)
 
 	# Luna con leve halo.
 	var moon: Vector2 = Vector2(size.x * 0.82, size.y * 0.22)

@@ -163,6 +163,14 @@ func _apply_visuals() -> void:
 	if is_instance_valid(_decoration) and _decoration.has_method("configure"):
 		_decoration.set("world_seed", _world_seed)
 		_decoration.configure(_map)
+	# FASE VISUAL 2: ambiente global (CanvasModulate + niebla) y vignette de camara.
+	# Se buscan por grupo para no acoplar rutas; si no existen, no pasa nada.
+	for ambient in get_tree().get_nodes_in_group("ambient_controller"):
+		if ambient.has_method("configure"):
+			ambient.configure(_map)
+	for overlay in get_tree().get_nodes_in_group("camera_overlay"):
+		if overlay.has_method("configure"):
+			overlay.configure(_map)
 
 
 func _apply_spawner_modifiers() -> void:

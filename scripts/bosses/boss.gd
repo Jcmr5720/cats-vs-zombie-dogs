@@ -60,6 +60,8 @@ var _stuck_check_timer: float = 0.0
 @onready var _telegraph: Node2D = $Telegraph
 @onready var _eye_left: Polygon2D = $Visual/EyeLeft
 @onready var _eye_right: Polygon2D = $Visual/EyeRight
+## Luz dinamica del jefe (FASE VISUAL 2). Puede ser null (luces desactivadas).
+var _light: GlowLight
 
 
 func _ready() -> void:
@@ -75,6 +77,13 @@ func _ready() -> void:
 	Feedback.hit_effect(global_position, accent, 0.8, 4.2)
 	Feedback.hit_effect(global_position, accent.lightened(0.3), 0.4, 2.4)
 	Feedback.shake(0.5)
+	# FASE VISUAL 2: pulso oscuro de aparicion (el mundo "traga aire") + luz propia.
+	Feedback.hitstop(0.09, 0.12)
+	_light = GlowLight.attach(self, accent, 250.0, 1.0, 2.0, 0.0, true)
+	if is_instance_valid(_light):
+		# La luz nace apagada y sube en ~0.8 s: aparicion dramatica, no un flashazo.
+		var light_in := create_tween()
+		light_in.tween_method(_light.set_base_energy, 0.0, 1.0, 0.8)
 
 
 ## Configura el jefe a partir de su BossData y la dificultad actual. La vida sube
@@ -300,6 +309,21 @@ func _on_phase_changed() -> void:
 	# Feedback de cambio de fase: destello y shake.
 	Feedback.shake(0.3)
 	Feedback.hit_effect(global_position, data.accent_color, 0.8, 3.5)
+	# FASE VISUAL 2: la fase se LEE. Micro hit-stop, el aura vira hacia rojo
+	# agresivo, los ojos estallan en blanco y la luz sube de energia.
+	Feedback.hitstop(0.06, 0.15)
+	var aggression: float = clampf(0.45 * float(phase - 1), 0.0, 0.9)
+	var phase_color: Color = data.accent_color.lerp(Color(1.0, 0.22, 0.16), aggression)
+	if is_instance_valid(_aura):
+		_aura.color = Color(phase_color.r, phase_color.g, phase_color.b, _aura.color.a)
+	if is_instance_valid(_light):
+		_light.color = phase_color
+		_light.set_base_energy(1.0 + aggression * 0.5)
+	for eye in [_eye_left, _eye_right]:
+		if is_instance_valid(eye):
+			eye.color = Color(1.0, 0.95, 0.85)
+			var eye_tween := create_tween()
+			eye_tween.tween_property(eye, "color", Color(1.0, 0.6, 0.15).lerp(Color(1.0, 0.3, 0.1), aggression), 0.6)
 
 
 ## Cooldown de ataque mas corto a medida que avanza la fase (mas presion).
@@ -418,6 +442,11 @@ func _die() -> void:
 	burst.tween_callback(func() -> void:
 		Feedback.hit_effect(center, accent, 1.0, 5.5)
 		Feedback.shake(0.5))
+	# FASE VISUAL 2: la luz del jefe estalla al morir y se apaga con el cuerpo
+	# (el modulate no afecta a las Light2D: hay que apagarla explicitamente).
+	if is_instance_valid(_light):
+		var light_out := create_tween()
+		light_out.tween_method(_light.set_base_energy, 2.4, 0.0, 0.75)
 	var tween := create_tween()
 	tween.set_parallel(true)
 	tween.tween_property(self, "scale", scale * 0.15, 0.75).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)

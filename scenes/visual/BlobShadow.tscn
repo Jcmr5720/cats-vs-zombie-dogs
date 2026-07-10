@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/visual/blob_shadow.gd" id="1_blob"]
+
+[node name="BlobShadow" type="Node2D"]
+script = ExtResource("1_blob")

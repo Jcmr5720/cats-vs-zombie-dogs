@@ -39,6 +39,9 @@ func defaults() -> Dictionary:
 		"visual_quality": "media",
 		"visual_effects": true,
 		"shadows": true,
+		"dynamic_lights": true,
+		"vignette": true,
+		"fog": true,
 		"show_fps": false,
 		"skip_cinematics": false,
 		"audio_master": 0.80,
@@ -116,7 +119,10 @@ func _apply_feedback() -> void:
 		fb.apply_visual_quality(
 			StringName(str(_data.get("visual_quality", "media"))),
 			bool(_data.get("visual_effects", true)),
-			bool(_data.get("shadows", true))
+			bool(_data.get("shadows", true)),
+			bool(_data.get("dynamic_lights", true)),
+			bool(_data.get("vignette", true)),
+			bool(_data.get("fog", true))
 		)
 
 

@@ -197,6 +197,32 @@ func _draw_neighborhood() -> void:
 	for its in plan["intersections"]:
 		_draw_intersection(its)
 
+	# Hojas secas arrastradas a las esquinas (FASE VISUAL 1): pequenos grupos
+	# ocres cerca de aceras; venden abandono sin ensuciar la lectura.
+	for i in 10:
+		var lx: float = CityPlan.hash01(_seed, "leaf_x:%d:%d:%d" % [_coord.x, _coord.y, i]) * CHUNK.x
+		var ly: float = CityPlan.hash01(_seed, "leaf_y:%d:%d:%d" % [_coord.x, _coord.y, i]) * CHUNK.y
+		if _point_on_road(plan, Vector2(lx, ly)):
+			continue
+		for k in 3:
+			var off := Vector2.RIGHT.rotated(CityPlan.hash01(_seed, "leaf_a:%d:%d:%d:%d" % [_coord.x, _coord.y, i, k]) * TAU) * (3.0 + float(k) * 4.0)
+			var warm: float = CityPlan.hash01(_seed, "leaf_c:%d:%d:%d:%d" % [_coord.x, _coord.y, i, k])
+			draw_circle(Vector2(lx, ly) + off, 2.2 + warm * 1.6, Color(0.45, 0.30, 0.12, 0.5).lerp(Color(0.55, 0.42, 0.18, 0.5), warm))
+
+	# Marcas de garra felina en el pavimento: firma del Barrio Gatuno (3 aranazos
+	# paralelos con el color de acento, muy tenues).
+	for i in 3:
+		if CityPlan.hash01(_seed, "claw:%d:%d:%d" % [_coord.x, _coord.y, i]) > 0.42:
+			continue
+		var cx: float = 90.0 + CityPlan.hash01(_seed, "claw_x:%d:%d:%d" % [_coord.x, _coord.y, i]) * (CHUNK.x - 180.0)
+		var cy: float = 90.0 + CityPlan.hash01(_seed, "claw_y:%d:%d:%d" % [_coord.x, _coord.y, i]) * (CHUNK.y - 180.0)
+		var ca: float = CityPlan.hash01(_seed, "claw_a:%d:%d:%d" % [_coord.x, _coord.y, i]) * TAU
+		var dir := Vector2.RIGHT.rotated(ca)
+		var side := Vector2(-dir.y, dir.x)
+		for s in 3:
+			var start := Vector2(cx, cy) + side * (float(s) - 1.0) * 7.0
+			_line(start, start + dir * (26.0 + float(s % 2) * 8.0), Color(_map.accent_color.r, _map.accent_color.g, _map.accent_color.b, 0.16), 2.5)
+
 	# Marcas de parada de bus.
 	for anchor in _layout.get("anchors", []):
 		if anchor.get("kind", &"") == &"bus_stop":
@@ -446,6 +472,33 @@ func _draw_park() -> void:
 			_line(reed, reed + Vector2(-3, -14), Color(0.25, 0.38, 0.20, 0.8), 2.0)
 			_line(reed, reed + Vector2(3, -16), Color(0.25, 0.38, 0.20, 0.8), 2.0)
 
+	# Hojarasca (FASE VISUAL 1): manchas de hojas caidas en tonos otonales que
+	# rompen el verde uniforme y refuerzan el abandono del parque.
+	for i in 12:
+		var hx: float = CityPlan.hash01(_seed, "hoja_x:%d:%d:%d" % [_coord.x, _coord.y, i]) * CHUNK.x
+		var hy: float = CityPlan.hash01(_seed, "hoja_y:%d:%d:%d" % [_coord.x, _coord.y, i]) * CHUNK.y
+		var warm: float = CityPlan.hash01(_seed, "hoja_c:%d:%d:%d" % [_coord.x, _coord.y, i])
+		var leaf_color := Color(0.42, 0.28, 0.10, 0.35).lerp(Color(0.52, 0.38, 0.14, 0.35), warm)
+		draw_circle(Vector2(hx, hy), 16.0 + warm * 22.0, leaf_color)
+		for k in 4:
+			var off := Vector2.RIGHT.rotated(CityPlan.hash01(_seed, "hoja_a:%d:%d:%d:%d" % [_coord.x, _coord.y, i, k]) * TAU) * (10.0 + warm * 16.0)
+			draw_circle(Vector2(hx, hy) + off, 2.4, Color(0.55, 0.40, 0.16, 0.55))
+
+	# Setas al pie de la humedad: puntitos palidos con sombrero, en grupitos.
+	for i in 5:
+		if CityPlan.hash01(_seed, "seta:%d:%d:%d" % [_coord.x, _coord.y, i]) > 0.5:
+			continue
+		var sx: float = 60.0 + CityPlan.hash01(_seed, "seta_x:%d:%d:%d" % [_coord.x, _coord.y, i]) * (CHUNK.x - 120.0)
+		var sy: float = 60.0 + CityPlan.hash01(_seed, "seta_y:%d:%d:%d" % [_coord.x, _coord.y, i]) * (CHUNK.y - 120.0)
+		# FASE VISUAL 2: halo bioluminiscente bajo el grupo de setas (glow fake).
+		draw_circle(Vector2(sx, sy - 3.0), 16.0, Color(0.35, 0.85, 0.55, 0.07))
+		draw_circle(Vector2(sx, sy - 3.0), 9.0, Color(0.45, 0.95, 0.6, 0.10))
+		for k in 3:
+			var mp := Vector2(sx, sy) + Vector2(float(k) * 7.0 - 7.0, float(k % 2) * 5.0)
+			_line(mp, mp + Vector2(0, -5), Color(0.75, 0.72, 0.62, 0.7), 2.0)
+			draw_circle(mp + Vector2(0, -5.5), 3.2, Color(0.62, 0.45, 0.38, 0.85))
+			draw_circle(mp + Vector2(0, -5.5), 1.2, Color(0.65, 1.0, 0.7, 0.7))
+
 	# Zona de picnic: manta y cesta.
 	for anchor in _layout.get("anchors", []):
 		if anchor.get("kind", &"") == &"picnic_zone":
@@ -565,6 +618,29 @@ func _draw_industrial() -> void:
 			var ry2: float = y - 12.0 if i % 2 == 0 else y + 12.0
 			_line(Vector2(rx, ry2), Vector2(minf(rx + rw, CHUNK.x), ry2), Color(0.40, 0.24, 0.11, 0.7), 4.0)
 
+	# Chatarra menuda (FASE VISUAL 1): tuercas, tornillos y esquirlas metalicas
+	# dispersas; venden uso rudo del suelo sin geometria colisionable.
+	for i in 12:
+		var scx: float = CityPlan.hash01(_seed, "scrap_x:%d:%d:%d" % [_coord.x, _coord.y, i]) * CHUNK.x
+		var scy: float = CityPlan.hash01(_seed, "scrap_y:%d:%d:%d" % [_coord.x, _coord.y, i]) * CHUNK.y
+		var kind: float = CityPlan.hash01(_seed, "scrap_k:%d:%d:%d" % [_coord.x, _coord.y, i])
+		if kind < 0.5:
+			draw_circle(Vector2(scx, scy), 2.6, Color(0.32, 0.33, 0.36, 0.8))
+			draw_circle(Vector2(scx, scy), 1.1, Color(0.08, 0.08, 0.09, 0.9))
+		else:
+			var ang: float = CityPlan.hash01(_seed, "scrap_a:%d:%d:%d" % [_coord.x, _coord.y, i]) * TAU
+			_line(Vector2(scx, scy), Vector2(scx, scy) + Vector2.RIGHT.rotated(ang) * 7.0, Color(0.38, 0.28, 0.16, 0.75), 2.0)
+
+	# Flechas estarcidas de circulacion en los corredores (plantilla desgastada).
+	if not plan.is_empty():
+		for r in plan["v_roads"]:
+			var ax: float = float(r["local_pos"])
+			var ay: float = 140.0 + CityPlan.hash01(_seed, "arrow_v:%d:%d:%d" % [_coord.x, _coord.y, int(r["index"])]) * (CHUNK.y - 280.0)
+			var arrow_c := Color(_map.hazard_color.r, _map.hazard_color.g, _map.hazard_color.b, 0.28)
+			_line(Vector2(ax, ay + 22.0), Vector2(ax, ay - 14.0), arrow_c, 6.0)
+			_line(Vector2(ax - 10.0, ay - 4.0), Vector2(ax, ay - 18.0), arrow_c, 6.0)
+			_line(Vector2(ax + 10.0, ay - 4.0), Vector2(ax, ay - 18.0), arrow_c, 6.0)
+
 	# Charco industrial con "sheen" frio.
 	if CityPlan.hash01(_seed, "ipuddle:%d:%d" % [_coord.x, _coord.y]) < 0.35:
 		var ipx: float = 120.0 + CityPlan.hash01(_seed, "ipuddle_x:%d:%d" % [_coord.x, _coord.y]) * (CHUNK.x - 240.0)
@@ -572,6 +648,9 @@ func _draw_industrial() -> void:
 		var ipr: float = 16.0 + CityPlan.hash01(_seed, "ipuddle_r:%d:%d" % [_coord.x, _coord.y]) * 22.0
 		draw_circle(Vector2(ipx, ipy), ipr, Color(0.06, 0.075, 0.09, 0.75))
 		draw_arc(Vector2(ipx, ipy), ipr * 0.7, PI * 1.0, PI * 1.5, 12, Color(0.5, 0.65, 0.75, 0.22), 2.5)
+		# FASE VISUAL 2: brillo toxico verdoso en el borde del charco quimico.
+		draw_arc(Vector2(ipx, ipy), ipr + 3.0, 0.0, TAU, 20, Color(0.45, 0.9, 0.4, 0.13), 3.0)
+		draw_circle(Vector2(ipx + ipr * 0.4, ipy - ipr * 0.2), ipr * 0.3, Color(0.5, 0.95, 0.45, 0.10))
 
 
 func _dashed_line_v(x: float, color: Color) -> void:

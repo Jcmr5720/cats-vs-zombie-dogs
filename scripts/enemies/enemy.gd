@@ -521,6 +521,17 @@ func _apply_config() -> void:
 	if is_instance_valid(_stud):
 		_stud.visible = show_gear
 
+	# FASE VISUAL 2: glow de ojos FAKE por tipo (Polygon2D, nunca Light2D en
+	# enemigos comunes). El runner brilla el doble: se lee venir a toda velocidad.
+	var eye_glow := get_node_or_null("Visual/EyeGlow") as Polygon2D
+	if eye_glow != null:
+		if enemy_id == &"runner_zombie_dog":
+			eye_glow.self_modulate = Color(1.6, 1.6, 1.6, 2.2)
+			eye_glow.scale = Vector2(1.35, 1.35)
+		else:
+			eye_glow.self_modulate = Color(1, 1, 1, 1)
+			eye_glow.scale = Vector2.ONE
+
 	_base_scale = scale
 	current_health = max_health
 	if _elite_kind != &"":

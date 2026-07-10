@@ -33,6 +33,19 @@ const ObstacleData = preload("res://scripts/maps/obstacle_data.gd")
 @export var road_line_enabled: bool = true
 @export var hazard_line_enabled: bool = false
 
+@export_group("Ambiente (FASE VISUAL 2)")
+## Tinte multiplicativo global del mundo (CanvasModulate). Blanco = sin capa.
+## Mantener cerca de 1.0 para no perder legibilidad.
+@export var ambient_color: Color = Color(1.0, 1.0, 1.0, 1.0)
+## Color de la niebla baja del bioma (bancos translucidos que derivan).
+@export var fog_color: Color = Color(0.7, 0.75, 0.72, 1.0)
+## Intensidad de la niebla 0..1 (0 = sin niebla).
+@export_range(0.0, 1.0, 0.01) var fog_strength: float = 0.0
+## Intensidad de la vignette base del mapa (0 = sin vignette).
+@export_range(0.0, 0.6, 0.01) var vignette_strength: float = 0.30
+## Color de la vignette base.
+@export var vignette_color: Color = Color(0.01, 0.01, 0.03, 1.0)
+
 @export_group("Modificadores de dificultad")
 ## Multiplica el difficulty_score final del EnemySpawner.
 @export var difficulty_modifier: float = 1.0
