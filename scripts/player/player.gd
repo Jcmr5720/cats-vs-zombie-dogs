@@ -64,6 +64,8 @@ var _is_moving: bool = false
 var _hurt_tween: Tween
 ## Temporizador de nubecitas de polvo al correr (game feel).
 var _dust_timer: float = 0.0
+## Controlador visual de sprites (ETAPA ARTISTICA 2/3). Puede no existir.
+@onready var _sprite_visual: Node = get_node_or_null("SpriteVisual")
 @onready var _weapons: Node = $WeaponManager
 @onready var _pickup_area: Area2D = $PickupArea
 @onready var _facing_indicator: Node2D = $FacingIndicator
@@ -161,6 +163,11 @@ func _physics_process(delta: float) -> void:
 func _animate_visual(delta: float) -> void:
 	if not is_instance_valid(_visual):
 		return
+	# En modo SPRITE el squash/lean/parpadeo procedural NO se aplica: la
+	# animacion dibujada lo representa. Al volver a procedural, el controlador
+	# restaura el transform base (reset_visual_transform).
+	if _sprite_visual != null and _sprite_visual.has_method("is_sprite_active") and _sprite_visual.is_sprite_active():
+		return
 	_anim_time += delta
 
 	# Respiración base + squash-and-stretch suave al caminar.
@@ -219,8 +226,15 @@ func take_damage(amount: int) -> void:
 			_die()
 
 
-## Parpadeo rojo breve al recibir daño (sobre el nodo Visual).
+## Parpadeo rojo breve al recibir daño. Va por el flash unificado del
+## SpriteVisual (ETAPA ARTISTICA 2): aplica al visual ACTIVO (sprite o
+## procedural) y restaura el tinte previo (arregla ademas que el flash de P2
+## volviera a blanco en vez de a su tinte frio). Fallback: codigo clasico.
 func _flash_hurt() -> void:
+	var sv: Node = get_node_or_null("SpriteVisual")
+	if sv != null and sv.has_method("flash_damage"):
+		sv.flash_damage(Color(1.8, 0.4, 0.4, 1.0), 0.35)
+		return
 	if not is_instance_valid(_visual):
 		return
 	if _hurt_tween != null and _hurt_tween.is_valid():
@@ -460,7 +474,10 @@ func _go_downed() -> void:
 	velocity = Vector2.ZERO
 	_knockback = Vector2.ZERO
 	_set_weapons_enabled(false)
-	if is_instance_valid(_visual):
+	# En modo SPRITE el derribo lo representa la animacion "downed" (via la
+	# senal); la rotacion/tinte procedural solo aplica al arte procedural.
+	var sprite_mode: bool = _sprite_visual != null and _sprite_visual.has_method("is_sprite_active") and _sprite_visual.is_sprite_active()
+	if is_instance_valid(_visual) and not sprite_mode:
 		_visual.modulate = Color(0.45, 0.45, 0.5, 0.85)
 		_visual.rotation = PI * 0.5  # tumbado de lado
 	downed.emit(player_id)
@@ -474,6 +491,8 @@ func revive_player(health_percent: float = 0.4) -> void:
 	current_health = max(1, int(round(max_health * clampf(health_percent, 0.05, 1.0))))
 	_damage_timer = damage_cooldown  # breve invulnerabilidad al levantarse
 	_set_weapons_enabled(true)
+	# Restaurar SIEMPRE el procedural (aunque este oculto en modo sprite: asi
+	# un cambio de modo posterior no hereda la pose de derribado).
 	if is_instance_valid(_visual):
 		_visual.rotation = 0.0
 		_visual.modulate = Color(0.62, 0.78, 1.15, 1.0) if player_id >= 2 else Color(1, 1, 1, 1)

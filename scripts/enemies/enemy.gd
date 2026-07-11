@@ -67,6 +67,11 @@ var _knockback: Vector2 = Vector2.ZERO
 var _separation_cache: Vector2 = Vector2.ZERO
 var _separation_timer: float = 0.0
 
+## Controlador visual de sprites (ETAPA ARTISTICA 2/3). Puede no existir.
+@onready var _sprite_visual: Node = get_node_or_null("SpriteVisual")
+## Cadencia de la ANIMACION de mordisco (solo visual; el dano sigue siendo el
+## contacto continuo regulado por la invulnerabilidad del objetivo).
+var _attack_anim_timer: float = 0.0
 @onready var _visual: Node2D = $Visual
 @onready var _body: Polygon2D = $Visual/Body
 @onready var _snout: Polygon2D = $Visual/Snout
@@ -149,6 +154,9 @@ func _physics_process(delta: float) -> void:
 		_knockback *= exp(-knockback_decay * delta)
 		if _knockback.length_squared() < 1.0:
 			_knockback = Vector2.ZERO
+
+	if _attack_anim_timer > 0.0:
+		_attack_anim_timer -= delta
 
 	# Daño por contacto continuo; el cooldown del jugador regula el ritmo.
 	_try_contact_damage()
@@ -336,10 +344,24 @@ func _try_contact_damage() -> void:
 	var hit_companion: Node2D = _nearest_contact_companion()
 	if hit_companion != null and hit_companion.has_method("take_damage"):
 		hit_companion.take_damage(contact_damage, global_position.direction_to(hit_companion.global_position))
+		_trigger_attack_anim()
 		return
 	if global_position.distance_to(_player.global_position) <= contact_range:
 		if _player.has_method("take_damage"):
 			_player.take_damage(contact_damage)
+			_trigger_attack_anim()
+
+
+## Animacion de mordisco (ETAPA ARTISTICA 3, 3.1): se dispara al INTENTAR un
+## ataque en rango, con cadencia propia (no cada frame de contacto). La
+## animacion NUNCA controla el dano: solo lo representa. Sin perfil de sprite
+## activo no hace nada (el procedural conserva su lenguaje actual).
+func _trigger_attack_anim() -> void:
+	if _attack_anim_timer > 0.0:
+		return
+	_attack_anim_timer = 0.6  # ~cadencia del cooldown de dano del jugador (0.5)
+	if _sprite_visual != null and _sprite_visual.has_method("play_attack"):
+		_sprite_visual.play_attack()
 
 
 func _nearest_contact_companion() -> Node2D:
@@ -371,6 +393,14 @@ func _flash_hit() -> void:
 
 
 func _animate_visual() -> void:
+	# En modo SPRITE el bob/trote/rotacion procedural no se aplica: la hoja de
+	# sprites y el resolver de direcciones lo representan. El aura de elite
+	# vive FUERA del Visual y sigue pulsando en ambos modos.
+	if _sprite_visual != null and _sprite_visual.has_method("is_sprite_active") and _sprite_visual.is_sprite_active():
+		if is_instance_valid(_elite_aura):
+			var sprite_aura_pulse: float = 1.0 + sin(_time * 4.0) * 0.14
+			_elite_aura.scale = Vector2(sprite_aura_pulse, sprite_aura_pulse)
+		return
 	# Orientación: el Visual rota hacia el movimiento, pero se voltea en vertical
 	# cuando mira a la izquierda para que el perro nunca aparezca boca abajo.
 	# La sombra (fuera del Visual) queda siempre plana bajo el cuerpo.

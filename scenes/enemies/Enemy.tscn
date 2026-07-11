@@ -1,6 +1,7 @@
-[gd_scene load_steps=5 format=3 uid="uid://bvc01enemy01"]
+[gd_scene load_steps=6 format=3 uid="uid://bvc01enemy01"]
 
 [ext_resource type="Script" path="res://scripts/enemies/enemy.gd" id="1_enemy"]
+[ext_resource type="PackedScene" path="res://scenes/visual/characters/SpriteCharacterVisual.tscn" id="4_spritevis"]
 [ext_resource type="PackedScene" uid="uid://bvc01xporb01" path="res://scenes/loot/XPOrb.tscn" id="2_orb"]
 [ext_resource type="Resource" path="res://data/enemies/normal_zombie_dog.tres" id="3_enemy_data"]
 
@@ -125,6 +126,8 @@ polygon = PackedVector2Array(19, 2, 21, 2, 21, 8, 19, 8)
 [node name="Spikes" type="Polygon2D" parent="Visual"]
 color = Color(0.12, 0.16, 0.1, 0.9)
 polygon = PackedVector2Array(-12, -13, -7, -23, -2, -14, 1, -19, 6, -12, 9, -17, 14, -10)
+
+[node name="SpriteVisual" parent="." instance=ExtResource("4_spritevis")]
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_enemy")

@@ -1,6 +1,7 @@
-[gd_scene load_steps=5 format=3 uid="uid://bvc05miniboss01"]
+[gd_scene load_steps=6 format=3 uid="uid://bvc05miniboss01"]
 
 [ext_resource type="Script" path="res://scripts/bosses/mini_boss.gd" id="1_miniboss"]
+[ext_resource type="PackedScene" path="res://scenes/visual/characters/SpriteCharacterVisual.tscn" id="2_spritevis"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_mb"]
 radius = 24.0
@@ -109,6 +110,8 @@ polygon = PackedVector2Array(30, -12, 40, -12, 40, -4, 30, -4)
 [node name="EyeRight" type="Polygon2D" parent="Visual"]
 color = Color(1, 0.7, 0.25, 1)
 polygon = PackedVector2Array(30, 2, 40, 2, 40, 10, 30, 10)
+
+[node name="SpriteVisual" parent="." instance=ExtResource("2_spritevis")]
 
 [node name="HealthBar" type="ProgressBar" parent="."]
 offset_left = -28.0

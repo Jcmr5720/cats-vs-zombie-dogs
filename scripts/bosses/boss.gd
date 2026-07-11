@@ -227,6 +227,7 @@ func _enter_windup() -> void:
 	_telegraph.global_rotation = _charge_dir.angle()
 	# Onda roja de aviso en el suelo: telegrafiado imposible de perder.
 	Feedback.hit_effect(global_position, Color(1.0, 0.4, 0.35, 0.8), 0.5, 2.4)
+	_visual_action(&"charge_windup")
 
 
 func _state_windup(delta: float) -> void:
@@ -249,6 +250,7 @@ func _enter_charge() -> void:
 	_charge_hit_done = false
 	_telegraph.visible = false
 	Feedback.shake(0.25)
+	_visual_action(&"charge")
 
 
 func _state_charge(delta: float) -> void:
@@ -279,6 +281,7 @@ func _enter_summon() -> void:
 	_summon_pulse = 1.0
 	Feedback.shake(0.2)
 	Feedback.hit_effect(global_position, data.accent_color, 0.6, 3.0)
+	_visual_action(&"summon")
 	_spawn_minions()
 
 
@@ -312,6 +315,7 @@ func _on_phase_changed() -> void:
 	# FASE VISUAL 2: la fase se LEE. Micro hit-stop, el aura vira hacia rojo
 	# agresivo, los ojos estallan en blanco y la luz sube de energia.
 	Feedback.hitstop(0.06, 0.15)
+	_visual_action(&"phase_change")
 	var aggression: float = clampf(0.45 * float(phase - 1), 0.0, 0.9)
 	var phase_color: Color = data.accent_color.lerp(Color(1.0, 0.22, 0.16), aggression)
 	if is_instance_valid(_aura):
@@ -379,6 +383,11 @@ func take_damage(amount: int, _knockback_dir: Vector2 = Vector2.ZERO) -> void:
 
 
 func _flash_hit() -> void:
+	# Flash unificado (ETAPA ARTISTICA 2); fallback al codigo clasico.
+	var sv: Node = get_node_or_null("SpriteVisual")
+	if sv != null and sv.has_method("flash_damage"):
+		sv.flash_damage(Color(1.8, 1.5, 1.5, 1.0), 0.12)
+		return
 	if not is_instance_valid(_visual):
 		return
 	if _flash_tween != null and _flash_tween.is_valid():
@@ -386,6 +395,13 @@ func _flash_hit() -> void:
 	_visual.modulate = Color(1.8, 1.5, 1.5, 1.0)
 	_flash_tween = create_tween()
 	_flash_tween.tween_property(_visual, "modulate", Color(1, 1, 1, 1), 0.12)
+
+
+## Accion visual explicita hacia el SpriteVisual (no hace nada sin perfil).
+func _visual_action(action: StringName) -> void:
+	var sv: Node = get_node_or_null("SpriteVisual")
+	if sv != null and sv.has_method("play_action"):
+		sv.play_action(action)
 
 
 # --- Invocacion --------------------------------------------------------------
@@ -499,10 +515,15 @@ func _is_coop() -> bool:
 func _animate(delta: float) -> void:
 	if not is_instance_valid(_visual):
 		return
-	var breathe: float = sin(_anim_time * 2.0) * 0.03
-	var face_sign: float = -1.0 if absf(wrapf(_face_angle, -PI, PI)) > PI * 0.5 else 1.0
-	_visual.rotation = _face_angle
-	_visual.scale = _visual.scale.lerp(Vector2(1.0 + breathe, face_sign * (1.0 - breathe)), 0.2)
+	# En modo SPRITE la respiracion/rotacion procedural no se aplica; el aura
+	# (nodo aparte) sigue pulsando mas abajo en ambos modos.
+	var sv: Node = get_node_or_null("SpriteVisual")
+	var sprite_mode: bool = sv != null and sv.has_method("is_sprite_active") and sv.is_sprite_active()
+	if not sprite_mode:
+		var breathe: float = sin(_anim_time * 2.0) * 0.03
+		var face_sign: float = -1.0 if absf(wrapf(_face_angle, -PI, PI)) > PI * 0.5 else 1.0
+		_visual.rotation = _face_angle
+		_visual.scale = _visual.scale.lerp(Vector2(1.0 + breathe, face_sign * (1.0 - breathe)), 0.2)
 	if is_instance_valid(_aura):
 		var pulse: float = 0.16 + 0.06 * sin(_anim_time * 3.0) + _summon_pulse * 0.3
 		_aura.modulate.a = pulse

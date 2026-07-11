@@ -34,6 +34,8 @@ var _bounce_tween: Tween
 var _knockback: Vector2 = Vector2.ZERO
 var _base_visual_scale: Vector2 = Vector2.ONE
 
+## Controlador visual de sprites (ETAPA ARTISTICA 2/3). Puede no existir.
+@onready var _sprite_visual: Node = get_node_or_null("SpriteVisual")
 @onready var _visual: Node2D = $Visual
 @onready var _body: Polygon2D = $Visual/Body
 @onready var _belly: Polygon2D = $Visual/Belly
@@ -269,6 +271,10 @@ func _try_heal_target() -> void:
 		Feedback.hit_effect(target_position, Color(0.55, 1.0, 0.72, 0.9), 0.30, 1.55)
 		_play_audio(&"medic_heal")
 		_play_join_bounce(0.10, Vector2(1.06, 0.95))
+		# Accion visual explicita de curacion (anim "ability" del medico).
+		var sv: Node = get_node_or_null("SpriteVisual")
+		if sv != null and sv.has_method("play_ability"):
+			sv.play_ability()
 
 
 func _find_priority_enemy(near_player: bool) -> Node2D:
@@ -303,6 +309,10 @@ func _fire_at(target: Node2D) -> void:
 		projectile.scale = Vector2(1.25, 1.25)
 	projectile.call("setup", direction, companion_data.projectile_speed, _effective_attack_damage())
 	get_tree().current_scene.add_child(projectile)
+	# Accion visual explicita (solo representa; sin logica en el controlador).
+	var sv: Node = get_node_or_null("SpriteVisual")
+	if sv != null and sv.has_method("play_attack"):
+		sv.play_attack()
 	Feedback.hit_effect(projectile.global_position, companion_data.projectile_color, 0.16, 0.54)
 	if companion_data.role == &"engineer":
 		Feedback.hit_effect(projectile.global_position, companion_data.projectile_color.lightened(0.12), 0.20, 0.70)
@@ -526,6 +536,10 @@ func _apply_visuals() -> void:
 func _animate_visual(delta: float) -> void:
 	if not is_instance_valid(_visual):
 		return
+	# En modo SPRITE el sway/respiracion procedural no se aplica (lo representa
+	# la animacion dibujada; el estado downed usa la anim "downed").
+	if _sprite_visual != null and _sprite_visual.has_method("is_sprite_active") and _sprite_visual.is_sprite_active():
+		return
 	_anim_time += delta
 	var breathe: float = sin(_anim_time * 2.4) * 0.03
 	var sway: float = sin(_anim_time * 6.2) * 0.04
@@ -540,6 +554,12 @@ func _animate_visual(delta: float) -> void:
 
 
 func _flash_hurt() -> void:
+	# Flash unificado (ETAPA ARTISTICA 2): aplica al visual activo y restaura
+	# el tinte de estado previo. Fallback al codigo clasico si no hay nodo.
+	var sv: Node = get_node_or_null("SpriteVisual")
+	if sv != null and sv.has_method("flash_damage"):
+		sv.flash_damage(Color(1.8, 0.45, 0.45, 1.0), 0.28)
+		return
 	if _hurt_tween != null and _hurt_tween.is_valid():
 		_hurt_tween.kill()
 	_visual.modulate = Color(1.8, 0.45, 0.45, 1.0)

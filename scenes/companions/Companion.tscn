@@ -1,7 +1,8 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/companions/companion.gd" id="1_companion"]
 [ext_resource type="PackedScene" uid="uid://bvc01projectile01" path="res://scenes/weapons/Projectile.tscn" id="2_projectile"]
+[ext_resource type="PackedScene" path="res://scenes/visual/characters/SpriteCharacterVisual.tscn" id="3_spritevis"]
 
 [sub_resource type="StyleBoxFlat" id="3_bar_bg"]
 bg_color = Color(0.04, 0.05, 0.075, 0.85)
@@ -133,6 +134,8 @@ polygon = PackedVector2Array(-10, -20, 10, -20, 7, -24, -7, -24)
 [node name="HatDetail" type="Polygon2D" parent="Visual"]
 color = Color(0.14, 0.2, 0.3, 1)
 polygon = PackedVector2Array(-12, -20, 12, -20, 10, -17, -10, -17)
+
+[node name="SpriteVisual" parent="." instance=ExtResource("3_spritevis")]
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("1_body_shape")

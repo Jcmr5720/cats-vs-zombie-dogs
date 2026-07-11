@@ -4,7 +4,40 @@ Juego 2D top-down tipo **bullet heaven / survivor** para PC. Un gato lider
 rescata otros gatos sobrevivientes mientras combate oleadas de perros zombis
 mutantes en una ciudad abandonada. Tono arcade, caricaturesco y no realista.
 
-> **Estado: FASE VISUAL 3 — UI premium.** Auditoría completa del stack de UI
+> **Estado: ETAPA ARTÍSTICA 3 — pipeline de producción P0 listo.** Trigger de
+> mordisco del enemigo sincronizado con su cadencia real, squash/bob/downed
+> procedurales separados del modo sprite (`reset_visual_transform`), estados
+> artísticos (`asset_status`: TEST_ONLY→APPROVED_FINAL) que gobiernan la
+> activación, flujo `_incoming raw/clean/aligned` con chequeo automático
+> (`incoming_check.gd`), prompts completos del LOTE P0
+> (`docs/AI_ART_P0_PROMPTS.md`) y Preview con tinte de bioma, zoom coop y
+> comparación procedural|sprite. **Gate B en B0: aún sin PNG definitivos
+> recibidos** — el arte procedural sigue activo. Detalle en
+> [`docs/ETAPA_ARTISTICA_3.md`](docs/ETAPA_ARTISTICA_3.md).
+>
+> **ETAPA ARTÍSTICA 2 — GATE A del pipeline completado.** Flash de
+> daño unificado (sprite/procedural, respeta tintes de P2 y estados),
+> `SpriteVisual` en los 5 actores, acciones visuales explícitas conectadas
+> (boss: windup/charge/summon/fase; compañeros: attack/ability), prioridades
+> de animación (death > downed > revive > ... > idle), asimetrías que
+> bloquean el espejo, validador que rechaza TEST_ONLY activado y cargas desde
+> `_incoming`, carpeta de recepción con puerta de aceptación y herramienta
+> `CharacterArtPreview`. **La migración P0 queda bloqueada en la puerta de
+> assets: no existen aún PNG definitivos** (ver
+> [`docs/SPRITE_MIGRATION_REPORT.md`](docs/SPRITE_MIGRATION_REPORT.md)).
+> Detalle en [`docs/ETAPA_ARTISTICA_2.md`](docs/ETAPA_ARTISTICA_2.md).
+>
+> **ETAPA ARTÍSTICA 1 — Identidad visual y pipeline de sprites.**
+> Dirección artística oficial (`docs/ART_DIRECTION_BIBLE.md`), especificación
+> técnica de sprites, pipeline documentado e inventario completo de assets.
+> Nuevo sistema `CharacterVisualProfile` + `CharacterVisualController`: los
+> personajes aceptan SpriteFrames definitivos con **fallback automático al
+> arte procedural actual** (nodo `SpriteVisual` dormido en Player/Enemy).
+> Prueba técnica con AnimatedSprite2D aprobada 11/11 y validador headless
+> (`scripts/visual/run_art_validator.gd`). Detalle en
+> [`docs/ETAPA_ARTISTICA_1.md`](docs/ETAPA_ARTISTICA_1.md).
+>
+> **FASE VISUAL 3 — UI premium.** Auditoría completa del stack de UI
 > contra estándar Steam: logo compuesto de tres tonos con marca de garra en el
 > menú principal, foco de gamepad visible en todas las variantes de botón,
 > pestaña **Controles** en Opciones (referencia P1/P2/atajos) y foco inicial

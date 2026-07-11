@@ -1,6 +1,7 @@
-[gd_scene load_steps=3 format=3 uid="uid://bvc05boss01"]
+[gd_scene load_steps=4 format=3 uid="uid://bvc05boss01"]
 
 [ext_resource type="Script" path="res://scripts/bosses/boss.gd" id="1_boss"]
+[ext_resource type="PackedScene" path="res://scenes/visual/characters/SpriteCharacterVisual.tscn" id="2_spritevis"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_boss"]
 radius = 48.0
@@ -111,6 +112,8 @@ polygon = PackedVector2Array(56, 6, 72, 6, 72, 18, 56, 18)
 [node name="EyeGlow" type="Polygon2D" parent="Visual"]
 color = Color(1, 0.65, 0.1, 0.26)
 polygon = PackedVector2Array(48, -26, 80, -26, 80, 24, 48, 24)
+
+[node name="SpriteVisual" parent="." instance=ExtResource("2_spritevis")]
 
 [node name="Telegraph" type="Node2D" parent="."]
 visible = false

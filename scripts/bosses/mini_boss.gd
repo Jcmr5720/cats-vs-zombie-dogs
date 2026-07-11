@@ -181,6 +181,11 @@ func take_damage(amount: int, _knockback_dir: Vector2 = Vector2.ZERO) -> void:
 
 
 func _flash_hit() -> void:
+	# Flash unificado (ETAPA ARTISTICA 2); fallback al codigo clasico.
+	var sv: Node = get_node_or_null("SpriteVisual")
+	if sv != null and sv.has_method("flash_damage"):
+		sv.flash_damage(Color(1.8, 1.6, 1.6, 1.0), 0.12)
+		return
 	if not is_instance_valid(_visual):
 		return
 	if _flash_tween != null and _flash_tween.is_valid():
@@ -260,14 +265,18 @@ func _update_bar() -> void:
 	_health_bar.visible = not _is_dead
 
 
-func _animate(delta: float) -> void:
+func _animate(_delta: float) -> void:
 	if not is_instance_valid(_visual):
 		return
-	var waddle: float = sin(_anim_time * 7.0) * 0.06
-	# Rota el Visual con volteo vertical al mirar a la izquierda: el mini-jefe
-	# nunca queda boca abajo y su sombra (fuera del Visual) no gira.
-	var face_sign: float = -1.0 if absf(wrapf(_face_angle, -PI, PI)) > PI * 0.5 else 1.0
-	_visual.rotation = _face_angle
-	_visual.scale = _visual.scale.lerp(Vector2(1.0 + waddle, face_sign * (1.0 - waddle)), 0.2)
+	# En modo SPRITE el waddle/rotacion procedural no se aplica; el aura sigue.
+	var sv: Node = get_node_or_null("SpriteVisual")
+	var sprite_mode: bool = sv != null and sv.has_method("is_sprite_active") and sv.is_sprite_active()
+	if not sprite_mode:
+		var waddle: float = sin(_anim_time * 7.0) * 0.06
+		# Rota el Visual con volteo vertical al mirar a la izquierda: el mini-jefe
+		# nunca queda boca abajo y su sombra (fuera del Visual) no gira.
+		var face_sign: float = -1.0 if absf(wrapf(_face_angle, -PI, PI)) > PI * 0.5 else 1.0
+		_visual.rotation = _face_angle
+		_visual.scale = _visual.scale.lerp(Vector2(1.0 + waddle, face_sign * (1.0 - waddle)), 0.2)
 	if is_instance_valid(_aura):
 		_aura.modulate.a = 0.75 + 0.25 * sin(_anim_time * 3.4)
