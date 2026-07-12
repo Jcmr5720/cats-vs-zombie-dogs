@@ -1,7 +1,10 @@
 extends Node2D
 ## Registra gatos rescatados, distribuye formacion y coordina HUD/balance.
+## Rework: ademas empuja el escalado central (vida/daño segun minuto y jugador),
+## expone el lider estable para la IA segura y gestiona la orden de reagrupar.
 
 const CompanionData = preload("res://scripts/companions/companion_data.gd")
+const CompanionBalance = preload("res://scripts/companions/companion_balance.gd")
 
 signal companions_changed(current: int, maximum: int)
 signal companion_rescued(data: CompanionData)
@@ -62,13 +65,86 @@ func _ready() -> void:
 	_emit_roster_changed()
 
 
-func _process(_delta: float) -> void:
+## Reloj de partida propio (para el escalado por minuto) y tick de escalado.
+var _elapsed_time: float = 0.0
+var _scaling_timer: float = 0.0
+
+
+func _process(delta: float) -> void:
 	if not is_instance_valid(_player):
 		_player = get_node_or_null(player_path)
 		if not is_instance_valid(_player):
 			return
+	_elapsed_time += delta
 	_prune_invalid_companions()
 	_update_formation()
+	_scaling_timer -= delta
+	if _scaling_timer <= 0.0:
+		_scaling_timer = CompanionBalance.SCALING_UPDATE_INTERVAL
+		_update_scaling()
+
+
+## Orden rapida "Reagruparse" (accion `companion_regroup`, tecla Q / boton Y del
+## mando). En coop cualquiera de los dos jugadores puede activarla (la accion
+## incluye teclado y mando). Los compañeros no consumen su habilidad.
+func _unhandled_input(event: InputEvent) -> void:
+	if not InputMap.has_action(&"companion_regroup"):
+		return
+	if event.is_action_pressed(&"companion_regroup"):
+		command_regroup()
+
+
+func command_regroup() -> void:
+	var any: bool = false
+	for companion in _companions:
+		if is_instance_valid(companion) and companion.has_method("start_regroup"):
+			companion.start_regroup()
+			any = true
+	if any and _hud != null and _hud.has_method("show_event_message"):
+		_hud.show_event_message("¡Reagrupando gatos!")
+
+
+## Escalado central (formulas en CompanionBalance): cada 2 s lee minuto de
+## partida, nivel y vida maxima del lider, y empuja los factores a cada
+## compañero. Factores separados de los upgrades: sin doble aplicacion.
+func _update_scaling() -> void:
+	var leader: Node2D = _active_leader()
+	if not is_instance_valid(leader):
+		return
+	var level_value = leader.get("level")
+	var max_health_value = leader.get("max_health")
+	var player_level: int = int(level_value) if level_value != null else 1
+	var player_max_health: int = int(max_health_value) if max_health_value != null else 100
+	var health_bonus: int = CompanionBalance.health_bonus(_elapsed_time / 60.0, player_max_health)
+	var damage_scale: float = CompanionBalance.damage_scale(player_level)
+	for companion in _companions:
+		if is_instance_valid(companion) and companion.has_method("set_scaling"):
+			companion.set_scaling(health_bonus, damage_scale)
+
+
+## Lider estable para la IA de los compañeros (prefiere P1 mientras este activo:
+## evita saltos constantes de referencia entre P1 y P2 en coop).
+func get_leader() -> Node2D:
+	return _active_leader()
+
+
+## ¿Hay algun compañero de este rol activo (no derribado)? Lo usan las sinergias.
+func has_active_role(role: StringName) -> bool:
+	for companion in _companions:
+		if not is_instance_valid(companion):
+			continue
+		var data = companion.get("companion_data")
+		if data == null or data.role != role:
+			continue
+		if companion.has_method("is_downed") and not companion.is_downed():
+			return true
+	return false
+
+
+## Aviso de compañero demasiado lejos (con antirrebote en el propio compañero).
+func notify_companion_far(data: CompanionData) -> void:
+	if data != null and _hud != null and _hud.has_method("show_event_message"):
+		_hud.show_event_message("%s esta lejos" % data.display_name)
 
 
 func can_add_companion() -> bool:
@@ -121,6 +197,8 @@ func rescue_companion(data: CompanionData) -> bool:
 	companion.connect("revived", Callable(self, "_on_companion_revived"))
 	_companions.append(companion)
 	_apply_bonuses_to(companion)
+	# El recien rescatado recibe el escalado de partida al instante (no nace debil).
+	_scaling_timer = 0.0
 	_update_formation()
 	companions_changed.emit(_companions.size(), max_companions)
 	companion_rescued.emit(data)

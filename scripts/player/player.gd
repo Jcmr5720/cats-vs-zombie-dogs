@@ -48,6 +48,10 @@ var _synergy_damage_reduction: float = 0.0
 var _permanent_damage_reduction: float = 0.0
 ## Multiplicador de XP por mejoras permanentes (Instinto Felino, Fase 07).
 var _xp_multiplier: float = 1.0
+## Escudo temporal del Gato Medico ("Emergencia de nueve vidas"): reduccion de
+## daño con vencimiento por tiempo real de juego (no requiere timer por frame).
+var _companion_shield_reduction: float = 0.0
+var _companion_shield_until_msec: int = 0
 ## Impulso externo (empuje de jefes/mini-jefes) que decae y se suma al movimiento.
 var _knockback: Vector2 = Vector2.ZERO
 var _is_dead: bool = false
@@ -205,8 +209,11 @@ func take_damage(amount: int) -> void:
 		return
 
 	_damage_timer = damage_cooldown
-	# Sinergia defensiva + reduccion permanente: multiplicativas entre si.
-	var final_amount: int = max(1, int(round(amount * (1.0 - _synergy_damage_reduction) * (1.0 - _permanent_damage_reduction))))
+	# Sinergia defensiva + reduccion permanente + escudo del medico: multiplicativas.
+	var shield: float = _companion_shield_reduction if Time.get_ticks_msec() < _companion_shield_until_msec else 0.0
+	var final_amount: int = max(1, int(round(
+		amount * (1.0 - _synergy_damage_reduction) * (1.0 - _permanent_damage_reduction) * (1.0 - shield)
+	)))
 	current_health = max(current_health - final_amount, 0)
 	health_changed.emit(current_health, max_health)
 	damaged.emit(final_amount)
@@ -335,6 +342,17 @@ func increase_max_health(amount: int) -> void:
 	max_health = min(max_health + amount, MAX_HEALTH_CAP)
 	current_health = min(current_health + amount, max_health)
 	health_changed.emit(current_health, max_health)
+
+
+## Escudo temporal del Gato Medico: reduce el daño recibido durante unos
+## segundos. No vuelve al jugador inmortal (tope 0.8) y no se apila: renueva.
+func apply_companion_shield(reduction: float, duration: float) -> void:
+	if _is_dead:
+		return
+	_companion_shield_reduction = clampf(reduction, 0.0, 0.8)
+	_companion_shield_until_msec = Time.get_ticks_msec() + int(duration * 1000.0)
+	# Telegrafica: destello verdoso sobre el gato (arte provisional).
+	Feedback.hit_effect(global_position, Color(0.55, 1.0, 0.72, 0.8), 0.4, 1.6)
 
 
 func heal(amount: int) -> void:

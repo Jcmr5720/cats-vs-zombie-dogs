@@ -102,6 +102,17 @@ func _process(delta: float) -> void:
 	global_position += _velocity * delta
 
 
+## Empuje externo hacia una posicion (pasiva "Mantenimiento de campo" del Gato
+## Ingeniero): acerca el orbe al jugador para que el iman normal lo capture.
+## No lo recoge directamente: la recoleccion sigue siendo del jugador.
+func nudge_toward(target: Vector2, speed: float) -> void:
+	if _collected:
+		return
+	var direction: Vector2 = global_position.direction_to(target)
+	if direction != Vector2.ZERO:
+		_velocity = direction * speed
+
+
 func _player_pickup_radius() -> float:
 	if is_instance_valid(_player) and _player.has_method("get_pickup_radius"):
 		return _player.get_pickup_radius()

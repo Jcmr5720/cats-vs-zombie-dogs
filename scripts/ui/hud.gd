@@ -563,7 +563,16 @@ func update_companion_roster(snapshots: Array) -> void:
 		var state_name: StringName = snapshot.get("state", &"active")
 		var style: Dictionary = COMPANION_STATE_STYLE.get(state_name, COMPANION_STATE_STYLE[&"active"])
 		var display_name: String = snapshot.get("display_name", "Companero")
-		_companion_bar.add_child(_make_companion_dot(snapshot, style, "%s · %s" % [display_name, style["label"]]))
+		var ability_name: String = str(snapshot.get("ability_name", ""))
+		var tooltip: String = "%s · %s" % [display_name, style["label"]]
+		if ability_name != "":
+			var ability_state: String = "lista"
+			if bool(snapshot.get("ability_locked", false)):
+				ability_state = "bloqueada"
+			elif not bool(snapshot.get("ability_ready", true)):
+				ability_state = "recargando"
+			tooltip += "\n%s (%s)" % [ability_name, ability_state]
+		_companion_bar.add_child(_make_companion_dot(snapshot, style, tooltip))
 
 
 func _make_companion_dot(snapshot: Dictionary, style: Dictionary, tooltip: String) -> Control:
@@ -583,6 +592,22 @@ func _make_companion_dot(snapshot: Dictionary, style: Dictionary, tooltip: Strin
 	bar.value = int(snapshot.get("current_health", 0))
 	bar.modulate = style["color"]
 	col.add_child(bar)
+	# Mini-barra de habilidad: llena y verde = lista; vaciandose = recargando;
+	# roja = bloqueada por penalizacion de reaparicion.
+	if snapshot.has("ability_cooldown_ratio"):
+		var ability_bar := ProgressBar.new()
+		ability_bar.custom_minimum_size = Vector2(26, 3)
+		ability_bar.show_percentage = false
+		ability_bar.max_value = 1.0
+		ability_bar.value = 1.0 - float(snapshot.get("ability_cooldown_ratio", 0.0))
+		if bool(snapshot.get("ability_locked", false)):
+			ability_bar.modulate = Color(1.0, 0.45, 0.45, 0.9)
+			ability_bar.value = 0.15
+		elif bool(snapshot.get("ability_ready", false)):
+			ability_bar.modulate = Color(0.55, 1.0, 0.72, 1.0)
+		else:
+			ability_bar.modulate = Color(0.85, 0.85, 0.6, 0.8)
+		col.add_child(ability_bar)
 	return col
 
 

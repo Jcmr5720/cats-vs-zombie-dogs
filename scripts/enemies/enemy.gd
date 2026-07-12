@@ -7,6 +7,7 @@ extends CharacterBody2D
 signal died(position: Vector2, xp_value: int)
 
 const EnemyData = preload("res://scripts/enemies/enemy_data.gd")
+const CompanionBalance = preload("res://scripts/companions/companion_balance.gd")
 
 @export var max_health: int = 20
 @export var speed: float = 90.0
@@ -67,6 +68,16 @@ var _knockback: Vector2 = Vector2.ZERO
 var _separation_cache: Vector2 = Vector2.ZERO
 var _separation_timer: float = 0.0
 
+## Ralentizacion externa (barricada del policia, empujon). Multiplica la
+## velocidad mientras dura; no se apila: gana la mas fuerte.
+var _slow_mult: float = 1.0
+var _slow_timer: float = 0.0
+
+## Cache del compañero objetivo/en contacto: el escaneo del grupo "companions"
+## se hace en ticks (0.25 s), no cada frame por enemigo (rendimiento en hordas).
+var _companion_scan_timer: float = 0.0
+var _cached_companion: Node2D
+
 ## Controlador visual de sprites (ETAPA ARTISTICA 2/3). Puede no existir.
 @onready var _sprite_visual: Node = get_node_or_null("SpriteVisual")
 ## Cadencia de la ANIMACION de mordisco (solo visual; el dano sigue siendo el
@@ -125,6 +136,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	_time += delta
+	_nearest_companion_cached(delta)
 	_chase_target = _pick_chase_target()
 	var target_position: Vector2 = _player.global_position
 	if is_instance_valid(_chase_target):
@@ -134,7 +146,12 @@ func _physics_process(delta: float) -> void:
 	var wobble: float = sin(_time * _wobble_speed + _wobble_phase) * _wobble_strength
 	if not _has_subtarget:
 		direction = direction.rotated(wobble)
-	velocity = direction * speed * _speed_jitter + _separation(delta) + _knockback + _avoid
+	# Ralentizacion externa (zonas de control de los compañeros).
+	if _slow_timer > 0.0:
+		_slow_timer -= delta
+		if _slow_timer <= 0.0:
+			_slow_mult = 1.0
+	velocity = direction * speed * _speed_jitter * _slow_mult + _separation(delta) + _knockback + _avoid
 	move_and_slide()
 	if velocity.length_squared() > 1.0:
 		_face_angle = lerp_angle(_face_angle, velocity.angle(), 0.16)
@@ -176,6 +193,11 @@ func configure(enemy_type: EnemyData, health_multiplier: float = 1.0, speed_mult
 func take_damage(amount: int, knockback_dir: Vector2 = Vector2.ZERO) -> void:
 	if _is_dead:
 		return
+
+	# Objetivo prioritario del Gato Policia: el enemigo marcado recibe daño
+	# extra de TODO el equipo (jugadores, compañeros y torretas).
+	if has_meta(&"companion_mark"):
+		amount = max(1, int(round(amount * (1.0 + CompanionBalance.POLICE_MARK_DAMAGE_BONUS))))
 
 	current_health -= amount
 
@@ -324,25 +346,46 @@ func _resolve_target_player() -> Node2D:
 	return best
 
 
-func _pick_chase_target() -> Node2D:
-	var best_target: Node2D = _player
-	var player_distance: float = global_position.distance_to(_player.global_position)
-	var best_distance: float = player_distance
+## Compañero targetable mas cercano, cacheado en ticks de 0.25 s: antes cada
+## enemigo recorria el grupo "companions" DOS veces por frame (persecucion y
+## contacto); con hordas grandes era un coste innecesario.
+func _nearest_companion_cached(delta: float) -> Node2D:
+	_companion_scan_timer -= delta
+	if _companion_scan_timer > 0.0:
+		if is_instance_valid(_cached_companion) and _cached_companion.has_method("can_be_targeted") \
+				and _cached_companion.can_be_targeted():
+			return _cached_companion
+		return null
+	_companion_scan_timer = 0.25
+	_cached_companion = null
+	var best_distance: float = INF
 	for companion in get_tree().get_nodes_in_group("companions"):
 		if not is_instance_valid(companion):
 			continue
 		if not companion.has_method("can_be_targeted") or not companion.can_be_targeted():
 			continue
 		var distance: float = global_position.distance_to(companion.global_position)
-		if distance < min(player_distance * 0.82, 180.0) and distance < best_distance:
+		if distance < best_distance:
 			best_distance = distance
-			best_target = companion
+			_cached_companion = companion
+	return _cached_companion
+
+
+func _pick_chase_target() -> Node2D:
+	var best_target: Node2D = _player
+	var player_distance: float = global_position.distance_to(_player.global_position)
+	if is_instance_valid(_cached_companion):
+		var distance: float = global_position.distance_to(_cached_companion.global_position)
+		if distance < min(player_distance * 0.82, 180.0):
+			best_target = _cached_companion
 	return best_target
 
 
 func _try_contact_damage() -> void:
-	var hit_companion: Node2D = _nearest_contact_companion()
-	if hit_companion != null and hit_companion.has_method("take_damage"):
+	var hit_companion: Node2D = _cached_companion if is_instance_valid(_cached_companion) else null
+	if hit_companion != null \
+			and global_position.distance_to(hit_companion.global_position) <= contact_range \
+			and hit_companion.has_method("take_damage"):
 		hit_companion.take_damage(contact_damage, global_position.direction_to(hit_companion.global_position))
 		_trigger_attack_anim()
 		return
@@ -350,6 +393,15 @@ func _try_contact_damage() -> void:
 		if _player.has_method("take_damage"):
 			_player.take_damage(contact_damage)
 			_trigger_attack_anim()
+
+
+## Ralentizacion temporal (barricada/empujon de los compañeros). No se apila:
+## conserva la mas fuerte y extiende la duracion.
+func apply_slow(mult: float, duration: float) -> void:
+	if _is_dead:
+		return
+	_slow_mult = clampf(minf(_slow_mult, mult), 0.2, 1.0)
+	_slow_timer = maxf(_slow_timer, duration)
 
 
 ## Animacion de mordisco (ETAPA ARTISTICA 3, 3.1): se dispara al INTENTAR un
@@ -362,21 +414,6 @@ func _trigger_attack_anim() -> void:
 	_attack_anim_timer = 0.6  # ~cadencia del cooldown de dano del jugador (0.5)
 	if _sprite_visual != null and _sprite_visual.has_method("play_attack"):
 		_sprite_visual.play_attack()
-
-
-func _nearest_contact_companion() -> Node2D:
-	var nearest: Node2D = null
-	var best_distance: float = contact_range
-	for companion in get_tree().get_nodes_in_group("companions"):
-		if not is_instance_valid(companion):
-			continue
-		if not companion.has_method("can_be_targeted") or not companion.can_be_targeted():
-			continue
-		var distance: float = global_position.distance_to(companion.global_position)
-		if distance <= best_distance:
-			best_distance = distance
-			nearest = companion
-	return nearest
 
 
 ## Feedback breve al recibir un impacto: leve "punch" de escala + destello,
