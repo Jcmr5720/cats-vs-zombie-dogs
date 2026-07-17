@@ -15,6 +15,8 @@ extends Resource
 ##   &"pickup_range_pct"    : +% radio de recogida de XP (por nivel, Fase 09).
 ##   &"damage_reduction_pct": -% daño recibido por el jugador (por nivel, Fase 09).
 ##   &"companion_damage_pct": +% daño de los compañeros (por nivel, Fase 09).
+##   &"reroll_per_run"      : +re-tiradas de cartas por partida (Rework adictividad).
+##   &"banish_per_run"      : +vetos de cartas por partida (Rework adictividad).
 @export var id: StringName = &"upgrade"
 @export var display_name: String = "Mejora"
 @export var description: String = ""

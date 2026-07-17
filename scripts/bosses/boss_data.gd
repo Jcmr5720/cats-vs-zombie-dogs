@@ -27,6 +27,18 @@ extends Resource
 @export var accent_color: Color = Color(1.0, 0.85, 0.25, 1.0)
 @export var visual_scale: float = 1.0
 
+@export_group("Esbirros del jefe (Partidas rapidas)")
+## Clases de esbirro que este jefe invoca en sus umbrales de vida (maximo DOS
+## simultaneas por diseño). Ids de data/enemies/minions: &"boss_guardian",
+## &"boss_healer", &"boss_exploder". Vacio = invoca solo perros comunes.
+@export var minion_classes: Array[StringName] = []
+
+@export_group("Transformacion elite (Partidas rapidas)")
+## Nombre mostrado al transformarse en elite (vacio = "<nombre> ELITE").
+@export var elite_name: String = ""
+## En elite, la embestida deja una zona peligrosa (identidad del Parque).
+@export var elite_leaves_hazard: bool = false
+
 @export_group("Dificultad / fases")
 ## Umbrales de vida (0..1) que disparan cambios de fase. Ej: [0.6, 0.3].
 @export var phase_thresholds: PackedFloat32Array = PackedFloat32Array([0.6, 0.3])

@@ -6,7 +6,7 @@ extends Control
 
 const MenuTheme = preload("res://scripts/menus/menu_theme.gd")
 const StoryCampaign = preload("res://scripts/story/story_campaign.gd")
-const FreePlayScore = preload("res://scripts/systems/free_play_score.gd")
+# FreePlayScore es clase global (class_name): se usa sin preload.
 
 const MAP_NAMES: Dictionary = {
 	"neighborhood": "Barrio Gatuno",
@@ -202,4 +202,5 @@ func _get_stat(key: String, default_value: Variant) -> Variant:
 
 func _format_time(seconds: float) -> String:
 	var total: int = int(seconds)
+	@warning_ignore("integer_division")
 	return "%02d:%02d" % [total / 60, total % 60]

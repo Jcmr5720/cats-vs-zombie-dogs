@@ -69,7 +69,7 @@ func _apply_contact_damage() -> void:
 			_recent_hits[id] = _hit_cooldown
 
 
-func _play_audio(name: StringName) -> void:
+func _play_audio(sound_name: StringName) -> void:
 	var audio: Node = get_node_or_null("/root/AudioManager")
 	if audio != null and audio.has_method("play_sfx"):
-		audio.play_sfx(name)
+		audio.play_sfx(sound_name)

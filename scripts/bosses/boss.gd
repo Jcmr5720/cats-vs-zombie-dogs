@@ -10,6 +10,7 @@ extends CharacterBody2D
 const BossData = preload("res://scripts/bosses/boss_data.gd")
 const ENEMY_SCENE := preload("res://scenes/enemies/Enemy.tscn")
 const XP_ORB_SCENE := preload("res://scenes/loot/XPOrb.tscn")
+const HAZARD_ZONE_SCRIPT := preload("res://scripts/enemies/hazard_zone.gd")
 
 signal health_changed(current: int, maximum: int, display_name: String)
 signal died(data: BossData)
@@ -28,6 +29,7 @@ const MAX_SUMMONED: int = 14
 @export var contact_range: float = 64.0
 @export var summon_count: int = 4
 ## Multiplicador de vida del jefe en coop local (Fase Coop 1.5). 1.0 en solo.
+## (Obsoleto, Fase correccion: la vida coop de jefes vive en GameBalance.BOSS_COOP_HEALTH_MULT.)
 @export var coop_health_mult: float = 1.55
 
 var data: BossData
@@ -47,6 +49,21 @@ var _anim_time: float = 0.0
 var _summoned: Array[Node2D] = []
 var _flash_tween: Tween
 var _summon_pulse: float = 0.0
+
+# --- Partidas rapidas: elite, furia final y esbirros del jefe -------------------
+## Transformado en su version ELITE (4:15). No se crea otro enemigo.
+var _elite: bool = false
+## Furia final (5:00): mas velocidad/cadencia con tope; sigue siendo evitable.
+var _enraged: bool = false
+var _move_speed_mult: float = 1.0
+## La version elite encadena UNA segunda embestida por patron (no infinitas).
+var _second_charge_done: bool = false
+## Guardianes vivos protegen al jefe; al caer uno se abre una ventana de
+## vulnerabilidad temporal.
+var _guardians: Array[Node2D] = []
+var _guardian_vuln_timer: float = 0.0
+## Total curado por sanadores (limitado: nunca grandes porcentajes repetidos).
+var _minion_heal_total: int = 0
 ## Ángulo visual: solo rota el nodo Visual (con volteo vertical al mirar a la
 ## izquierda) para que el jefe nunca quede boca abajo y la sombra no gire.
 var _face_angle: float = 0.0
@@ -87,13 +104,17 @@ func _ready() -> void:
 
 
 ## Configura el jefe a partir de su BossData y la dificultad actual. La vida sube
-## con difficulty_score pero queda acotada para no volverse imposible.
+## con difficulty_score pero queda acotada DOS veces (GameBalance): el factor por
+## score tiene techo y el total en px de vida tambien (MAX_HEALTH_CAP).
 func configure(boss_data: BossData, difficulty_score: float) -> void:
 	data = boss_data
-	var scaled: float = data.max_health * (1.0 + max(0.0, difficulty_score) * data.difficulty_multiplier)
-	# Coop local: mas vida para que el jefe aguante el fuego de 2 jugadores.
+	var factor: float = minf(GameBalance.BOSS_HEALTH_SCORE_FACTOR_CAP,
+		1.0 + max(0.0, difficulty_score) * data.difficulty_multiplier)
+	var scaled: float = data.max_health * factor
+	# Coop local: mas vida para que el jefe aguante el fuego de 2 jugadores
+	# (UNA sola vez, centralizado en GameBalance).
 	if _is_coop():
-		scaled *= coop_health_mult
+		scaled *= GameBalance.BOSS_COOP_HEALTH_MULT
 	max_health = clampi(int(round(scaled)), data.max_health, MAX_HEALTH_CAP)
 	current_health = max_health
 	phase = 1
@@ -141,6 +162,8 @@ func _physics_process(delta: float) -> void:
 	_animate(delta)
 	if _contact_timer > 0.0:
 		_contact_timer -= delta
+	if _guardian_vuln_timer > 0.0:
+		_guardian_vuln_timer -= delta
 
 	match _state:
 		State.CHASE:
@@ -199,7 +222,7 @@ func _update_stuck_state(delta: float) -> void:
 func _state_chase(delta: float) -> void:
 	var dir: Vector2 = _steered_direction(_player.global_position)
 	_avoid = _avoid.move_toward(Vector2.ZERO, data.move_speed * 3.0 * delta)
-	velocity = dir * data.move_speed + _avoid
+	velocity = dir * data.move_speed * _move_speed_mult + _avoid
 	move_and_slide()
 	_update_stuck_state(delta)
 	_face_angle = lerp_angle(_face_angle, dir.angle(), 0.08)
@@ -219,9 +242,13 @@ func _start_special() -> void:
 		_enter_windup()
 
 
-func _enter_windup() -> void:
+## chained=true: segunda embestida ELITE encadenada (telegrafo mas corto pero
+## visible; no resetea el contador de encadenado).
+func _enter_windup(chained: bool = false) -> void:
 	_state = State.WINDUP
-	_state_timer = windup_time
+	_state_timer = windup_time * (0.55 if chained else 1.0)
+	if not chained:
+		_second_charge_done = false
 	_charge_dir = global_position.direction_to(_player.global_position)
 	_telegraph.visible = true
 	_telegraph.global_rotation = _charge_dir.angle()
@@ -262,8 +289,18 @@ func _state_charge(delta: float) -> void:
 		_charge_hit_done = true
 	_state_timer -= delta
 	if _state_timer <= 0.0 or collided:
-		_state = State.RECOVER
-		_state_timer = recover_time
+		# Identidad del Parque (elite): la embestida deja una zona peligrosa.
+		if _elite and data.elite_leaves_hazard:
+			_leave_hazard_zone()
+		# Habilidad extra de la version ELITE: encadena UNA segunda embestida
+		# (telegrafiada) por patron. Si choco, respeta la recuperacion normal.
+		if _elite and not _second_charge_done and not collided:
+			_second_charge_done = true
+			_enter_windup(true)
+			_telegraph.visible = true
+		else:
+			_state = State.RECOVER
+			_state_timer = recover_time
 
 
 func _state_recover(delta: float) -> void:
@@ -309,6 +346,9 @@ func _update_phase() -> void:
 
 
 func _on_phase_changed() -> void:
+	# Esbirros del jefe: aparecen en MOMENTOS DEFINIDOS (los umbrales de vida de
+	# phase_thresholds, p.ej. 75/50/25%), nunca de forma continua.
+	_spawn_threshold_minions()
 	# Feedback de cambio de fase: destello y shake.
 	Feedback.shake(0.3)
 	Feedback.hit_effect(global_position, data.accent_color, 0.8, 3.5)
@@ -331,13 +371,19 @@ func _on_phase_changed() -> void:
 
 
 ## Cooldown de ataque mas corto a medida que avanza la fase (mas presion).
+## Elite y furia final lo acortan mas, con SUELO duro: nunca ataques encadenados
+## inevitables.
 func _next_attack_cooldown() -> float:
 	var factor: float = 1.0
 	if phase == 2:
 		factor = 0.7
 	elif phase >= 3:
 		factor = 0.5
-	return max(1.0, data.attack_cooldown * factor)
+	if _elite:
+		factor *= 0.85
+	if _enraged:
+		factor *= 0.8
+	return max(0.9, data.attack_cooldown * factor)
 
 
 ## Aplica daño por contacto al jugador (prioritario) y a companeros en rango.
@@ -371,6 +417,12 @@ func _contact(amount: int, with_knockback: bool) -> bool:
 func take_damage(amount: int, _knockback_dir: Vector2 = Vector2.ZERO) -> void:
 	if _is_dead:
 		return
+	# Guardian vivo: reduce el daño que recibe el jefe. Al caer el guardian se
+	# abre una ventana de vulnerabilidad (notify_guardian_down).
+	if _guardian_alive():
+		amount = maxi(1, int(round(amount * 0.6)))
+	elif _guardian_vuln_timer > 0.0:
+		amount = int(round(amount * 1.3))
 	current_health = max(0, current_health - amount)
 	Feedback.damage_number(global_position + Vector2(0, -50), amount, Color(1.0, 0.8, 0.5))
 	_flash_hit()
@@ -409,7 +461,10 @@ func _visual_action(action: StringName) -> void:
 func _spawn_minions() -> void:
 	_prune_summoned()
 	var allowed: int = MAX_SUMMONED - _summoned.size()
-	var count: int = min(summon_count, allowed)
+	# Elite: la invocacion se refuerza (esbirros modificados), siempre bajo el
+	# mismo tope MAX_SUMMONED.
+	var wanted: int = summon_count + (2 if _elite else 0)
+	var count: int = min(wanted, allowed)
 	for i in count:
 		var minion := ENEMY_SCENE.instantiate() as Node2D
 		if minion == null:
@@ -424,6 +479,132 @@ func _prune_summoned() -> void:
 	for index in range(_summoned.size() - 1, -1, -1):
 		if not is_instance_valid(_summoned[index]):
 			_summoned.remove_at(index)
+	for index in range(_guardians.size() - 1, -1, -1):
+		if not is_instance_valid(_guardians[index]):
+			_guardians.remove_at(index)
+
+
+## Esbirros de clase (Guardian/Sanador/Explosivo) en los umbrales de vida.
+## Maximo DOS clases por jefe (se ignoran las demas); cantidades pequeñas y
+## bajo el tope global MAX_SUMMONED.
+func _spawn_threshold_minions() -> void:
+	if data == null or data.minion_classes.is_empty():
+		return
+	_prune_summoned()
+	var classes: Array[StringName] = []
+	for c in data.minion_classes:
+		classes.append(c)
+		if classes.size() >= 2:
+			break
+	for minion_id in classes:
+		var mdata = RunPhaseConfig.load_enemy_data(minion_id)
+		if mdata == null:
+			continue
+		var count: int = 2 if minion_id == &"boss_exploder" else 1
+		if _elite:
+			count += 1  # esbirros modificados en la version elite
+		for i in count:
+			if _summoned.size() >= MAX_SUMMONED:
+				return
+			var minion := ENEMY_SCENE.instantiate() as Node2D
+			if minion == null:
+				continue
+			if minion.has_method("configure"):
+				minion.call("configure", mdata, 1.0, 1.0, 1.0)
+			var angle: float = randf() * TAU
+			minion.global_position = global_position + Vector2.RIGHT.rotated(angle) * 90.0
+			get_parent().add_child(minion)
+			if minion.has_method("bind_boss"):
+				minion.bind_boss(self)
+			_summoned.append(minion)
+			if mdata.behavior == &"boss_guardian":
+				_guardians.append(minion)
+
+
+func _guardian_alive() -> bool:
+	for g in _guardians:
+		if is_instance_valid(g) and g.is_inside_tree():
+			return true
+	return false
+
+
+## La llama el guardian al morir: ventana temporal de vulnerabilidad del jefe.
+func notify_guardian_down() -> void:
+	_guardian_vuln_timer = 4.0
+	Feedback.hit_effect(global_position, Color(0.5, 0.8, 1.0, 0.8), 0.6, 2.6)
+
+
+## Curacion LIMITADA de los sanadores: el total curado por esbirros nunca supera
+## el 25% de la vida maxima (sin bucles de curacion infinitos).
+func receive_minion_heal(amount: int) -> void:
+	if _is_dead or amount <= 0:
+		return
+	var cap: int = int(round(max_health * 0.25))
+	var allowed: int = mini(amount, cap - _minion_heal_total)
+	if allowed <= 0:
+		return
+	_minion_heal_total += allowed
+	current_health = mini(max_health, current_health + allowed)
+	_emit_health()
+
+
+## 4:15 — transformacion ELITE del jefe ACTUAL (no se crea otro enemigo):
+## cambio visual + animacion breve, nombre nuevo (el HUD lo actualiza el
+## PhaseDirector), recuperacion controlada del 30%, una habilidad extra (segunda
+## embestida encadenada; en el Parque ademas deja zonas), patrones mas intensos
+## pero evitables y esbirros reforzados. NO duplica vida ni daño.
+func transform_elite() -> void:
+	if _is_dead or _elite:
+		return
+	_elite = true
+	Feedback.hitstop(0.12, 0.1)
+	Feedback.shake(0.6)
+	var elite_color := Color(1.0, 0.25, 0.55)
+	Feedback.hit_effect(global_position, elite_color, 1.0, 5.0)
+	Feedback.hit_effect(global_position, elite_color.lightened(0.3), 0.5, 2.6)
+	# Recuperacion CONTROLADA (30%, dentro del rango 25-35% del diseño).
+	current_health = mini(max_health, current_health + int(round(max_health * 0.30)))
+	# Patrones mas intensos pero legibles: carga algo mas rapida (los telegrafos
+	# no cambian) y cooldowns menores via _next_attack_cooldown.
+	charge_speed *= 1.12
+	# Identidad visual propia: mas grande, aura y luz magenta, ojos blancos.
+	scale *= 1.15
+	if is_instance_valid(_aura):
+		_aura.color = Color(elite_color.r, elite_color.g, elite_color.b, 0.2)
+	if is_instance_valid(_light):
+		_light.color = elite_color
+		_light.set_base_energy(1.6)
+	for eye in [_eye_left, _eye_right]:
+		if is_instance_valid(eye):
+			eye.color = Color(1.0, 0.95, 0.9)
+	_visual_action(&"phase_change")
+	_emit_health()
+
+
+func is_elite() -> bool:
+	return _elite
+
+
+## Furia final (5:00): acelera al jefe con TOPE (presion final, no injusticia).
+func enrage() -> void:
+	if _is_dead or _enraged:
+		return
+	_enraged = true
+	_move_speed_mult = 1.1
+	Feedback.shake(0.4)
+	Feedback.hit_effect(global_position, Color(1.0, 0.4, 0.1, 0.9), 0.8, 4.0)
+
+
+## Zona peligrosa al final de la embestida elite (identidad del Parque).
+func _leave_hazard_zone() -> void:
+	if get_tree().get_node_count_in_group(HAZARD_ZONE_SCRIPT.GROUP) >= RunPhaseConfig.MAX_HAZARD_ZONES:
+		return
+	var zone := Node2D.new()
+	zone.set_script(HAZARD_ZONE_SCRIPT)
+	zone.position = global_position
+	zone.set("radius", 85.0)
+	zone.set("duration", 3.5)
+	get_parent().add_child.call_deferred(zone)
 
 
 # --- Muerte / recompensa -----------------------------------------------------
@@ -439,7 +620,7 @@ func _die() -> void:
 	# Hit-stop dramatico: la derrota del jefe congela el tiempo un instante.
 	Feedback.hitstop(0.14, 0.05)
 	Feedback.shake(0.6)
-	Feedback.death_burst(global_position, data.body_color, 10)
+	Feedback.death_burst(global_position, data.visual_color, 10)
 	var missions: Node = get_node_or_null("/root/Missions")
 	if missions != null:
 		missions.add(&"boss_kills")

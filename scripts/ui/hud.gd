@@ -6,10 +6,18 @@ extends CanvasLayer
 ## y se ofrece en la pausa (ESC) via get_run_info(). No saturar la pantalla de juego.
 
 signal upgrade_card_selected(card_index: int)
+## Agencia en el level-up (Rework de adictividad): las gestiona UpgradeManager.
+## Fase correccion: la opcion de SALTAR la seleccion se elimino por completo
+## (rompia la progresion); subir de nivel siempre exige elegir una carta.
+signal reroll_requested
+signal banish_requested(card_index: int)
 
 const META_PANEL_SCENE := preload("res://scenes/ui/MetaUpgradePanel.tscn")
 const PAUSE_MENU_SCENE := preload("res://scenes/menus/PauseMenu.tscn")
+const MINIMAP_SYSTEM_SCRIPT := preload("res://scripts/ui/minimap/minimap_system.gd")
+@warning_ignore("shadowed_global_identifier")
 const MenuTheme = preload("res://scripts/menus/menu_theme.gd")
+@warning_ignore("shadowed_global_identifier")
 const IconDrawer = preload("res://scripts/ui/icon_drawer.gd")
 
 var _meta_panel: Control
@@ -19,6 +27,7 @@ const RARITY_STYLE: Dictionary = {
 	&"common": {"label": "COMUN", "color": Color(0.78, 0.82, 0.88)},
 	&"rare": {"label": "RARO", "color": Color(0.36, 0.66, 1.0)},
 	&"epic": {"label": "EPICO", "color": Color(0.78, 0.45, 1.0)},
+	&"legendary": {"label": "LEGENDARIA", "color": Color(1.0, 0.82, 0.25)},
 }
 
 const COMPANION_STATE_STYLE: Dictionary = {
@@ -150,6 +159,11 @@ func _ready() -> void:
 	add_to_group("hud")
 	_style_bars()
 	_build_vignette()
+	# Sistema Minimapa: radar de jugadores/aliados/enemigos/jefes/rescates.
+	# Se auto-configura (solo o coop) y se oculta solo en pausa/fin de partida.
+	var minimap_system := MINIMAP_SYSTEM_SCRIPT.new()
+	minimap_system.name = "MinimapSystem"
+	add_child(minimap_system)
 	# Panel de mejoras permanentes (Fase 07) y menu de pausa (Fase 08).
 	_meta_panel = META_PANEL_SCENE.instantiate()
 	add_child(_meta_panel)
@@ -165,6 +179,7 @@ func _ready() -> void:
 		button.pivot_offset = button.custom_minimum_size * 0.5
 		button.mouse_entered.connect(_on_card_hover.bind(button, true))
 		button.mouse_exited.connect(_on_card_hover.bind(button, false))
+	_build_upgrade_actions_row()
 
 	_victory_details_button.pressed.connect(_toggle_victory_details)
 	_victory_details_button.pressed.connect(func() -> void: _play_ui(&"ui_click"))
@@ -173,6 +188,7 @@ func _ready() -> void:
 
 	_perf = get_node_or_null("/root/Performance")
 	_build_combo_label()
+	_build_phase_label()
 	_build_debug_overlay()
 	_victory_retry = _build_run_end_buttons($VictoryPanel/Center/Content)
 	_defeat_retry = _build_run_end_buttons($GameOverPanel/Center/Content)
@@ -269,6 +285,35 @@ func _build_combo_label() -> void:
 		center.add_child(_combo_label)
 	else:
 		add_child(_combo_label)
+
+
+## Rotulo de fase de las Partidas rapidas: "Fase · tiempo restante" bajo el
+## reloj. Lo actualiza el PhaseDirector (~4 veces por segundo).
+var _phase_label: Label
+
+
+func _build_phase_label() -> void:
+	_phase_label = Label.new()
+	_phase_label.name = "PhaseLabel"
+	_phase_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_phase_label.add_theme_font_size_override("font_size", 15)
+	_phase_label.add_theme_color_override("font_color", Color(0.85, 0.9, 1.0, 0.95))
+	_phase_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
+	_phase_label.add_theme_constant_override("shadow_offset_x", 1)
+	_phase_label.add_theme_constant_override("shadow_offset_y", 1)
+	_phase_label.text = ""
+	var center := $TopCenter as Control
+	if center != null:
+		center.add_child(_phase_label)
+		center.move_child(_phase_label, time_label.get_index() + 1)
+	else:
+		add_child(_phase_label)
+
+
+## Fase actual y cuenta atras de la partida rapida (PhaseDirector).
+func set_phase_info(text: String) -> void:
+	if _phase_label != null:
+		_phase_label.text = text
 
 
 ## Llamado por Feedback.register_kill vía el grupo "hud". count=0 termina la racha.
@@ -423,7 +468,7 @@ func _toggle_map_debug(enabled: bool) -> void:
 func _map_debug_line() -> String:
 	var chunks: int = 0
 	var obstacles: int = get_tree().get_node_count_in_group(&"obstacles")
-	var seed: int = 0
+	var map_seed: int = 0
 	for manager in get_tree().get_nodes_in_group("map_manager"):
 		if not is_instance_valid(manager):
 			continue
@@ -434,8 +479,8 @@ func _map_debug_line() -> String:
 			if spawner.has_method("get_active_obstacle_count"):
 				obstacles = int(spawner.get_active_obstacle_count())
 			if spawner.has_method("get_resolved_seed"):
-				seed = int(spawner.get_resolved_seed())
-	return "MAP seed:%d chunks:%d obstacles:%d stuck:%d" % [seed, chunks, obstacles, get_tree().get_node_count_in_group(&"stuck_enemies")]
+				map_seed = int(spawner.get_resolved_seed())
+	return "MAP seed:%d chunks:%d obstacles:%d stuck:%d" % [map_seed, chunks, obstacles, get_tree().get_node_count_in_group(&"stuck_enemies")]
 
 
 ## --- Stats esenciales ---------------------------------------------------------
@@ -488,6 +533,7 @@ func on_level_changed(level: int) -> void:
 func on_time_updated(seconds: float) -> void:
 	_last_time = seconds
 	var total: int = int(seconds)
+	@warning_ignore("integer_division")
 	time_label.text = "%02d:%02d" % [total / 60, total % 60]
 
 
@@ -729,6 +775,7 @@ func _fill_summary_tiles(grid: GridContainer, summary: Dictionary) -> void:
 		grid.add_child(MenuTheme.make_stat_card(label, "Puntuación", MenuTheme.GOLD, &"star"))
 	else:
 		grid.add_child(MenuTheme.make_stat_card("+%d" % int(summary.get("sardines_earned", 0)), "Sardinas", MenuTheme.GOLD, &"sardine"))
+	@warning_ignore("integer_division")
 	grid.add_child(MenuTheme.make_stat_card("%02d:%02d" % [total / 60, total % 60], "Tiempo", MenuTheme.CYAN, &"clock"))
 	grid.add_child(MenuTheme.make_stat_card(str(int(summary.get("kills", 0))), "Enemigos", MenuTheme.DANGER, &"boss"))
 	grid.add_child(MenuTheme.make_stat_card(str(int(summary.get("cats", 0))), "Gatos", MenuTheme.PURPLE, &"companion"))
@@ -739,6 +786,7 @@ func _fill_summary_tiles(grid: GridContainer, summary: Dictionary) -> void:
 ## Resumen limpio: solo los datos clave.
 func _summary_core(summary: Dictionary) -> String:
 	var total: int = int(summary.get("time", 0.0))
+	@warning_ignore("integer_division")
 	var lines: Array[String] = [
 		"Sardinas  +%d" % int(summary.get("sardines_earned", 0)),
 		"Tiempo  %02d:%02d" % [total / 60, total % 60],
@@ -839,8 +887,12 @@ func toggle_meta_panel() -> void:
 
 
 ## True mientras se muestran las cartas de mejora (para que la pausa no interfiera).
+## Cubre el panel solo clasico y el panel coop de cartas por jugador.
 func is_selecting_upgrade() -> bool:
-	return is_instance_valid(upgrade_panel) and upgrade_panel.visible
+	if is_instance_valid(upgrade_panel) and upgrade_panel.visible:
+		return true
+	var coop_panel: Node = get_tree().get_first_node_in_group("coop_upgrade_panel")
+	return coop_panel != null and coop_panel is CanvasItem and (coop_panel as CanvasItem).visible
 
 
 func _is_coop() -> bool:
@@ -901,6 +953,11 @@ func show_upgrade_selection(cards: Array[Dictionary]) -> void:
 		_upgrade_buttons[0].call_deferred("grab_focus")
 
 	for index in _upgrade_buttons.size():
+		# Con vetos el pool puede quedarse corto: oculta los botones sin carta.
+		if index >= cards.size():
+			_upgrade_buttons[index].visible = false
+			continue
+		_upgrade_buttons[index].visible = true
 		var card: Dictionary = cards[index]
 		var rarity: StringName = card.get("rarity", &"common")
 		var style: Dictionary = RARITY_STYLE.get(rarity, RARITY_STYLE[&"common"])
@@ -1055,18 +1112,97 @@ func _style_card(button: Button, accent: Color) -> void:
 		button.add_theme_stylebox_override(state, box)
 
 
+## --- Acciones de agencia (reroll / veto; elegir carta es obligatorio) ------------
+
+var _reroll_button: Button
+var _banish_button: Button
+## Modo veto: el siguiente clic en una carta la veta en vez de elegirla.
+var _banish_mode: bool = false
+
+
+func _build_upgrade_actions_row() -> void:
+	var content := get_node_or_null("UpgradePanel/Center/Content") as Control
+	if content == null:
+		return
+	var row := HBoxContainer.new()
+	row.name = "ActionsRow"
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 14)
+	content.add_child(row)
+	_reroll_button = _make_action_button(row, "Otra tirada")
+	_reroll_button.pressed.connect(func() -> void:
+		_play_ui(&"ui_click")
+		_banish_mode = false
+		reroll_requested.emit())
+	_banish_button = _make_action_button(row, "Vetar carta")
+	_banish_button.pressed.connect(_toggle_banish_mode)
+
+
+func _make_action_button(parent: Control, text: String) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.custom_minimum_size = Vector2(150, 40)
+	button.focus_mode = Control.FOCUS_ALL
+	var accent := Color(0.65, 0.72, 0.82)
+	for state in ["normal", "hover", "pressed", "focus"]:
+		var box := StyleBoxFlat.new()
+		var hovered: bool = state != "normal"
+		box.bg_color = Color(0.10, 0.11, 0.16, 0.95).lerp(accent, 0.10 if hovered else 0.03)
+		box.border_color = accent if hovered else Color(accent.r, accent.g, accent.b, 0.5)
+		box.set_border_width_all(2)
+		box.set_corner_radius_all(10)
+		box.set_content_margin_all(8)
+		button.add_theme_stylebox_override(state, box)
+	button.add_theme_font_size_override("font_size", 14)
+	parent.add_child(button)
+	return button
+
+
+## Actualiza contadores/estado de los botones (lo llama UpgradeManager al abrir
+## la seleccion y tras cada reroll/veto). Sin "Pasar": elegir es obligatorio.
+func set_upgrade_actions(rerolls: int, banishes: int) -> void:
+	_banish_mode = false
+	if is_instance_valid(_reroll_button):
+		_reroll_button.text = "Otra tirada (%d)" % rerolls
+		_reroll_button.disabled = rerolls <= 0
+	if is_instance_valid(_banish_button):
+		_banish_button.text = "Vetar carta (%d)" % banishes
+		_banish_button.disabled = banishes <= 0
+		_banish_button.modulate = Color(1, 1, 1, 1)
+
+
+func _toggle_banish_mode() -> void:
+	_play_ui(&"ui_click")
+	_banish_mode = not _banish_mode
+	if is_instance_valid(_banish_button):
+		_banish_button.modulate = Color(1.0, 0.6, 0.6, 1.0) if _banish_mode else Color(1, 1, 1, 1)
+	if is_instance_valid(_upgrade_title):
+		_upgrade_title.text = "Elige que carta VETAR" if _banish_mode else "Elige una mejora"
+
+
 func hide_upgrade_selection() -> void:
 	upgrade_panel.visible = false
+	_banish_mode = false
+	if is_instance_valid(_upgrade_title):
+		_upgrade_title.text = "Elige una mejora"
 
 
 func _on_upgrade_button_pressed(card_index: int) -> void:
+	if _banish_mode:
+		_banish_mode = false
+		if is_instance_valid(_banish_button):
+			_banish_button.modulate = Color(1, 1, 1, 1)
+		if is_instance_valid(_upgrade_title):
+			_upgrade_title.text = "Elige una mejora"
+		banish_requested.emit(card_index)
+		return
 	upgrade_card_selected.emit(card_index)
 
 
-func _play_ui(name: StringName) -> void:
+func _play_ui(sound_name: StringName) -> void:
 	var audio: Node = get_node_or_null("/root/AudioManager")
 	if audio != null and audio.has_method("play_ui"):
-		audio.play_ui(name)
+		audio.play_ui(sound_name)
 
 
 ## --- Guia de rescate ----------------------------------------------------------

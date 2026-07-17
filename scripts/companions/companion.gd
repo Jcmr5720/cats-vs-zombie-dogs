@@ -6,6 +6,7 @@ extends CharacterBody2D
 
 const CompanionData = preload("res://scripts/companions/companion_data.gd")
 const CompanionBalance = preload("res://scripts/companions/companion_balance.gd")
+const Targeting = preload("res://scripts/weapons/targeting.gd")
 const PoliceBarricadeScript = preload("res://scripts/companions/police_barricade.gd")
 const CompanionTurretScript = preload("res://scripts/companions/companion_turret.gd")
 
@@ -341,6 +342,7 @@ func _update_passive_regen(delta: float) -> void:
 		return
 	_regen_timer = max(0.25, companion_data.passive_regen_interval)
 
+	@warning_ignore("integer_division")
 	var amount: int = max(1, companion_data.passive_regen + (_medic_heal_bonus / 3))
 	var healed_any: bool = false
 	var range_sq: float = companion_data.passive_regen_range * companion_data.passive_regen_range
@@ -468,22 +470,16 @@ func _find_priority_enemy(near_player: bool) -> Node2D:
 			and global_position.distance_to(_marked_enemy.global_position) <= companion_data.attack_range:
 		return _marked_enemy
 
-	var nearest: Node2D = null
-	var nearest_distance: float = companion_data.attack_range
+	# Apuntado inteligente compartido (Targeting): pondera cercania, amenaza al
+	# lider (peligro real) y marca del policia, en vez de "el mas cercano".
 	var leader: Node2D = _leader()
 	var reference: Vector2 = leader.global_position if near_player and is_instance_valid(leader) else global_position
-
-	for enemy in get_tree().get_nodes_in_group("enemies"):
-		if not is_instance_valid(enemy):
-			continue
-		var distance_from_reference: float = reference.distance_to(enemy.global_position)
-		if distance_from_reference > nearest_distance:
-			continue
-		if global_position.distance_to(enemy.global_position) > companion_data.attack_range * 1.15:
-			continue
-		nearest_distance = distance_from_reference
-		nearest = enemy
-	return nearest
+	var candidates: Array[Dictionary] = Targeting.gather_candidates(
+		get_tree().get_nodes_in_group("enemies"), global_position, reference, companion_data.attack_range)
+	var picked: Dictionary = Targeting.pick_projectile_target(candidates, reference)
+	if picked.is_empty():
+		return null
+	return picked.get("enemy")
 
 
 func _fire_at(target: Node2D) -> void:
@@ -493,7 +489,11 @@ func _fire_at(target: Node2D) -> void:
 	if projectile == null:
 		return
 
-	var direction: Vector2 = global_position.direction_to(target.global_position)
+	# Tiro liderado: intercepta el movimiento del blanco (igual que el jugador).
+	var target_body := target as CharacterBody2D
+	var target_velocity: Vector2 = target_body.velocity if target_body != null else Vector2.ZERO
+	var direction: Vector2 = Targeting.intercept_direction(
+		global_position, target.global_position, target_velocity, companion_data.projectile_speed)
 	projectile.global_position = global_position + direction * 18.0
 	projectile.modulate = companion_data.projectile_color
 	if companion_data.role == &"engineer":

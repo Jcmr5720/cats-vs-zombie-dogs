@@ -7,6 +7,18 @@ extends Resource
 @export var speed: float = 90.0
 @export var contact_damage: int = 10
 @export var xp_value: int = 3
+
+@export_group("Clasificacion (Partidas rapidas por fases)")
+## Categoria de amenaza: &"common" (horda), &"special" (tactico), &"heavy" (puntual).
+@export var tier: StringName = &"common"
+## Rol: &"" = enemigo normal; &"boss_minion" = esbirro invocado por un jefe.
+@export var role: StringName = &""
+## Comportamiento especial (rama en enemy.gd). &"" = persecucion clasica.
+## Valores: flanker, howler, spitter, infection_carrier, pack, armored,
+## charger, splitter, hunter, boss_guardian, boss_healer, boss_exploder.
+@export var behavior: StringName = &""
+## Coste en el presupuesto de amenaza del spawner (fase 7 del diseño).
+@export var threat_cost: float = 1.0
 ## Peso base de aparición (a dificultad 0).
 @export var spawn_weight: float = 1.0
 ## Cuánto crece el peso por cada punto de dificultad. Positivo = aparece

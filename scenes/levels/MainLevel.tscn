@@ -1,4 +1,4 @@
-[gd_scene load_steps=35 format=3 uid="uid://bvc01mainlevel01"]
+[gd_scene load_steps=36 format=3 uid="uid://bvc01mainlevel01"]
 
 [ext_resource type="PackedScene" uid="uid://bvc01hud01" path="res://scenes/ui/HUD.tscn" id="1_hud"]
 [ext_resource type="PackedScene" uid="uid://bvc01player01" path="res://scenes/player/Player.tscn" id="2_player"]
@@ -35,6 +35,7 @@
 [ext_resource type="Script" path="res://scripts/systems/player_manager.gd" id="31_playermgr"]
 [ext_resource type="Script" path="res://scripts/visual/ambient_controller.gd" id="32_ambient"]
 [ext_resource type="Script" path="res://scripts/visual/camera_overlay.gd" id="33_overlay"]
+[ext_resource type="Script" path="res://scripts/systems/phase_director.gd" id="34_phase_director"]
 
 [node name="MainLevel" type="Node2D"]
 
@@ -114,6 +115,15 @@ wave_event_manager_path = NodePath("../WaveEventManager")
 boss_spawner_path = NodePath("../BossSpawner")
 companion_manager_path = NodePath("../CompanionManager")
 obstacle_spawner_path = NodePath("../ObstacleSpawner")
+
+[node name="PhaseDirector" type="Node" parent="."]
+script = ExtResource("34_phase_director")
+hud_path = NodePath("../HUD")
+enemy_spawner_path = NodePath("../EnemySpawner")
+boss_spawner_path = NodePath("../BossSpawner")
+wave_event_manager_path = NodePath("../WaveEventManager")
+map_manager_path = NodePath("../MapManager")
+upgrade_manager_path = NodePath("../UpgradeManager")
 
 [node name="GameManager" type="Node" parent="."]
 script = ExtResource("5_gm")

@@ -5,7 +5,7 @@ extends StaticBody2D
 ## arbol, contenedor, barril, banca, roca, caja, valla, tuberia, arbusto, señal).
 ## Todo con _draw (formas simples), sin assets externos.
 
-const ObstacleData = preload("res://scripts/maps/obstacle_data.gd")
+# ObstacleData es clase global (class_name): se usa sin preload.
 const XP_ORB_SCENE := preload("res://scenes/loot/XPOrb.tscn")
 
 ## Luz global desde el noroeste: las sombras se proyectan al sureste con este
@@ -399,7 +399,7 @@ func _draw_building(body: Color, outline: Color, vr: RandomNumberGenerator) -> v
 
 # --- Resto de categorias ----------------------------------------------------------
 
-func _draw_container(body: Color, detail: Color, outline: Color, accent: Color, vr: RandomNumberGenerator) -> void:
+func _draw_container(body: Color, detail: Color, _outline: Color, accent: Color, vr: RandomNumberGenerator) -> void:
 	_drop_shadow(Vector2(_size.x * 0.52, _size.y * 0.52), 0.7)
 	_rect(_size, body)
 	# Techo corrugado: lineas transversales alternando tono.
@@ -539,7 +539,7 @@ func _draw_pipe(body: Color, detail: Color, outline: Color, accent: Color) -> vo
 	_rect(Vector2(_size.x * 0.1, _size.y + 6), detail, Vector2(_size.x * 0.42, 0))
 
 
-func _draw_sign(body: Color, detail: Color, outline: Color, accent: Color) -> void:
+func _draw_sign(_body: Color, detail: Color, outline: Color, accent: Color) -> void:
 	_drop_shadow(Vector2(_size.x * 0.4, _size.y * 0.3), 0.5)
 	# Poste.
 	_rect(Vector2(_size.x * 0.14, _size.y), Color(0.4, 0.4, 0.44))

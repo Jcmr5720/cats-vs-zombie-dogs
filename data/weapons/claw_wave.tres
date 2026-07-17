@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1_wdata"]
+
+[resource]
+script = ExtResource("1_wdata")
+id = &"claw_wave"
+display_name = "Onda de Garras"
+description = "Zarpazo que viaja recto y atraviesa 4 enemigos."
+weapon_type = &"boomerang"
+damage = 6
+cooldown = 0.9
+range = 500.0
+projectile_speed = 540.0
+projectile_count = 1
+spread_degrees = 6.0
+pierce = 4
+knockback = 100.0
+visual_color = Color(1, 0.65, 0.35, 1)
+rarity = &"rare"
+rarity_weight = 0.5
+max_level = 5

@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1_wdata"]
+
+[resource]
+script = ExtResource("1_wdata")
+id = &"black_hole_yarn"
+display_name = "Ovillo Agujero Negro"
+description = "Zona que ATRAE y dana a los enemigos. Evolucion del Ovillo Explosivo."
+weapon_type = &"area"
+damage = 10
+cooldown = 2.4
+range = 480.0
+projectile_count = 1
+area_radius = 140.0
+duration = 2.5
+tick_interval = 0.4
+knockback = -170.0
+visual_color = Color(0.62, 0.35, 0.95, 1)
+rarity = &"legendary"
+rarity_weight = 0.0
+max_level = 3

@@ -6,8 +6,7 @@ extends RefCounted
 ## funciones puras sobre coordenadas GLOBALES: los chunks vecinos comparten las
 ## mismas lineas y todo continua sin costuras en las fronteras.
 
-const WorldSeedManager = preload("res://scripts/maps/world_seed_manager.gd")
-const CityPlan = preload("res://scripts/maps/city_plan.gd")
+# WorldSeedManager y CityPlan son clases globales (class_name): sin preload.
 const CHUNK_SIZE := Vector2(1024.0, 1024.0)
 
 

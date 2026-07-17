@@ -8,6 +8,7 @@ extends Node
 ##
 ## No usa servidor, ni Supabase, ni Steam Cloud. Solo disco local.
 
+@warning_ignore("shadowed_global_identifier")
 const SaveData = preload("res://scripts/save/save_data.gd")
 
 const SAVE_PATH: String = "user://cats_vs_zombie_dogs_save.json"

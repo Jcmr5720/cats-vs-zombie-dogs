@@ -43,13 +43,17 @@ obstacle_field_radius = 1700.0
 allow_large_blocks = false
 road_layout_type = &"none"
 road_half_width = 150.0
-boss_spawn_time = 720.0
-miniboss_times = PackedFloat32Array(150, 390)
-duration_seconds = 720.0
-survive_seconds = 720.0
-require_defeat_boss = false
-rescue_cats_required = 3
-defeat_minibosses_required = 2
-objective_description = "Rescata 3 gatos y derrota 2 centinelas"
+phase_weight_overrides = {
+&"infection_carrier_dog": 2.0,
+&"howler_zombie_dog": 1.3
+}
+boss_spawn_time = 0.0
+miniboss_times = PackedFloat32Array()
+duration_seconds = 300.0
+survive_seconds = 0.0
+require_defeat_boss = true
+rescue_cats_required = 0
+defeat_minibosses_required = 0
+objective_description = "Limpia el nido: derrota al jefe de la plaga"
 victory_message = "El nido cayo"
 game_over_message = "El parque se cerro"

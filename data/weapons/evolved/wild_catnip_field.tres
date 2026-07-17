@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1_wdata"]
+
+[resource]
+script = ExtResource("1_wdata")
+id = &"wild_catnip_field"
+display_name = "Campo de Hierba Salvaje"
+description = "Zona gigante de danio sostenido. Evolucion de la Granada de Catnip."
+weapon_type = &"area"
+damage = 8
+cooldown = 2.6
+range = 460.0
+projectile_count = 1
+area_radius = 176.0
+duration = 3.5
+tick_interval = 0.3
+knockback = 40.0
+visual_color = Color(0.45, 1, 0.35, 1)
+rarity = &"legendary"
+rarity_weight = 0.0
+max_level = 3

@@ -5,11 +5,13 @@
 [resource]
 script = ExtResource("1_enemy_data")
 id = &"zombie_dog"
-display_name = "Zombie Dog"
+display_name = "Mordedor"
 max_health = 20
 speed = 90.0
 contact_damage = 10
 xp_value = 3
+tier = &"common"
+threat_cost = 1.0
 spawn_weight = 0.75
 weight_growth = 0.0
 body_color = Color(0.32, 0.49, 0.29, 1)

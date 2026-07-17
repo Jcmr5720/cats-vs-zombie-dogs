@@ -7,7 +7,9 @@ extends Node
 ## placed_slots, seen_tutorial, total_spent). Compatible con saves antiguos:
 ## si falta, se crean valores por defecto.
 
+@warning_ignore("shadowed_global_identifier")
 const ShelterItemData = preload("res://scripts/shelter/shelter_item_data.gd")
+@warning_ignore("shadowed_global_identifier")
 const ShelterBonusCalculator = preload("res://scripts/shelter/shelter_bonus_calculator.gd")
 
 signal shelter_items_changed()

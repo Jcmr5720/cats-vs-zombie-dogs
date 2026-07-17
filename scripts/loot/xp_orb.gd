@@ -33,7 +33,7 @@ var _collected: bool = false
 func _ready() -> void:
 	add_to_group("xp_orbs")
 	_velocity = pop_velocity
-	_player = get_tree().get_first_node_in_group("player")
+	_player = _nearest_active_player()
 	# Control de saturacion: si ya hay demasiados orbes, funde este con el mas
 	# cercano para no perder XP y no crear nodos sin limite.
 	if get_tree().get_node_count_in_group("xp_orbs") > max_xp_orbs:
@@ -72,8 +72,10 @@ func _process(delta: float) -> void:
 		var pulse: float = 1.0 + sin(_time * 4.5) * 0.12
 		_visual.scale = Vector2(pulse, pulse)
 
-	if not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player")
+	# Coop (Rework): el iman apunta al jugador ACTIVO mas cercano, no siempre al
+	# P1. Se reevalua cada frame (2 jugadores: costo despreciable); asi el orbe
+	# nunca cruza la pantalla hacia el jugador equivocado ni ignora al P2.
+	_player = _nearest_active_player()
 
 	if is_instance_valid(_player):
 		var to_player: Vector2 = _player.global_position - global_position
@@ -111,6 +113,25 @@ func nudge_toward(target: Vector2, speed: float) -> void:
 	var direction: Vector2 = global_position.direction_to(target)
 	if direction != Vector2.ZERO:
 		_velocity = direction * speed
+
+
+## Jugador activo (ni muerto ni derribado) mas cercano al orbe. En solo devuelve
+## al unico jugador; si nadie esta activo, cae al grupo clasico "player".
+func _nearest_active_player() -> Node2D:
+	var best: Node2D = null
+	var best_sq: float = INF
+	for p in get_tree().get_nodes_in_group("players"):
+		if not is_instance_valid(p) or not (p is Node2D):
+			continue
+		if p.has_method("is_active") and not p.is_active():
+			continue
+		var d: float = global_position.distance_squared_to((p as Node2D).global_position)
+		if d < best_sq:
+			best_sq = d
+			best = p
+	if best == null:
+		best = get_tree().get_first_node_in_group("player") as Node2D
+	return best
 
 
 func _player_pickup_radius() -> float:

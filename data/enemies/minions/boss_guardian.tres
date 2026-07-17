@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemies/enemy_data.gd" id="1_enemy_data"]
+
+[resource]
+script = ExtResource("1_enemy_data")
+id = &"boss_guardian"
+display_name = "Guardian"
+max_health = 90
+speed = 90.0
+contact_damage = 10
+xp_value = 6
+tier = &"special"
+role = &"boss_minion"
+behavior = &"boss_guardian"
+threat_cost = 6.0
+spawn_weight = 0.0
+weight_growth = 0.0
+body_color = Color(0.3, 0.32, 0.42, 1)
+accent_color = Color(0.5, 0.55, 0.7, 1)
+eye_color = Color(0.5, 0.7, 1, 1)
+visual_scale = Vector2(1.25, 1.2)

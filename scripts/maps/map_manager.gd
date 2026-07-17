@@ -9,10 +9,9 @@ extends Node
 ## que todo (decoracion, objetivos, eventos, jefes) queda limpio sin codigo extra.
 
 const MapData = preload("res://scripts/maps/map_data.gd")
-const WorldSeedManager = preload("res://scripts/maps/world_seed_manager.gd")
 const RunSummary = preload("res://scripts/systems/run_summary.gd")
 const StoryCampaign = preload("res://scripts/story/story_campaign.gd")
-const FreePlayScore = preload("res://scripts/systems/free_play_score.gd")
+# WorldSeedManager y FreePlayScore son clases globales (class_name): sin preload.
 
 ## Mapa que se desbloquea al asegurar cada zona (progresion simple, Fase 07).
 const NEXT_MAP_UNLOCK: Dictionary = {
@@ -40,9 +39,12 @@ static var _selected_map_index: int = -1
 
 @export_group("Balance coop (Fase Coop 1.5)")
 ## Multiplicadores aplicados a los enemigos en coop local (partida libre).
-@export var coop_pressure_multiplier: float = 1.25
-@export var coop_enemy_health_multiplier: float = 1.45
-@export var coop_enemy_damage_multiplier: float = 1.15
+## Fase correccion: la presion coop entra UNA sola vez (bono plano de score en
+## GameBalance.COOP_SCORE_BONUS): este multiplicador de presion queda en 1.0
+## (antes 1.25 se sumaba ENCIMA del bono y de los techos ampliados = triple).
+@export var coop_pressure_multiplier: float = GameBalance.COOP_PRESSURE_MULT
+@export var coop_enemy_health_multiplier: float = GameBalance.COOP_ENEMY_HEALTH_MULT
+@export var coop_enemy_damage_multiplier: float = GameBalance.COOP_ENEMY_DAMAGE_MULT
 
 var _map: MapData
 ## Semilla efectiva del mundo de esta run (de GameFlow o fallback determinista).
@@ -104,6 +106,18 @@ func _resolve_active_map() -> MapData:
 
 func is_run_ended() -> bool:
 	return _run_ended
+
+
+## Mapa/bioma activo de la run (lo consulta el PhaseDirector para la identidad
+## de composicion por mapa).
+func get_active_map() -> MapData:
+	return _map
+
+
+## Fin de partida forzado por un sistema externo (PhaseDirector: derrota por
+## limite absoluto de tiempo). Reusa el flujo unificado de recompensas/panel.
+func force_run_end(victory: bool) -> void:
+	_finish_run(victory)
 
 
 func get_world_seed() -> int:
@@ -554,6 +568,7 @@ func _show_objective_event(text: String) -> void:
 
 func _format_time(seconds: float) -> String:
 	var total: int = int(ceil(seconds))
+	@warning_ignore("integer_division")
 	return "%02d:%02d" % [total / 60, total % 60]
 
 

@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="BossData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/bosses/boss_data.gd" id="1_bdata"]
+
+[resource]
+script = ExtResource("1_bdata")
+id = &"swamp_mastiff"
+display_name = "Mastin del Pantano"
+boss_type = &"boss"
+max_health = 1500
+move_speed = 62.0
+contact_damage = 16
+attack_damage = 32
+attack_cooldown = 4.5
+attack_range = 1100.0
+knockback = 300.0
+xp_reward = 200
+visual_color = Color(0.24, 0.38, 0.26, 1)
+accent_color = Color(0.6, 1, 0.35, 1)
+visual_scale = 1.1
+minion_classes = Array[StringName]([&"boss_healer"])
+elite_name = "Mastin del Pantano Putrefacto"
+elite_leaves_hazard = true
+phase_thresholds = PackedFloat32Array(0.75, 0.5, 0.25)
+spawn_time = 200.0
+difficulty_multiplier = 0.08

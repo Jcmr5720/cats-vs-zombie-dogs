@@ -16,6 +16,8 @@ const WEAPON_REGISTRY: Array[String] = [
 	"res://data/weapons/laser_pointer.tres",
 	"res://data/weapons/spin_scratcher.tres",
 	"res://data/weapons/catnip_grenade.tres",
+	"res://data/weapons/hairball_launcher.tres",
+	"res://data/weapons/claw_wave.tres",
 ]
 const STARTING_WEAPON: String = "res://data/weapons/cat_pistol.tres"
 
@@ -108,6 +110,60 @@ func level_up_weapon(weapon_id: StringName) -> bool:
 	return true
 
 
+## Evoluciona un arma a su WeaponData de evolucion (data.evolution), conservando
+## el "slot": se libera el arma vieja y la nueva entra aunque el maximo este lleno.
+## La validacion de requisitos (nivel maximo + carta de stat) la hace el
+## UpgradeManager; aqui solo se ejecuta el reemplazo con juice.
+func evolve_weapon(weapon_id: StringName) -> bool:
+	var weapon := get_weapon(weapon_id)
+	if weapon == null or weapon.data == null or weapon.data.evolution == null:
+		return false
+	var evolved: WeaponData = weapon.data.evolution as WeaponData
+	if evolved == null or has_weapon(evolved.id):
+		return false
+
+	var index: int = _weapons.find(weapon)
+	if index >= 0:
+		_weapons.remove_at(index)
+	weapon.queue_free()
+
+	var new_weapon := WEAPON_BASE_SCENE.instantiate() as Node2D
+	if new_weapon == null:
+		return false
+	add_child(new_weapon)
+	new_weapon.call("setup", evolved, self, _player)
+	_weapons.insert(clampi(index, 0, _weapons.size()), new_weapon)
+	_emit_weapons_changed()
+
+	# Juice: la evolucion es EL momento de la partida (hitstop + shake + destello).
+	Feedback.hitstop(0.14, 0.08)
+	Feedback.shake(0.8)
+	if is_instance_valid(_player):
+		Feedback.hit_effect(_player.global_position, Color(1.0, 0.85, 0.3, 0.95), 0.5, 2.4)
+		Feedback.hit_effect(_player.global_position, evolved.visual_color, 0.35, 1.8)
+	if _hud != null and _hud.has_method("show_event_message"):
+		_hud.show_event_message("¡EVOLUCION: %s!" % evolved.display_name)
+	var audio: Node = get_node_or_null("/root/AudioManager")
+	if audio != null and audio.has_method("play_sfx"):
+		audio.play_sfx(&"level_up")
+	return true
+
+
+## Armas del jugador listas para evolucionar: nivel maximo + evolucion definida +
+## la evolucion aun no esta en juego. El requisito de carta lo valida quien llama.
+func get_evolution_ready_weapons() -> Array:
+	var result: Array = []
+	for weapon in _weapons:
+		if not is_instance_valid(weapon) or weapon.data == null:
+			continue
+		if not weapon.is_max_level() or weapon.data.evolution == null:
+			continue
+		var evolved: WeaponData = weapon.data.evolution as WeaponData
+		if evolved != null and not has_weapon(evolved.id):
+			result.append(weapon)
+	return result
+
+
 func has_weapon(weapon_id: StringName) -> bool:
 	return get_weapon(weapon_id) != null
 
@@ -143,8 +199,13 @@ func get_available_new_weapons() -> Array:
 		return result
 	for path in WEAPON_REGISTRY:
 		var data: WeaponData = load(path)
-		if data != null and not has_weapon(data.id):
-			result.append(data)
+		if data == null or has_weapon(data.id):
+			continue
+		# No re-ofrecer un arma base si su evolucion ya esta en juego.
+		var evolved := data.evolution as WeaponData
+		if evolved != null and has_weapon(evolved.id):
+			continue
+		result.append(data)
 	return result
 
 

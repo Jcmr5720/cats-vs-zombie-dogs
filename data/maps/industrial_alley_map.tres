@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="MapData" load_steps=7 format=3]
+[gd_resource type="Resource" script_class="MapData" load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/maps/map_data.gd" id="1_mdata"]
 [ext_resource type="Resource" path="res://data/obstacles/in_container.tres" id="2_container"]
@@ -6,6 +6,7 @@
 [ext_resource type="Resource" path="res://data/obstacles/in_pipe.tres" id="4_pipe"]
 [ext_resource type="Resource" path="res://data/obstacles/in_wall.tres" id="5_wall"]
 [ext_resource type="Resource" path="res://data/obstacles/in_block.tres" id="6_block"]
+[ext_resource type="Resource" path="res://data/bosses/junkyard_alpha.tres" id="7_boss"]
 
 [resource]
 script = ExtResource("1_mdata")
@@ -48,13 +49,19 @@ obstacle_field_radius = 1500.0
 allow_large_blocks = true
 road_layout_type = &"none"
 road_half_width = 130.0
-boss_spawn_time = 900.0
-miniboss_times = PackedFloat32Array(120, 300, 540)
-duration_seconds = 900.0
-survive_seconds = 900.0
-require_defeat_boss = false
+phase_weight_overrides = {
+&"tank_zombie_dog": 1.8,
+&"charger_zombie_dog": 1.6,
+&"splitter_zombie_dog": 1.2
+}
+boss_data = ExtResource("7_boss")
+boss_spawn_time = 0.0
+miniboss_times = PackedFloat32Array()
+duration_seconds = 300.0
+survive_seconds = 0.0
+require_defeat_boss = true
 rescue_cats_required = 0
-defeat_minibosses_required = 2
-objective_description = "Derrota 2 mini-jefes"
+defeat_minibosses_required = 0
+objective_description = "Resiste las fases y derrota al Alfa de la Chatarra"
 victory_message = "Callejon asegurado"
 game_over_message = "Zona tomada"

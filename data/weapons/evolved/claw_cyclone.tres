@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1_wdata"]
+
+[resource]
+script = ExtResource("1_wdata")
+id = &"claw_cyclone"
+display_name = "Ciclon de Garras"
+description = "Seis garras giratorias en un radio enorme. Evolucion del Rascador."
+weapon_type = &"orbital"
+damage = 12
+cooldown = 0.4
+range = 170.0
+projectile_count = 5
+area_radius = 126.0
+tick_interval = 0.35
+knockback = 110.0
+visual_color = Color(0.55, 0.85, 1, 1)
+rarity = &"legendary"
+rarity_weight = 0.0
+max_level = 3

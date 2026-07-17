@@ -46,13 +46,17 @@ obstacle_field_radius = 1600.0
 allow_large_blocks = true
 road_layout_type = &"cross"
 road_half_width = 160.0
+phase_weight_overrides = {
+&"pack_zombie_dog": 1.5,
+&"flanker_zombie_dog": 1.4
+}
 boss_spawn_time = 0.0
-miniboss_times = PackedFloat32Array(120, 300)
-duration_seconds = 480.0
-survive_seconds = 480.0
-require_defeat_boss = false
+miniboss_times = PackedFloat32Array()
+duration_seconds = 300.0
+survive_seconds = 0.0
+require_defeat_boss = true
 rescue_cats_required = 0
 defeat_minibosses_required = 0
-objective_description = "Resiste el asedio de la segunda ola"
+objective_description = "Resiste el asedio y derrota al jefe de la ola"
 victory_message = "El barrio resistio"
 game_over_message = "La noche gano"

@@ -204,15 +204,54 @@ static func make_section_header(text: String, accent: Color = ACCENT) -> Control
 	return row
 
 
+## Botón "Volver" estándar: píldora con chevron dibujado + texto, igual en TODAS
+## las pantallas (antes era un cuadrado solo-icono poco legible).
+static func make_back_button(on_back: Callable, accent: Color = TEXT) -> Button:
+	var button := Button.new()
+	button.text = "Volver"
+	button.tooltip_text = "ESC"
+	button.custom_minimum_size = Vector2(118, 44)
+	button.focus_mode = Control.FOCUS_ALL
+	button.add_theme_font_size_override("font_size", FS_BODY)
+	button.add_theme_color_override("font_color", TEXT)
+	button.add_theme_color_override("font_hover_color", TEXT)
+	button.add_theme_color_override("font_pressed_color", TEXT)
+	button.add_theme_color_override("font_focus_color", TEXT)
+	for state in ["normal", "hover", "pressed", "focus"]:
+		var box := StyleBoxFlat.new()
+		var hovered: bool = state != "normal"
+		box.bg_color = Color(1, 1, 1, 0.10) if hovered else Color(1, 1, 1, 0.04)
+		box.border_color = Color(accent.r, accent.g, accent.b, 0.62 if hovered else 0.30)
+		box.set_border_width_all(1)
+		box.set_corner_radius_all(22)
+		box.content_margin_left = 34.0
+		box.content_margin_right = 16.0
+		box.content_margin_top = 8.0
+		box.content_margin_bottom = 8.0
+		button.add_theme_stylebox_override(state, box)
+	# Chevron dibujado a la izquierda del texto.
+	var glyph := IconDrawer.new()
+	glyph.icon_type = &"back"
+	glyph.accent = TEXT
+	glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	glyph.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
+	glyph.offset_left = 12.0
+	glyph.offset_right = 28.0
+	glyph.offset_top = 13.0
+	glyph.offset_bottom = -13.0
+	button.add_child(glyph)
+	button.pressed.connect(on_back)
+	_wire_button_feedback(button)
+	return button
+
+
 ## Barra superior estándar: retorno a la izquierda + título + zona de acciones a
 ## la derecha (accesible con `bar.get_node("Actions")`). Da navegación coherente.
 static func make_top_bar(title: String, on_back: Callable = Callable(), accent: Color = ACCENT) -> HBoxContainer:
 	var bar := HBoxContainer.new()
 	bar.add_theme_constant_override("separation", GAP_M)
 	if on_back.is_valid():
-		var back := make_icon_button(&"back", "Volver  (ESC)", TEXT)
-		back.pressed.connect(on_back)
-		bar.add_child(back)
+		bar.add_child(make_back_button(on_back, accent))
 	var label := make_title(title, FS_H1, accent)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER

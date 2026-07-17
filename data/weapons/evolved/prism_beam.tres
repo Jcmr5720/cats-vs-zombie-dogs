@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1_wdata"]
+
+[resource]
+script = ExtResource("1_wdata")
+id = &"prism_beam"
+display_name = "Rayo Prisma"
+description = "El rayo salta en cadena hasta 4 enemigos. Evolucion del Puntero Laser."
+weapon_type = &"laser"
+damage = 30
+cooldown = 1.4
+range = 660.0
+projectile_count = 1
+pierce = 3
+knockback = 40.0
+visual_color = Color(1, 0.55, 0.85, 1)
+rarity = &"legendary"
+rarity_weight = 0.0
+max_level = 3

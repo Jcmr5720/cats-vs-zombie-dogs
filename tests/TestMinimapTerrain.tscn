@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bvc99terraintest"]
+
+[ext_resource type="Script" path="res://tests/test_minimap_terrain.gd" id="1_test"]
+
+[node name="TestMinimapTerrain" type="Node2D"]
+script = ExtResource("1_test")

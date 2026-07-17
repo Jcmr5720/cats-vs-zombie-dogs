@@ -5,7 +5,9 @@ extends Control
 ## "Jugar". La dificultad se elige en un overlay centrado al pulsar Jugar. Toda la
 ## lógica de StoryCampaign (desbloqueos, tiers, recompensas, abandono) se conserva.
 
+@warning_ignore("shadowed_global_identifier")
 const MenuTheme = preload("res://scripts/menus/menu_theme.gd")
+@warning_ignore("shadowed_global_identifier")
 const StoryCampaign = preload("res://scripts/story/story_campaign.gd")
 
 var _save: Node

@@ -1,9 +1,14 @@
 extends CharacterBody2D
 ## Mini-jefe (Bulldog Bruto Zombi). Mas grande, mas vida y mas lento que un enemigo
-## normal; pega fuerte por contacto y empuja al jugador. No tiene fases ni patrones
-## complejos: su rol es ser un "elite" que se nota. Vive en el grupo "enemies"
+## normal; pega fuerte por contacto y empuja al jugador. Vive en el grupo "enemies"
 ## (para recibir daño de todas las armas) y "miniboss" (para limpieza). Muestra una
 ## barra de vida pequena propia encima.
+##
+## Partidas rapidas: ahora tiene DOS patrones propios, ambos telegrafiados:
+## - Habilidad principal: ONDA EXPANSIVA (anillo de aviso creciente y golpe en
+##   area alrededor suyo; se esquiva saliendo del anillo).
+## - Ataque secundario: EMBESTIDA CORTA (pausa de apuntado y acelera en recta).
+## Al derrotarlo entrega una Mutacion (la orquesta el PhaseDirector).
 
 const BossData = preload("res://scripts/bosses/boss_data.gd")
 const XP_ORB_SCENE := preload("res://scenes/loot/XPOrb.tscn")
@@ -14,16 +19,36 @@ const MAX_HEALTH_CAP: int = 4000
 
 @export var contact_range: float = 52.0
 ## Multiplicador de vida del mini-jefe en coop local (Fase Coop 1.5). 1.0 en solo.
+## (Obsoleto, Fase correccion: la vida coop de jefes vive en GameBalance.BOSS_COOP_HEALTH_MULT.)
 @export var coop_health_mult: float = 1.45
 
 var data: BossData
 var max_health: int = 320
 var current_health: int = 320
 
+enum MBState { CHASE, SLAM_WINDUP, LUNGE_WINDUP, LUNGE }
+
+## Radio de la onda expansiva (px de mundo) y tiempos de los patrones.
+const SLAM_RADIUS: float = 150.0
+const SLAM_WINDUP_TIME: float = 0.9
+const LUNGE_WINDUP_TIME: float = 0.5
+const LUNGE_TIME: float = 0.4
+const ATTACK_COOLDOWN: float = 4.5
+
 var _player: Node2D
 var _is_dead: bool = false
 var _contact_timer: float = 0.0
 var _anim_time: float = 0.0
+
+# --- Patrones (Partidas rapidas) ---
+var _mb_state: int = MBState.CHASE
+var _mb_timer: float = 0.0
+var _attack_timer: float = 3.0
+## Alterna: onda expansiva (principal) <-> embestida corta (secundario).
+var _next_is_slam: bool = true
+var _slam_ring: Polygon2D
+var _lunge_dir: Vector2 = Vector2.ZERO
+var _lunge_hit: bool = false
 var _flash_tween: Tween
 ## Ángulo visual suavizado (el Visual rota; el cuerpo se voltea al mirar a la izquierda).
 var _face_angle: float = 0.0
@@ -56,9 +81,12 @@ func _ready() -> void:
 
 func configure(boss_data: BossData, difficulty_score: float) -> void:
 	data = boss_data
-	var scaled: float = data.max_health * (1.0 + max(0.0, difficulty_score) * data.difficulty_multiplier)
+	# Doble techo centralizado (GameBalance): factor por score + px absolutos.
+	var factor: float = minf(GameBalance.MINIBOSS_HEALTH_SCORE_FACTOR_CAP,
+		1.0 + max(0.0, difficulty_score) * data.difficulty_multiplier)
+	var scaled: float = data.max_health * factor
 	if _is_coop():
-		scaled *= coop_health_mult
+		scaled *= GameBalance.BOSS_COOP_HEALTH_MULT
 	max_health = clampi(int(round(scaled)), data.max_health, MAX_HEALTH_CAP)
 	current_health = max_health
 	if is_node_ready():
@@ -95,14 +123,143 @@ func _physics_process(delta: float) -> void:
 	if _contact_timer > 0.0:
 		_contact_timer -= delta
 
-	var dir: Vector2 = _steered_direction(_player.global_position)
-	_avoid = _avoid.move_toward(Vector2.ZERO, data.move_speed * 3.0 * delta)
-	velocity = dir * data.move_speed + _avoid
-	move_and_slide()
-	_update_stuck_state(delta)
-	_face_angle = lerp_angle(_face_angle, dir.angle(), 0.10)
+	match _mb_state:
+		MBState.SLAM_WINDUP:
+			_mb_slam_windup(delta)
+		MBState.LUNGE_WINDUP:
+			_mb_lunge_windup(delta)
+		MBState.LUNGE:
+			_mb_lunge(delta)
+		_:
+			var dir: Vector2 = _steered_direction(_player.global_position)
+			_avoid = _avoid.move_toward(Vector2.ZERO, data.move_speed * 3.0 * delta)
+			velocity = dir * data.move_speed + _avoid
+			move_and_slide()
+			_update_stuck_state(delta)
+			_face_angle = lerp_angle(_face_angle, dir.angle(), 0.10)
+			_contact()
+			# Alterna sus dos patrones cuando el jugador esta a rango util.
+			_attack_timer -= delta
+			if _attack_timer <= 0.0:
+				var d: float = global_position.distance_to(_player.global_position)
+				if _next_is_slam and d < SLAM_RADIUS * 1.4:
+					_start_slam()
+				elif not _next_is_slam and d < 420.0:
+					_start_lunge()
 	_animate(delta)
-	_contact()
+
+
+# --- Patrones -------------------------------------------------------------------
+
+func _start_slam() -> void:
+	_mb_state = MBState.SLAM_WINDUP
+	_mb_timer = SLAM_WINDUP_TIME
+	_next_is_slam = false
+	_ensure_slam_ring()
+	_slam_ring.visible = true
+	_play_alert()
+
+
+func _mb_slam_windup(delta: float) -> void:
+	velocity = velocity.move_toward(Vector2.ZERO, data.move_speed * 6.0 * delta)
+	move_and_slide()
+	_mb_timer -= delta
+	# El anillo crece hasta el radio real del golpe y pulsa: aviso inconfundible.
+	if is_instance_valid(_slam_ring):
+		var t: float = 1.0 - _mb_timer / SLAM_WINDUP_TIME
+		_slam_ring.scale = Vector2.ONE * maxf(0.15, t)
+		_slam_ring.modulate.a = 0.5 + 0.5 * absf(sin(t * 14.0))
+	if _mb_timer <= 0.0:
+		_do_slam()
+
+
+func _do_slam() -> void:
+	_mb_state = MBState.CHASE
+	_attack_timer = ATTACK_COOLDOWN
+	if is_instance_valid(_slam_ring):
+		_slam_ring.visible = false
+	Feedback.shake(0.35)
+	Feedback.hit_effect(global_position, Color(1.0, 0.7, 0.25, 0.9), 0.7, 3.6)
+	Feedback.hit_effect(global_position, Color(1.0, 0.85, 0.5, 0.6), 0.35, 2.0)
+	# Golpe en area: jugadores y companeros dentro del anillo.
+	for p in get_tree().get_nodes_in_group("players"):
+		if not is_instance_valid(p) or not (p is Node2D):
+			continue
+		if global_position.distance_to((p as Node2D).global_position) <= SLAM_RADIUS:
+			if p.has_method("take_damage"):
+				p.take_damage(data.contact_damage)
+			if p.has_method("apply_knockback"):
+				p.apply_knockback(global_position.direction_to((p as Node2D).global_position) * data.knockback * 1.2)
+	for c in get_tree().get_nodes_in_group("companions"):
+		if not is_instance_valid(c) or not c.has_method("take_damage"):
+			continue
+		if not c.has_method("can_be_targeted") or not c.can_be_targeted():
+			continue
+		if global_position.distance_to((c as Node2D).global_position) <= SLAM_RADIUS:
+			c.take_damage(data.contact_damage, global_position.direction_to((c as Node2D).global_position))
+
+
+func _start_lunge() -> void:
+	_mb_state = MBState.LUNGE_WINDUP
+	_mb_timer = LUNGE_WINDUP_TIME
+	_next_is_slam = true
+	_lunge_dir = global_position.direction_to(_player.global_position)
+	_play_alert()
+	Feedback.hit_effect(global_position, Color(1.0, 0.5, 0.2, 0.7), 0.4, 1.8)
+
+
+func _mb_lunge_windup(delta: float) -> void:
+	velocity = velocity.move_toward(Vector2.ZERO, data.move_speed * 6.0 * delta)
+	move_and_slide()
+	# Reapunta levemente hasta el ultimo instante (aviso legible, no teledirigido).
+	_lunge_dir = _lunge_dir.lerp(global_position.direction_to(_player.global_position), 0.06).normalized()
+	_face_angle = lerp_angle(_face_angle, _lunge_dir.angle(), 0.2)
+	_mb_timer -= delta
+	if _mb_timer <= 0.0:
+		_mb_state = MBState.LUNGE
+		_mb_timer = LUNGE_TIME
+		_lunge_hit = false
+
+
+func _mb_lunge(delta: float) -> void:
+	velocity = _lunge_dir * data.move_speed * 4.5
+	var collided := move_and_slide()
+	_face_angle = lerp_angle(_face_angle, _lunge_dir.angle(), 0.3)
+	if not _lunge_hit and global_position.distance_to(_player.global_position) <= contact_range + 16.0:
+		if _player.has_method("take_damage"):
+			_player.take_damage(data.contact_damage)
+		if _player.has_method("apply_knockback"):
+			_player.apply_knockback(global_position.direction_to(_player.global_position) * data.knockback)
+		_lunge_hit = true
+	_mb_timer -= delta
+	if _mb_timer <= 0.0 or collided:
+		_mb_state = MBState.CHASE
+		_attack_timer = ATTACK_COOLDOWN * 0.85
+
+
+## Anillo de aviso de la onda expansiva (radio real del golpe, compensando la
+## escala del nodo: los hijos heredan visual_scale).
+func _ensure_slam_ring() -> void:
+	if _slam_ring != null:
+		return
+	_slam_ring = Polygon2D.new()
+	var pts := PackedVector2Array()
+	var r: float = SLAM_RADIUS / maxf(scale.x, 0.01)
+	for i in 40:
+		var a: float = TAU * float(i) / 40.0
+		pts.append(Vector2(cos(a), sin(a)) * r)
+	# Anillo (poligono con agujero simulado: dos vueltas) — suficiente y barato:
+	# un disco translucido con borde mas marcado via self_modulate.
+	_slam_ring.polygon = pts
+	_slam_ring.color = Color(1.0, 0.55, 0.2, 0.18)
+	_slam_ring.z_index = -1
+	add_child(_slam_ring)
+
+
+func _play_alert() -> void:
+	var audio: Node = get_node_or_null("/root/AudioManager")
+	if audio != null and audio.has_method("play_sfx"):
+		audio.play_sfx(&"event_alert")
 
 
 func _steered_direction(target_position: Vector2) -> Vector2:
@@ -204,7 +361,7 @@ func _die() -> void:
 	_drop_reward()
 	Feedback.shake(0.3)
 	Feedback.hit_effect(global_position, data.accent_color, 0.8, 3.5)
-	Feedback.death_burst(global_position, data.body_color if data != null else Color(0.5, 0.6, 0.45), 8)
+	Feedback.death_burst(global_position, data.visual_color if data != null else Color(0.5, 0.6, 0.45), 8)
 	Feedback.hitstop(0.09, 0.07)
 	var missions: Node = get_node_or_null("/root/Missions")
 	if missions != null:

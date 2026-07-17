@@ -199,9 +199,15 @@ func _is_ui_glyph(t: StringName) -> bool:
 
 
 func _draw_back(c: Vector2, r: float, col: Color) -> void:
-	var w: float = maxf(3.0, r * 0.34)
-	draw_line(c + Vector2(r * 0.5, -r * 0.62), c + Vector2(-r * 0.42, 0), col, w)
-	draw_line(c + Vector2(-r * 0.42, 0), c + Vector2(r * 0.5, r * 0.62), col, w)
+	# Chevron fino y antialiasado (polyline con union continua): a tamaños
+	# pequeños el draw_line grueso sin AA se veia como una mancha.
+	var w: float = maxf(2.0, r * 0.20)
+	var points := PackedVector2Array([
+		c + Vector2(r * 0.34, -r * 0.58),
+		c + Vector2(-r * 0.38, 0),
+		c + Vector2(r * 0.34, r * 0.58),
+	])
+	draw_polyline(points, col, w, true)
 
 
 func _draw_close(c: Vector2, r: float, col: Color) -> void:

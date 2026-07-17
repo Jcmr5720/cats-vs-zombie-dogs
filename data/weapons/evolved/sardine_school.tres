@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1_wdata"]
+
+[resource]
+script = ExtResource("1_wdata")
+id = &"sardine_school"
+display_name = "Banco de Sardinas"
+description = "Triple sardina que atraviesa hordas enteras. Evolucion del Boomerang."
+weapon_type = &"boomerang"
+damage = 13
+cooldown = 0.7
+range = 560.0
+projectile_speed = 560.0
+projectile_count = 3
+spread_degrees = 10.0
+pierce = 8
+knockback = 110.0
+visual_color = Color(0.4, 0.95, 1, 1)
+rarity = &"legendary"
+rarity_weight = 0.0
+max_level = 3

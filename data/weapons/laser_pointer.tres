@@ -1,9 +1,12 @@
-[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="WeaponData" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1_wdata"]
+[ext_resource type="Resource" path="res://data/weapons/evolved/prism_beam.tres" id="2_evo"]
 
 [resource]
 script = ExtResource("1_wdata")
+evolution = ExtResource("2_evo")
+evolution_requirement = &"weapon_damage"
 id = &"laser_pointer"
 display_name = "Puntero Laser"
 description = "Rayo instantaneo de alto dano al mas cercano."

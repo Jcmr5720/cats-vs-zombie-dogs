@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemies/enemy_data.gd" id="1_enemy_data"]
+
+[resource]
+script = ExtResource("1_enemy_data")
+id = &"infection_carrier_dog"
+display_name = "Portador de Infeccion"
+max_health = 24
+speed = 95.0
+contact_damage = 8
+xp_value = 8
+tier = &"special"
+behavior = &"infection_carrier"
+threat_cost = 3.0
+spawn_weight = 0.0
+weight_growth = 0.0
+body_color = Color(0.42, 0.6, 0.28, 1)
+accent_color = Color(0.6, 0.75, 0.3, 1)
+eye_color = Color(0.8, 1, 0.3, 1)
+visual_scale = Vector2(1.05, 1.0)

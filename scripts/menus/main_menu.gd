@@ -3,6 +3,7 @@ extends Control
 ## mejoras permanentes, estadisticas, opciones y salir, todo via el autoload GameFlow.
 ## Fondo urbano nocturno dibujado por codigo (luna, silueta de gato, huellas).
 
+@warning_ignore("shadowed_global_identifier")
 const MenuTheme = preload("res://scripts/menus/menu_theme.gd")
 
 var _anim_time: float = 0.0
@@ -116,8 +117,8 @@ func _build_ui() -> void:
 
 
 ## Palabra del logo con contorno grueso y sombra propios.
-func _logo_word(text: String, size: int, color: Color, outline: Color) -> Label:
-	var label := MenuTheme.make_title(text, size, color)
+func _logo_word(text: String, font_size: int, color: Color, outline: Color) -> Label:
+	var label := MenuTheme.make_title(text, font_size, color)
 	label.add_theme_color_override("font_outline_color", outline)
 	label.add_theme_constant_override("outline_size", 10)
 	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
@@ -128,6 +129,7 @@ func _logo_word(text: String, size: int, color: Color, outline: Color) -> Label:
 
 ## Fondo decorativo: degradado, luna, silueta de gato y huellas. Solo formas.
 func _draw() -> void:
+	@warning_ignore("shadowed_variable_base_class")
 	var size: Vector2 = get_viewport_rect().size
 	# Degradado vertical simple por bandas.
 	var bands: int = 24

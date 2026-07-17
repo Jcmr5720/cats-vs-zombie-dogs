@@ -5,11 +5,14 @@
 [resource]
 script = ExtResource("1_enemy_data")
 id = &"tank_zombie_dog"
-display_name = "Mastin Podrido"
+display_name = "Mastin Blindado"
 max_health = 85
 speed = 55.0
 contact_damage = 18
 xp_value = 10
+tier = &"heavy"
+behavior = &"armored"
+threat_cost = 5.0
 spawn_weight = 0.0
 weight_growth = 0.045
 body_color = Color(0.32, 0.36, 0.44, 1)

@@ -6,7 +6,7 @@ extends Control
 
 const MenuTheme = preload("res://scripts/menus/menu_theme.gd")
 const StoryCampaign = preload("res://scripts/story/story_campaign.gd")
-const FreePlayScore = preload("res://scripts/systems/free_play_score.gd")
+# FreePlayScore es clase global (class_name): se usa sin preload.
 
 const MAP_PATHS: Array[String] = [
 	"res://data/maps/neighborhood_map.tres",
@@ -114,12 +114,14 @@ func _build_ui() -> void:
 	_selected_difficulty = GameFlow.get_free_play_difficulty()
 	col.add_child(_build_settings_bar())
 
+	# Tarjetas dentro de un scroll: en resoluciones bajas el contenido no se corta.
 	var cards := GridContainer.new()
 	cards.columns = 3
 	cards.add_theme_constant_override("h_separation", 20)
 	cards.add_theme_constant_override("v_separation", 20)
-	cards.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	col.add_child(cards)
+	var cards_scroll := MenuTheme.wrap_scrollable(cards)
+	cards_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(cards_scroll)
 
 	for path in MAP_PATHS:
 		var map_data: Resource = load(path)
@@ -201,12 +203,12 @@ func _build_settings_bar() -> Control:
 	_diff_desc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	diff_row.add_child(_diff_desc)
 
-	# --- Identidad del modo Partida libre ---
-	var identity := MenuTheme.make_label(
-		"Partida libre: sin bonos de mejoras ni refugio — puntuación pura para competir.",
-		MenuTheme.FS_CAPTION, Color(0.7, 0.8, 0.95))
-	identity.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	col.add_child(identity)
+	# --- Identidad del modo Partida libre (corto: chip, no frase larga) ---
+	var identity_row := HBoxContainer.new()
+	identity_row.add_theme_constant_override("separation", MenuTheme.GAP_S)
+	identity_row.add_child(MenuTheme.make_chip("Puntuación pura", MenuTheme.CYAN, &"star"))
+	identity_row.add_child(MenuTheme.make_chip("Sin bonos de mejoras ni refugio", MenuTheme.TEXT_DIM))
+	col.add_child(identity_row)
 
 	_refresh_mode_buttons()
 	_refresh_difficulty_buttons()
@@ -250,10 +252,10 @@ func _refresh_mode_buttons() -> void:
 	if is_instance_valid(_mode_hint):
 		if _coop_selected:
 			if Input.get_connected_joypads().is_empty():
-				_mode_hint.text = "Conecta un control para el Jugador 2 (o usa IJKL)."
+				_mode_hint.text = "Pantalla dividida. Conecta un control para J2 (o usa IJKL + H)."
 				_mode_hint.add_theme_color_override("font_color", Color(1.0, 0.6, 0.5))
 			else:
-				_mode_hint.text = "Jugador 2: control detectado. Stick izq. para moverse."
+				_mode_hint.text = "Pantalla dividida: cada gato con su camara y sus cartas. J2: stick izq. + A."
 				_mode_hint.add_theme_color_override("font_color", MenuTheme.ZOMBIE)
 		else:
 			_mode_hint.text = ""
@@ -630,4 +632,5 @@ func _format_minutes(seconds: float) -> String:
 
 func _format_time(seconds: float) -> String:
 	var total: int = int(seconds)
+	@warning_ignore("integer_division")
 	return "%02d:%02d" % [total / 60, total % 60]

@@ -3,7 +3,7 @@ extends Node2D
 ## Props visuales sin colision para el mundo procedural. Se dibujan por codigo y
 ## usan fases derivadas de seed+celda, asi que se ven vivos sin romper determinismo.
 
-const CityPlan = preload("res://scripts/maps/city_plan.gd")
+# CityPlan es clase global (class_name): se usa sin preload.
 
 var kind: StringName = &"traffic_light"
 var _seed: int = 0

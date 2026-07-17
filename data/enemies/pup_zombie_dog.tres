@@ -5,11 +5,13 @@
 [resource]
 script = ExtResource("1_enemy_data")
 id = &"pup_zombie_dog"
-display_name = "Cachorro Rabioso"
+display_name = "Cachorro Infectado"
 max_health = 6
 speed = 175.0
 contact_damage = 5
 xp_value = 1
+tier = &"common"
+threat_cost = 1.0
 spawn_weight = 0.15
 weight_growth = 0.08
 body_color = Color(0.50, 0.46, 0.25, 1)

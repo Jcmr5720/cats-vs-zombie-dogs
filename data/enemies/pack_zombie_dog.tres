@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemies/enemy_data.gd" id="1_enemy_data"]
+
+[resource]
+script = ExtResource("1_enemy_data")
+id = &"pack_zombie_dog"
+display_name = "Perro de Manada"
+max_health = 14
+speed = 100.0
+contact_damage = 8
+xp_value = 3
+tier = &"common"
+behavior = &"pack"
+threat_cost = 1.5
+spawn_weight = 0.0
+weight_growth = 0.0
+body_color = Color(0.46, 0.38, 0.24, 1)
+accent_color = Color(0.32, 0.26, 0.16, 1)
+eye_color = Color(1, 0.68, 0.2, 1)
+visual_scale = Vector2(0.95, 0.9)

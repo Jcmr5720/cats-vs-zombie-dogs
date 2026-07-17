@@ -20,16 +20,22 @@ const TABS: Array[Dictionary] = [
 	{"id": &"datos", "label": "Datos", "color": Color(0.95, 0.42, 0.42)},
 ]
 
-## Referencia de controles (solo lectura; el remapeo queda para otra fase).
-const CONTROL_ROWS: Array[Array] = [
-	["Jugador 1 — mover", "WASD  /  Flechas"],
-	["Jugador 2 — mover (coop)", "Stick izq. del mando  /  IJKL"],
-	["Pausa", "ESC"],
-	["Elegir carta de mejora", "Clic  /  Mando (P2)"],
-	["Reintentar (fin de partida)", "R"],
-	["Mejoras permanentes (fin de partida)", "M"],
-	["Cambiar zona (pruebas)", "F1 · F2 · F3"],
-	["Panel de rendimiento", "F8"],
+## Acciones remapeables, agrupadas por jugador (Opciones → Controles).
+const P1_BINDINGS: Array[Array] = [
+	[&"move_up", "Arriba"], [&"move_down", "Abajo"],
+	[&"move_left", "Izquierda"], [&"move_right", "Derecha"],
+]
+const P2_BINDINGS: Array[Array] = [
+	[&"p2_move_up", "Arriba"], [&"p2_move_down", "Abajo"],
+	[&"p2_move_left", "Izquierda"], [&"p2_move_right", "Derecha"],
+]
+const EXTRA_BINDINGS: Array[Array] = [
+	[&"companion_regroup", "Reagrupar compañeros"],
+	[&"restart", "Reintentar (fin de partida)"],
+]
+## Atajos fijos (no remapeables), mostrados como referencia compacta.
+const FIXED_ROWS: Array[Array] = [
+	["Pausa", "ESC"], ["Elegir carta", "Clic / Mando (P2)"], ["Rendimiento", "F8"],
 ]
 
 var _settings: Node
@@ -39,6 +45,10 @@ var _tab_row: HBoxContainer
 var _content_box: VBoxContainer
 var _reset_button: Button
 var _reset_stage: int = 0
+## Captura de tecla en curso: accion esperando pulsacion (o vacio).
+var _capturing_action: StringName = &""
+var _capturing_button: Button
+var _binding_buttons: Dictionary = {}
 
 
 func _ready() -> void:
@@ -51,7 +61,45 @@ func _ready() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
+		if _capturing_action != &"":
+			_cancel_capture()
+			get_viewport().set_input_as_handled()
+			return
 		GameFlow.return_to_main_menu()
+
+
+## Captura de tecla para el remapeo: el siguiente KeyDown fija la tecla de la
+## accion en espera. ESC cancela (lo maneja _unhandled_input); se ignoran
+## modificadores sueltos para no atrapar Shift/Ctrl por accidente.
+func _input(event: InputEvent) -> void:
+	if _capturing_action == &"" or not (event is InputEventKey):
+		return
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return
+	if key.keycode == KEY_ESCAPE:
+		return  # lo resuelve _unhandled_input como cancelacion
+	if key.keycode in [KEY_SHIFT, KEY_CTRL, KEY_ALT, KEY_META]:
+		return
+	get_viewport().set_input_as_handled()
+	var code: int = int(key.physical_keycode if key.physical_keycode != KEY_NONE else key.keycode)
+	var accepted: bool = _settings != null and _settings.has_method("set_input_override") \
+		and _settings.set_input_override(_capturing_action, code)
+	var button := _capturing_button
+	_capturing_action = &""
+	_capturing_button = null
+	if accepted:
+		_play_ui_sound(&"ui_click")
+		_refresh_binding_buttons()
+	else:
+		# Tecla en conflicto con otra accion: avisar sin aplicar.
+		_play_ui_sound(&"ui_error")
+		if is_instance_valid(button):
+			button.text = "Tecla en uso"
+			var timer := get_tree().create_timer(0.9)
+			timer.timeout.connect(func() -> void:
+				if is_instance_valid(button) and _capturing_action == &"":
+					_refresh_binding_buttons())
 
 
 func _build_ui() -> void:
@@ -97,6 +145,10 @@ func _on_tab_selected(id: Variant) -> void:
 
 func _rebuild_content() -> void:
 	_reset_stage = 0
+	# Cambiar de pestaña cancela cualquier captura de tecla pendiente.
+	_capturing_action = &""
+	_capturing_button = null
+	_binding_buttons.clear()
 	for child in _content_box.get_children():
 		child.queue_free()
 	_focus_first_control.call_deferred()
@@ -112,14 +164,16 @@ func _rebuild_content() -> void:
 			_content_box.add_child(MenuTheme.make_setting_toggle("Efectos intensos", "visual_effects"))
 			_content_box.add_child(MenuTheme.make_setting_toggle("Sombras", "shadows"))
 			_content_box.add_child(MenuTheme.make_setting_toggle("Mostrar FPS", "show_fps"))
-			var hint := MenuTheme.make_label("Luces y niebla nuevas se aplican al instante; las luces ya encendidas se apagan/encienden en vivo.", MenuTheme.FS_BODY, MenuTheme.TEXT_DIM)
-			hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			var hint := MenuTheme.make_label("Los cambios se aplican al instante.", MenuTheme.FS_CAPTION, MenuTheme.TEXT_DIM)
 			_content_box.add_child(hint)
 		&"juego":
 			_content_box.add_child(MenuTheme.make_setting_toggle("Screen shake", "shake_enabled"))
 			_content_box.add_child(_choice_row("Intensidad de shake", "shake_level", SHAKE_OPTIONS, "medio"))
 			_content_box.add_child(MenuTheme.make_setting_toggle("Números de daño", "damage_numbers"))
 			_content_box.add_child(MenuTheme.make_setting_toggle("Omitir cinemáticas", "skip_cinematics"))
+			# Accesibilidad coop: elegir sola la carta resaltada tras 25 s de
+			# inactividad (p.ej. mando compartido/soltado). Desactivado por defecto.
+			_content_box.add_child(MenuTheme.make_setting_toggle("Carta automática por inactividad (coop)", "card_auto_pick"))
 		&"audio":
 			_content_box.add_child(MenuTheme.make_setting_slider("Master", "audio_master", MenuTheme.PURPLE))
 			_content_box.add_child(MenuTheme.make_setting_slider("Música", "audio_music", MenuTheme.PURPLE))
@@ -127,13 +181,7 @@ func _rebuild_content() -> void:
 			_content_box.add_child(MenuTheme.make_setting_slider("UI", "audio_ui", MenuTheme.PURPLE))
 			_content_box.add_child(MenuTheme.make_setting_toggle("Silenciar todo", "audio_mute"))
 		&"controles":
-			# Referencia de controles en pares titulo/valor (FASE VISUAL 3).
-			for row in CONTROL_ROWS:
-				_content_box.add_child(MenuTheme.make_info_pair(row[0], row[1]))
-			_content_box.add_child(_spacer(MenuTheme.GAP_S))
-			var note := MenuTheme.make_label("El remapeo de teclas llegará en una fase futura.", MenuTheme.FS_CAPTION, MenuTheme.TEXT_DIM)
-			note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			_content_box.add_child(note)
+			_build_controls_tab()
 		&"datos":
 			var warn := MenuTheme.make_label("El reinicio borra partidas, sardinas y desbloqueos. No se puede deshacer.", MenuTheme.FS_BODY, MenuTheme.TEXT_DIM)
 			warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -144,6 +192,115 @@ func _rebuild_content() -> void:
 			_reset_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 			_reset_button.pressed.connect(_on_reset_pressed)
 			_content_box.add_child(_reset_button)
+
+
+# --- Pestaña Controles: remapeo de teclado por jugador --------------------------
+
+func _build_controls_tab() -> void:
+	_capturing_action = &""
+	_capturing_button = null
+	_binding_buttons.clear()
+
+	# Dos columnas: Jugador 1 y Jugador 2, cada una con sus 4 direcciones.
+	var players_row := HBoxContainer.new()
+	players_row.add_theme_constant_override("separation", MenuTheme.GAP_XL)
+	_content_box.add_child(players_row)
+	players_row.add_child(_player_bindings_column("Jugador 1", MenuTheme.CYAN, P1_BINDINGS))
+	players_row.add_child(_player_bindings_column("Jugador 2 (coop)", MenuTheme.GOLD, P2_BINDINGS))
+
+	_content_box.add_child(_spacer(MenuTheme.GAP_XS))
+	_content_box.add_child(MenuTheme.make_section_header("Acciones", MenuTheme.PURPLE))
+	for entry in EXTRA_BINDINGS:
+		_content_box.add_child(_binding_row(entry[0], entry[1]))
+
+	_content_box.add_child(_spacer(MenuTheme.GAP_XS))
+	_content_box.add_child(MenuTheme.make_section_header("Atajos fijos", MenuTheme.TEXT_DIM))
+	var fixed_row := HBoxContainer.new()
+	fixed_row.add_theme_constant_override("separation", MenuTheme.GAP_M)
+	for row in FIXED_ROWS:
+		fixed_row.add_child(MenuTheme.make_chip("%s · %s" % [row[0], row[1]], MenuTheme.TEXT_DIM))
+	_content_box.add_child(fixed_row)
+
+	_content_box.add_child(_spacer(MenuTheme.GAP_S))
+	var footer := HBoxContainer.new()
+	footer.add_theme_constant_override("separation", MenuTheme.GAP_M)
+	_content_box.add_child(footer)
+	var hint := MenuTheme.make_label("Haz clic en una tecla y pulsa la nueva. El mando del J2 no cambia.", MenuTheme.FS_CAPTION, MenuTheme.TEXT_DIM)
+	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	footer.add_child(hint)
+	var reset := MenuTheme.make_button("Restaurar teclas", MenuTheme.TEXT_DIM, &"ghost")
+	reset.custom_minimum_size = Vector2(190, 42)
+	reset.pressed.connect(func() -> void:
+		if _settings != null and _settings.has_method("clear_input_overrides"):
+			_settings.clear_input_overrides()
+		_play_ui_sound(&"ui_click")
+		_refresh_binding_buttons())
+	footer.add_child(reset)
+
+
+## Columna de un jugador: panel con encabezado de color + 4 filas de direccion.
+func _player_bindings_column(title: String, accent: Color, bindings: Array[Array]) -> Control:
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	MenuTheme.style_panel(panel, accent, MenuTheme.PANEL_BG_SOFT)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", MenuTheme.GAP_S)
+	panel.add_child(col)
+	col.add_child(MenuTheme.make_section_header(title, accent))
+	for entry in bindings:
+		col.add_child(_binding_row(entry[0], entry[1]))
+	return panel
+
+
+## Fila accion: etiqueta + boton con la tecla actual (clic = capturar nueva).
+func _binding_row(action: StringName, title: String) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", MenuTheme.GAP_M)
+	var label := MenuTheme.make_label(title, MenuTheme.FS_BODY, MenuTheme.TEXT)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(label)
+	var button := MenuTheme.make_button(_key_label(action), MenuTheme.CYAN, &"secondary")
+	button.custom_minimum_size = Vector2(190, 42)
+	button.pressed.connect(_start_capture.bind(action, button))
+	row.add_child(button)
+	_binding_buttons[action] = button
+	return row
+
+
+func _start_capture(action: StringName, button: Button) -> void:
+	_cancel_capture()
+	_capturing_action = action
+	_capturing_button = button
+	button.text = "Pulsa una tecla…"
+	_play_ui_sound(&"ui_click")
+
+
+func _cancel_capture() -> void:
+	if _capturing_action != &"" and is_instance_valid(_capturing_button):
+		_capturing_button.text = _key_label(_capturing_action)
+	_capturing_action = &""
+	_capturing_button = null
+
+
+func _refresh_binding_buttons() -> void:
+	for action in _binding_buttons:
+		var button: Button = _binding_buttons[action]
+		if is_instance_valid(button):
+			button.text = _key_label(action)
+
+
+func _key_label(action: StringName) -> String:
+	if _settings != null and _settings.has_method("get_action_key_label"):
+		return str(_settings.get_action_key_label(action))
+	return "—"
+
+
+func _play_ui_sound(name: StringName) -> void:
+	var audio: Node = get_node_or_null("/root/AudioManager")
+	if audio != null and audio.has_method("play_ui"):
+		audio.play_ui(name)
 
 
 ## Fila etiqueta + control segmentado ligado a una clave de texto de Settings.

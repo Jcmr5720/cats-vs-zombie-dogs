@@ -4,12 +4,9 @@ extends Node2D
 ## derivada del mapa y de sus coordenadas, asi que al descargarse y volver a entrar
 ## se reconstruye igual. El nodo reemplaza al viejo "generador unico inicial".
 
-const ObstacleData = preload("res://scripts/maps/obstacle_data.gd")
-const WorldSeedManager = preload("res://scripts/maps/world_seed_manager.gd")
-const BiomeLayoutGenerator = preload("res://scripts/maps/biome_layout_generator.gd")
-const CityPlan = preload("res://scripts/maps/city_plan.gd")
-const ChunkGroundRenderer = preload("res://scripts/maps/chunk_ground_renderer.gd")
-const AnimatedProp = preload("res://scripts/maps/animated_prop.gd")
+# ObstacleData, WorldSeedManager, BiomeLayoutGenerator, CityPlan,
+# ChunkGroundRenderer y AnimatedProp son clases globales (class_name): se usan
+# directamente sin preload (evita el warning de constante que sombrea la clase).
 
 const CHUNK_SIZE := Vector2(1024.0, 1024.0)
 const ACTIVE_RADIUS: int = 2
@@ -429,8 +426,10 @@ func _place_warehouse(chunk: Node2D, layout: Dictionary, wall: ObstacleData, con
 		var a: Vector2 = side["a"]
 		var b: Vector2 = side["b"]
 		var count: int = maxi(1, int(a.distance_to(b) / (wall_avg + 10.0)))
+		@warning_ignore("integer_division")
+		var door_index: int = count / 2  # hueco de entrada en el punto medio
 		for i in count:
-			if s == door_side and i == count / 2:
+			if s == door_side and i == door_index:
 				continue  # hueco de entrada
 			var pos: Vector2 = a.lerp(b, (float(i) + 0.5) / float(count))
 			# Lados verticales: tamaño transpuesto en vez de rotar (extrusion al sur).
@@ -605,6 +604,12 @@ func get_active_obstacle_count() -> int:
 
 func get_resolved_seed() -> int:
 	return _resolved_seed
+
+
+## MapData activo (lo usa el minimapa para reconstruir el trazado del terreno
+## con las MISMAS funciones puras de CityPlan/BiomeLayoutGenerator).
+func get_map_data() -> MapData:
+	return _map
 
 
 func set_debug_draw(enabled: bool) -> void:

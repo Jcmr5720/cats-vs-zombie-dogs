@@ -5,13 +5,14 @@ extends Node2D
 ## proyectil / explosivo / boomerang / laser / orbital / area.
 
 const WeaponData = preload("res://scripts/weapons/weapon_data.gd")
+const Targeting = preload("res://scripts/weapons/targeting.gd")
 const PROJECTILE_SCENE = preload("res://scenes/weapons/WeaponProjectile.tscn")
 const ORBITAL_SCENE = preload("res://scenes/weapons/Orbital.tscn")
 const AREA_SCENE = preload("res://scenes/weapons/CatnipArea.tscn")
 
 ## Topes de seguridad (Fase 04.5): evitan acumulacion de nodos/efectos que tiren
 ## FPS o vuelvan el juego trivial. Documentados en docs/FASE_04_5_*.
-const MAX_ORBITALS: int = 4
+const MAX_ORBITALS: int = 6
 const MIN_WEAPON_COOLDOWN: float = 0.12
 ## Radio maximo de explosiones/zonas para que un area no limpie toda la pantalla.
 const MAX_AREA_RADIUS: float = 230.0
@@ -79,11 +80,36 @@ func _process(delta: float) -> void:
 # --- Disparo por tipo -------------------------------------------------------
 
 func _fire_projectiles() -> bool:
-	var target: Node2D = _find_nearest_enemy(_effective_range())
-	if target == null:
+	# Apuntado inteligente (Targeting): amenaza/marca en vez de "el mas cercano",
+	# fila alineada para el pierce, racimo para explosivos y tiro LIDERADO
+	# (intercept) para que los enemigos rapidos no esquiven las balas.
+	var origin: Vector2 = _player.global_position
+	var candidates: Array[Dictionary] = Targeting.gather_candidates(
+		get_tree().get_nodes_in_group("enemies"), origin, origin, _effective_range())
+	if candidates.is_empty():
 		return false
 
-	var base_dir: Vector2 = _player.global_position.direction_to(target.global_position)
+	var base_dir: Vector2 = Vector2.ZERO
+	match data.weapon_type:
+		&"boomerang":
+			# Direccion de la fila mas valiosa (el pierce quiere enemigos alineados).
+			base_dir = Targeting.pick_pierce_direction(candidates, origin, origin)
+		&"explosive":
+			# Centroide del racimo mas valioso dentro del radio de explosion.
+			var cluster: Vector2 = Targeting.pick_area_position(candidates, _effective_area(), origin)
+			if cluster != Vector2.INF and cluster != origin:
+				base_dir = origin.direction_to(cluster)
+		_:
+			var target: Dictionary = Targeting.pick_projectile_target(candidates, origin)
+			if not target.is_empty():
+				base_dir = Targeting.intercept_direction(
+					origin, target["pos"], target["velocity"], data.projectile_speed)
+	if base_dir == Vector2.ZERO:
+		var fallback: Node2D = _find_nearest_enemy(_effective_range())
+		if fallback == null:
+			return false
+		base_dir = origin.direction_to(fallback.global_position)
+
 	var count: int = _effective_projectiles()
 	var start_angle: float = -data.spread_degrees * float(count - 1) * 0.5
 	var is_explosive: bool = data.weapon_type == &"explosive"
@@ -112,34 +138,81 @@ func _fire_projectiles() -> bool:
 	return true
 
 
+## Distancia maxima de cada salto del laser en cadena (evolucion Rayo Prisma).
+const LASER_CHAIN_JUMP_RANGE: float = 260.0
+## El dano decae por salto para que la cadena no multiplique el DPS sin costo.
+const LASER_CHAIN_DAMAGE_FALLOFF: float = 0.8
+
 func _fire_laser() -> bool:
-	var target: Node2D = _find_nearest_enemy(_effective_range())
-	if target == null:
+	# El laser es el nuke single-target: prioriza elites/tanques/marcados en vez
+	# de gastar el disparo en el cachorro mas cercano.
+	var origin: Vector2 = _player.global_position
+	var candidates: Array[Dictionary] = Targeting.gather_candidates(
+		get_tree().get_nodes_in_group("enemies"), origin, origin, _effective_range())
+	var picked: Dictionary = Targeting.pick_laser_target(candidates, origin)
+	var target: Node2D = picked.get("enemy") if not picked.is_empty() else _find_nearest_enemy(_effective_range())
+	if target == null or not is_instance_valid(target):
 		return false
-	if target.has_method("take_damage"):
-		var dir: Vector2 = _player.global_position.direction_to(target.global_position)
-		target.take_damage(_effective_damage(), dir)
-		Feedback.hit_effect(_player.global_position + dir * 34.0, data.visual_color, 0.18, 0.75)
-	_show_laser(_player.global_position, target.global_position)
-	Feedback.hit_effect(target.global_position, data.visual_color, 0.3, 1.2)
+
+	# Cadena: con `pierce > 0` (Rayo Prisma) el rayo salta hasta `pierce` enemigos
+	# extra, cada salto al mas cercano del anterior, con dano decreciente.
+	var points := PackedVector2Array([_player.global_position])
+	var hit: Array[Node2D] = []
+	var current: Node2D = target
+	var damage: float = float(_effective_damage())
+	var previous_position: Vector2 = _player.global_position
+	for _jump in 1 + max(0, data.pierce):
+		if current == null:
+			break
+		if current.has_method("take_damage"):
+			var dir: Vector2 = previous_position.direction_to(current.global_position)
+			current.take_damage(max(1, int(round(damage))), dir)
+		points.append(current.global_position)
+		hit.append(current)
+		Feedback.hit_effect(current.global_position, data.visual_color, 0.3, 1.2)
+		previous_position = current.global_position
+		damage *= LASER_CHAIN_DAMAGE_FALLOFF
+		current = _find_nearest_enemy_excluding(previous_position, LASER_CHAIN_JUMP_RANGE, hit)
+
+	_show_laser_path(points)
+	Feedback.hit_effect(_player.global_position + _player.global_position.direction_to(points[1]) * 34.0, data.visual_color, 0.18, 0.75)
 	_play_weapon_audio(&"laser")
 	return true
 
 
+## Enemigo mas cercano a `origin` dentro de `max_range`, excluyendo los ya golpeados.
+func _find_nearest_enemy_excluding(origin: Vector2, max_range: float, excluded: Array[Node2D]) -> Node2D:
+	var nearest: Node2D = null
+	var nearest_distance: float = max_range
+	for enemy in get_tree().get_nodes_in_group("enemies"):
+		if not is_instance_valid(enemy) or excluded.has(enemy):
+			continue
+		var distance: float = origin.distance_to((enemy as Node2D).global_position)
+		if distance <= nearest_distance:
+			nearest_distance = distance
+			nearest = enemy
+	return nearest
+
+
 func _fire_area() -> bool:
-	var target: Node2D = _find_nearest_enemy(_effective_range() * 1.4)
-	var spawn_position: Vector2 = _player.global_position
-	if target != null:
-		spawn_position = target.global_position
-	elif _player.has_method("get_last_facing_direction"):
-		spawn_position = _player.global_position + _player.get_last_facing_direction() * 120.0
+	# La zona cae en el CENTROIDE del racimo mas valioso (no encima de un enemigo
+	## suelto). Sin candidatos conserva el fallback clasico: delante del jugador.
+	var origin: Vector2 = _player.global_position
+	var candidates: Array[Dictionary] = Targeting.gather_candidates(
+		get_tree().get_nodes_in_group("enemies"), origin, origin, _effective_range() * 1.4)
+	var spawn_position: Vector2 = Targeting.pick_area_position(candidates, _effective_area(), origin)
+	if spawn_position == Vector2.INF:
+		spawn_position = origin
+		if _player.has_method("get_last_facing_direction"):
+			spawn_position = origin + _player.get_last_facing_direction() * 120.0
 
 	var area := AREA_SCENE.instantiate() as Node2D
 	if area == null:
 		return false
 	area.global_position = spawn_position
 	_projectile_parent().add_child(area)
-	area.call("setup", _effective_damage(), _effective_area(), data.duration, data.tick_interval, data.visual_color)
+	# Knockback negativo (Ovillo Agujero Negro): la zona ATRAE en vez de empujar.
+	area.call("setup", _effective_damage(), _effective_area(), data.duration, data.tick_interval, data.visual_color, data.knockback < 0.0)
 	_play_weapon_audio(&"shoot_strong")
 	return true
 
@@ -257,6 +330,13 @@ func _find_nearest_enemy(max_range: float) -> Node2D:
 
 
 func _show_laser(from: Vector2, to: Vector2) -> void:
+	_show_laser_path(PackedVector2Array([from, to]))
+
+
+## Dibuja el rayo como polilinea (soporta la cadena del Rayo Prisma sin nodos extra).
+func _show_laser_path(points: PackedVector2Array) -> void:
+	if points.size() < 2:
+		return
 	if _laser_glow == null:
 		_laser_glow = Line2D.new()
 		_laser_glow.width = 14.0
@@ -272,11 +352,11 @@ func _show_laser(from: Vector2, to: Vector2) -> void:
 		_laser_line.end_cap_mode = Line2D.LINE_CAP_ROUND
 		add_child(_laser_line)
 	_laser_glow.default_color = Color(data.visual_color.r, data.visual_color.g, data.visual_color.b, 0.26)
-	_laser_glow.points = PackedVector2Array([from, to])
+	_laser_glow.points = points
 	_laser_glow.modulate.a = 1.0
 	_laser_glow.width = 14.0
 	_laser_line.default_color = data.visual_color
-	_laser_line.points = PackedVector2Array([from, to])
+	_laser_line.points = points
 	_laser_line.modulate.a = 1.0
 	_laser_line.width = 7.0
 	var tween := create_tween()

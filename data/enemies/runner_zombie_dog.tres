@@ -5,11 +5,13 @@
 [resource]
 script = ExtResource("1_enemy_data")
 id = &"runner_zombie_dog"
-display_name = "Zombie Dog Runner"
+display_name = "Corredor Rabioso"
 max_health = 12
 speed = 150.0
 contact_damage = 8
 xp_value = 3
+tier = &"common"
+threat_cost = 1.0
 spawn_weight = 0.25
 weight_growth = 0.05
 body_color = Color(0.58, 0.25, 0.30, 1)

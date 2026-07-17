@@ -18,6 +18,14 @@ const SHAKE_LEVELS: Dictionary = {
 
 signal settings_changed()
 
+## Acciones remapeables desde Opciones → Controles. SOLO se sustituyen sus
+## eventos de TECLADO; los de mando (P2) se conservan intactos.
+const REMAP_ACTIONS: Array[StringName] = [
+	&"move_left", &"move_right", &"move_up", &"move_down",
+	&"p2_move_left", &"p2_move_right", &"p2_move_up", &"p2_move_down",
+	&"companion_regroup", &"restart",
+]
+
 var _data: Dictionary = {}
 var _fps_layer: CanvasLayer
 var _fps_label: Label
@@ -28,6 +36,7 @@ func _ready() -> void:
 	_load()
 	_build_fps_overlay()
 	apply_all()
+	apply_input_overrides()
 
 
 func defaults() -> Dictionary:
@@ -49,6 +58,8 @@ func defaults() -> Dictionary:
 		"audio_sfx": 0.75,
 		"audio_ui": 0.70,
 		"audio_mute": false,
+		# Remapeo de teclado: accion (String) -> physical_keycode (int).
+		"input_overrides": {},
 	}
 
 
@@ -145,6 +156,81 @@ func _apply_audio() -> void:
 func _apply_fps() -> void:
 	if is_instance_valid(_fps_layer):
 		_fps_layer.visible = bool(_data.get("show_fps", false))
+
+
+# --- Remapeo de teclado (Opciones → Controles) --------------------------------
+
+## Aplica los overrides guardados sobre el InputMap en runtime. Para cada accion
+## remapeada se eliminan SOLO los InputEventKey (el joypad del P2 se conserva) y
+## se añade la tecla elegida. Sin override, la accion queda como en project.godot.
+func apply_input_overrides() -> void:
+	var overrides: Dictionary = _data.get("input_overrides", {})
+	for action in REMAP_ACTIONS:
+		if not InputMap.has_action(action):
+			continue
+		if not overrides.has(String(action)):
+			continue
+		var keycode: int = int(overrides[String(action)])
+		if keycode <= 0:
+			continue
+		for event in InputMap.action_get_events(action):
+			if event is InputEventKey:
+				InputMap.action_erase_event(action, event)
+		var key := InputEventKey.new()
+		key.physical_keycode = keycode as Key
+		InputMap.action_add_event(action, key)
+
+
+## Fija la tecla de una accion. Devuelve false si la tecla ya la usa otra accion
+## remapeable (conflicto); no aplica nada en ese caso.
+func set_input_override(action: StringName, physical_keycode: int) -> bool:
+	if physical_keycode <= 0 or not REMAP_ACTIONS.has(action):
+		return false
+	for other in REMAP_ACTIONS:
+		if other != action and get_action_keycode(other) == physical_keycode:
+			return false
+	var overrides: Dictionary = _data.get("input_overrides", {})
+	overrides[String(action)] = physical_keycode
+	_data["input_overrides"] = overrides
+	_save()
+	apply_input_overrides()
+	settings_changed.emit()
+	return true
+
+
+## Borra todos los overrides y restaura el InputMap de project.godot.
+func clear_input_overrides() -> void:
+	_data["input_overrides"] = {}
+	_save()
+	InputMap.load_from_project_settings()
+	settings_changed.emit()
+
+
+## Tecla (physical keycode) actualmente activa para una accion, o 0 si su
+## entrada de teclado es la por defecto con varias teclas / no tiene teclado.
+func get_action_keycode(action: StringName) -> int:
+	if not InputMap.has_action(action):
+		return 0
+	for event in InputMap.action_get_events(action):
+		if event is InputEventKey:
+			var key := event as InputEventKey
+			return int(key.physical_keycode if key.physical_keycode != KEY_NONE else key.keycode)
+	return 0
+
+
+## Etiqueta legible de las teclas de una accion (para la UI de Controles).
+func get_action_key_label(action: StringName) -> String:
+	if not InputMap.has_action(action):
+		return "—"
+	var parts: Array[String] = []
+	for event in InputMap.action_get_events(action):
+		if event is InputEventKey:
+			var key := event as InputEventKey
+			var code: Key = key.physical_keycode if key.physical_keycode != KEY_NONE else key.keycode
+			parts.append(OS.get_keycode_string(DisplayServer.keyboard_get_keycode_from_physical(code)))
+	if parts.is_empty():
+		return "—"
+	return " / ".join(parts)
 
 
 func _build_fps_overlay() -> void:

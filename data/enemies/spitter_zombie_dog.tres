@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemies/enemy_data.gd" id="1_enemy_data"]
+
+[resource]
+script = ExtResource("1_enemy_data")
+id = &"spitter_zombie_dog"
+display_name = "Escupidor"
+max_health = 20
+speed = 85.0
+contact_damage = 6
+xp_value = 8
+tier = &"special"
+behavior = &"spitter"
+threat_cost = 3.0
+spawn_weight = 0.0
+weight_growth = 0.0
+body_color = Color(0.3, 0.55, 0.35, 1)
+accent_color = Color(0.2, 0.4, 0.24, 1)
+eye_color = Color(0.55, 1, 0.35, 1)
+visual_scale = Vector2(0.95, 1.0)

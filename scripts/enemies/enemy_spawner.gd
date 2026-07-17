@@ -1,14 +1,14 @@
 extends Node2D
 ## Genera perros zombis alrededor del jugador y escala la dificultad de forma
-## CONTINUA mediante un difficulty_score que combina tiempo, nivel del jugador
-## y enemigos eliminados. Todos los efectos tienen límites para que la curva
-## sea exigente pero nunca imposible demasiado pronto.
+## CONTINUA mediante un difficulty_score. Fase correccion de balance: TODA la
+## curva (pesos, techos, etapas) vive CENTRALIZADA en GameBalance
+## (scripts/systems/game_balance.gd); aqui solo queda la mecanica de spawn.
 ##
-## difficulty_score = minutos_sobrevividos * time_weight
-##                  + nivel_jugador * level_weight
-##                  + enemigos_eliminados / kills_divisor
-##                  + upgrades_elegidos * upgrade_weight
-##                  + companions * companion_weight
+## difficulty_score = minutos * TIME_WEIGHT            (eje principal: tiempo)
+##                  + potencia_del_jugador SUAVIZADA   (ajuste moderado, EMA)
+##                  + kills / KILLS_DIVISOR
+##                  + bono coop plano
+##   ... multiplicado por el mapa y ACOTADO por SCORE_CAP.
 
 const EnemyData = preload("res://scripts/enemies/enemy_data.gd")
 
@@ -17,45 +17,9 @@ signal stats_updated(kills: int, difficulty: float)
 @export var enemy_scene: PackedScene
 @export var enemy_types: Array[EnemyData] = []
 
-@export_group("Fórmula de dificultad")
-## Peso de los minutos sobrevividos en el score.
-@export var time_weight: float = 1.2
-## Peso del nivel del jugador en el score.
-@export var level_weight: float = 0.9
-## Cada cuántos kills se suma 1 punto de dificultad.
-@export var kills_divisor: float = 35.0
-## Peso de cada mejora elegida (premia builds avanzadas con más presión).
-@export var upgrade_weight: float = 0.35
-## Peso de cada gato rescatado en la dificultad. Suavizado en Fase 04: con armas
-## y compañeros la presión ya crece por otros lados, 1.1 castigaba demasiado.
-@export var companion_weight: float = 0.7
-## Ligera compensacion si varios companeros estan derribados.
-@export var downed_companion_weight: float = -0.25
-## Peso de cada arma activa (Fase 04.5): mas armas = mas presion.
-@export var weapon_weight: float = 0.7
-## Peso de cada nivel de arma acumulado (builds muy subidas = mas presion).
-@export var weapon_level_weight: float = 0.18
-
 @export_group("Aparición")
-## Bajado de 1.2 a 0.95: el primer minuto tiene mas accion (critica de "poco
-## divertido" por arranque lento). La dificultad lo sigue acortando sola.
-@export var base_spawn_interval: float = 0.95
-@export var min_spawn_interval: float = 0.30
-## Cuánto baja el intervalo por punto de dificultad.
-@export var interval_per_point: float = 0.05
-@export var base_max_enemies: int = 22
-## Enemigos vivos extra permitidos por punto de dificultad.
-@export var enemies_per_point: float = 3.0
 @export var min_radius: float = 520.0
 @export var max_radius: float = 760.0
-
-@export_group("Escalado de enemigos")
-@export var health_per_point: float = 0.06
-@export var max_health_multiplier: float = 2.6
-@export var speed_per_point: float = 0.025
-@export var max_speed_multiplier: float = 1.7
-@export var damage_per_point: float = 0.04
-@export var max_damage_multiplier: float = 2.2
 
 @export_group("Presión")
 ## Probabilidad base de que un enemigo aparezca justo en el borde visible de
@@ -91,9 +55,8 @@ signal stats_updated(kills: int, difficulty: float)
 @export_range(0.0, 1.0, 0.05) var horde_bias_strength: float = 0.6
 
 @export_group("Balance coop (Fase Coop 1.5)")
-## Bono de presion constante al difficulty_score con 2 jugadores.
-@export var coop_score_bonus: float = 3.0
-## Enemigos vivos extra permitidos en coop (base y topes).
+## Enemigos vivos extra permitidos en coop (base y topes). El bono de score coop
+## vive en GameBalance.COOP_SCORE_BONUS (fuente unica).
 @export var coop_max_enemies_bonus: int = 25
 @export var coop_cap_bonus: int = 30
 
@@ -131,12 +94,31 @@ var _map_damage_mult: float = 1.0
 ## Bono de dificultad por jugadores extra en coop (Fase Coop, seccion 13). Suma
 ## presion constante al score para compensar el doble de dano/coberturua del equipo.
 var _coop_bonus: float = 0.0
+## Enemigos vivos extra permitidos en coop (antes se sumaba al export base).
+var _coop_extra_enemies: int = 0
+## Potencia del jugador SUAVIZADA (Fase correccion): los datos caros se muestrean
+## cada POWER_POLL_SECONDS y el valor efectivo persigue al real con una media
+## movil exponencial — elegir una carta no dispara la dificultad al instante.
+var _raw_power: float = 0.0
+var _power_smoothed: float = 0.0
+var _power_poll_timer: float = 0.0
 ## Presion extra por mejoras permanentes (Fase 07). Se lee una vez al iniciar.
 var _permanent_power: float = 0.0
 ## Presion extra por el poder del Refugio (Fase 10): objetos colocados.
 var _shelter_power: float = 0.0
 var _obstacle_cache: Array = []
 var _obstacle_cache_timer: float = 0.0
+
+# --- Partidas rapidas por fases (lo dirige PhaseDirector) -----------------------
+## Perfil de la fase activa (RunPhaseConfig.phase_profile + overrides del mapa).
+## Vacio = modo clasico (curva continua por score). Claves: weights, interval,
+## budget, max_alive, tier_caps, type_caps.
+var _phase_profile: Dictionary = {}
+## Suma de threat_cost de los enemigos VIVOS generados por este spawner.
+var _threat_active: float = 0.0
+## Conteos de vivos por id y por categoria (para limites por tipo/categoria).
+var _alive_by_id: Dictionary = {}
+var _alive_by_tier: Dictionary = {}
 
 
 func _ready() -> void:
@@ -156,7 +138,7 @@ func _ready() -> void:
 			_shelter_power = float(shelter.get_power_score())
 
 	_spawn_timer = Timer.new()
-	_spawn_timer.wait_time = base_spawn_interval
+	_spawn_timer.wait_time = GameBalance.BASE_SPAWN_INTERVAL
 	_spawn_timer.autostart = true
 	_spawn_timer.timeout.connect(_on_spawn_timer_timeout)
 	add_child(_spawn_timer)
@@ -170,7 +152,34 @@ func _process(delta: float) -> void:
 	_update_event_timers(delta)
 	_update_backpressure(delta)
 	_maybe_emergency_cleanup()
+	_update_smoothed_power(delta)
 	_recalculate_difficulty()
+
+
+## Muestrea la potencia real del jugador por intervalos y la suaviza con una
+## media movil exponencial. La potencia solo puede BAJAR igual de despacio que
+## sube: perder companeros/derribarse no abarata la dificultad al instante
+## (anti-exploit) y elegir una carta no la encarece de golpe.
+func _update_smoothed_power(delta: float) -> void:
+	_power_poll_timer -= delta
+	if _power_poll_timer <= 0.0:
+		_power_poll_timer = GameBalance.POWER_POLL_SECONDS
+		_raw_power = _compute_raw_power()
+	var blend: float = 1.0 - exp(-delta / GameBalance.POWER_SMOOTH_SECONDS)
+	_power_smoothed = lerpf(_power_smoothed, _raw_power, blend)
+
+
+## Potencia CRUDA del equipo. Cada beneficio cuenta UNA sola vez (la formula
+## anterior sumaba nivel + mejoras elegidas + niveles de arma: el mismo poder
+## puntuaba tres veces por carta). Componentes: nivel maximo del equipo, armas
+## activas, niveles de arma acumulados y companeros (con leve descuento por
+## companero derribado).
+func _compute_raw_power() -> float:
+	return _get_player_level() * GameBalance.LEVEL_WEIGHT \
+		+ _get_weapon_count() * GameBalance.WEAPON_WEIGHT \
+		+ _get_total_weapon_levels() * GameBalance.WEAPON_LEVEL_WEIGHT \
+		+ _get_companion_count() * GameBalance.COMPANION_WEIGHT \
+		+ _get_downed_companion_count() * GameBalance.DOWNED_COMPANION_WEIGHT
 
 
 ## Numero real de enemigos vivos (incluye jefes/mini-jefes, que tambien presionan).
@@ -225,13 +234,18 @@ func _maybe_emergency_cleanup() -> void:
 		return
 	if not is_instance_valid(_player):
 		return
+	var team: Array = _team_players()
 	var candidates: Array = []
 	for e in get_tree().get_nodes_in_group("enemies"):
 		if not is_instance_valid(e):
 			continue
 		if e.is_in_group("boss") or e.is_in_group("miniboss"):
 			continue
-		var d: float = (e as Node2D).global_position.distance_to(_player.global_position)
+		# Coop: la distancia que cuenta es al jugador MAS CERCANO. Nunca se borra
+		# un enemigo que este presionando al P2 aunque quede lejos del P1.
+		var d: float = INF
+		for p in team:
+			d = minf(d, (e as Node2D).global_position.distance_to((p as Node2D).global_position))
 		if d >= emergency_cleanup_distance:
 			candidates.append([d, e])
 	candidates.sort_custom(func(a, b): return a[0] > b[0])
@@ -287,15 +301,66 @@ func _is_story_run() -> bool:
 
 ## Activa el escalado cooperativo (Fase Coop, seccion 13): bono de presion constante
 ## y mas techo de enemigos, porque el equipo cubre mas terreno y hace mas dano.
+## Fase correccion: la presion coop entra UNA sola vez (este bono plano); ya no se
+## multiplica ademas todo el score (map_manager) ni se duplica en los caps.
 func set_coop_players(count: int) -> void:
 	if count >= 2:
-		_coop_bonus = coop_score_bonus
-		base_max_enemies += coop_max_enemies_bonus
+		_coop_bonus = GameBalance.COOP_SCORE_BONUS
+		_coop_extra_enemies = coop_max_enemies_bonus
 		soft_enemy_cap += coop_cap_bonus
 		hard_enemy_cap += coop_cap_bonus
 		absolute_enemy_cap += coop_cap_bonus
 	else:
 		_coop_bonus = 0.0
+		_coop_extra_enemies = 0
+
+
+# --- API de fases (la llama PhaseDirector) --------------------------------------
+
+## Fija el perfil de spawn de la fase activa. Un Dictionary vacio devuelve el
+## spawner al modo clasico. El presupuesto de amenaza y los limites por tipo y
+## categoria se aplican EN CADA spawn: nunca se generan combinaciones por encima
+## del presupuesto, y el presupuesto se recupera solo al morir enemigos.
+func set_phase_profile(profile: Dictionary) -> void:
+	_phase_profile = profile if profile != null else {}
+	if not _phase_profile.is_empty():
+		_spawn_timer.wait_time = maxf(0.2, float(_phase_profile.get("interval", GameBalance.BASE_SPAWN_INTERVAL)))
+
+
+func get_phase_profile() -> Dictionary:
+	return _phase_profile
+
+
+func get_active_threat() -> float:
+	return _threat_active
+
+
+func get_alive_count_for(id: StringName) -> int:
+	return int(_alive_by_id.get(id, 0))
+
+
+## Genera una manada inmediata de `count` enemigos de un tipo, entrando desde un
+## arco de ~200 grados fuera de la camara: presion inmediata pero SIEMPRE queda
+## al menos una ruta de escape despejada.
+func spawn_pack(enemy_id: StringName, count: int) -> int:
+	var data: EnemyData = RunPhaseConfig.load_enemy_data(enemy_id)
+	if data == null or enemy_scene == null:
+		return 0
+	var base_angle: float = randf() * TAU
+	var spawned: int = 0
+	for _i in count:
+		if not _can_spawn_more():
+			break
+		if not _phase_profile.is_empty() and not _phase_slot_available(data):
+			break
+		var angle: float = base_angle + randf_range(-1.75, 1.75)
+		var anchor: Node2D = _spawn_anchor()
+		if anchor == null:
+			break
+		var offset: Vector2 = _camera_edge_offset(angle)
+		_spawn_enemy_of(data, anchor.global_position + offset)
+		spawned += 1
+	return spawned
 
 
 func get_difficulty_score() -> float:
@@ -317,53 +382,88 @@ func set_map_modifiers(difficulty_mult: float, runner_mult: float, health_mult: 
 	_map_damage_mult = max(0.1, damage_mult)
 
 
-## Recalcula el score y ajusta el ritmo de aparición en vivo.
+## Recalcula el score y ajusta el ritmo de aparición en vivo. La curva completa
+## (pesos, techos y etapas) vive en GameBalance: fuente unica de verdad.
 func _recalculate_difficulty() -> void:
 	var minutes: float = _elapsed_time / 60.0
-	var player_level: int = _get_player_level()
-	_difficulty_score = minutes * time_weight \
-		+ player_level * level_weight \
-		+ _kills / kills_divisor \
-		+ _get_player_upgrades() * upgrade_weight \
-		+ _get_companion_count() * companion_weight \
-		+ _get_downed_companion_count() * downed_companion_weight \
-		+ _get_weapon_count() * weapon_weight \
-		+ _get_total_weapon_levels() * weapon_level_weight \
-		+ _coop_bonus
+	# El bono coop entra en RAMPA durante la etapa inicial: dos jugadores no
+	# empiezan con toda la presion extra encima antes de su primera build.
+	_difficulty_score = minutes * GameBalance.TIME_WEIGHT \
+		+ _power_smoothed \
+		+ _kills / GameBalance.KILLS_DIVISOR \
+		+ _coop_bonus * GameBalance.early_ramp(minutes)
 
 	# Modificador del mapa activo (Fase 06): escala la presion global.
 	_difficulty_score *= _map_difficulty_mult
-	# Mejoras permanentes (Fase 07.5): presion extra suave segun el poder acumulado.
-	_difficulty_score += _permanent_power * 0.12
-	# Poder del Refugio (Fase 10): mas equipo colocado = algo mas de presion.
-	_difficulty_score += _shelter_power * 0.10
+	# Mejoras permanentes (Fase 07.5) y Refugio (Fase 10): presion extra SUAVE.
+	# Bajadas en la Fase correccion (0.12/0.10 -> 0.10/0.08) para que ser mas
+	# fuerte por meta-progresion no castigue de inmediato.
+	_difficulty_score += _permanent_power * 0.10
+	_difficulty_score += _shelter_power * 0.08
+	# Techo absoluto del score (antes no existia: superaba 120).
+	_difficulty_score = minf(_difficulty_score, GameBalance.SCORE_CAP)
+
+	# MODO FASES: la fase es la fuente principal de dificultad; el score solo
+	# ajusta SUAVE dentro de ella (tope 25% mas rapido). El backpressure por
+	# saturacion/FPS sigue mandando por encima de todo.
+	if not _phase_profile.is_empty():
+		var base_interval: float = float(_phase_profile.get("interval", GameBalance.BASE_SPAWN_INTERVAL))
+		var tune: float = clampf(1.0 - _difficulty_score * 0.004, 0.75, 1.0)
+		var phase_interval: float = base_interval * tune / maxf(0.05, _spawn_multiplier)
+		_spawn_timer.wait_time = maxf(0.25, phase_interval)
+		stats_updated.emit(_kills, _difficulty_score)
+		return
 
 	# La horda acorta el intervalo (mas spawns); el backpressure lo alarga si hay
-	# saturacion. rate>1 = mas rapido, rate<1 = mas lento.
-	var interval: float = base_spawn_interval - _difficulty_score * interval_per_point
+	# saturacion. rate>1 = mas rapido, rate<1 = mas lento. El SUELO del intervalo
+	# depende del minuto: alto al inicio, baja hacia el final (GameBalance).
+	var interval: float = GameBalance.BASE_SPAWN_INTERVAL - _difficulty_score * GameBalance.INTERVAL_PER_POINT
 	var rate: float = max(0.05, _horde_intensity * _spawn_multiplier)
 	interval /= rate
-	_spawn_timer.wait_time = max(min_spawn_interval, interval)
+	_spawn_timer.wait_time = maxf(GameBalance.spawn_floor(minutes), interval)
 
 	stats_updated.emit(_kills, _difficulty_score)
 
 
+## Jugadores del equipo (coop: ambos; solo: el clasico). Para dificultad y anclas.
+func _team_players() -> Array:
+	var players: Array = []
+	for p in get_tree().get_nodes_in_group("players"):
+		if is_instance_valid(p) and p is Node2D:
+			players.append(p)
+	if players.is_empty() and is_instance_valid(_player):
+		players.append(_player)
+	return players
+
+
+## Ancla del spawn: un jugador ACTIVO al azar (en coop reparte la presion entre
+## las dos mitades). Cae a P1 si nadie esta activo.
+func _spawn_anchor() -> Node2D:
+	var active: Array = []
+	for p in _team_players():
+		if p.has_method("is_active") and not p.is_active():
+			continue
+		active.append(p)
+	if active.is_empty():
+		return _player
+	return active.pick_random()
+
+
+func _far_from_all_players(pos: Vector2, min_distance: float) -> bool:
+	for p in _team_players():
+		if pos.distance_to((p as Node2D).global_position) < min_distance:
+			return false
+	return true
+
+
+## Nivel del equipo: el MAXIMO de los jugadores (coop: niveles independientes).
 func _get_player_level() -> int:
-	if not is_instance_valid(_player):
-		return 1
-	var level_value = _player.get("level")
-	if level_value == null:
-		return 1
-	return int(level_value)
-
-
-func _get_player_upgrades() -> int:
-	if not is_instance_valid(_player):
-		return 0
-	var value = _player.get("upgrades_chosen")
-	if value == null:
-		return 0
-	return int(value)
+	var best: int = 1
+	for p in _team_players():
+		var level_value = p.get("level")
+		if level_value != null:
+			best = maxi(best, int(level_value))
+	return best
 
 
 func _get_companion_count() -> int:
@@ -390,18 +490,35 @@ func _get_weapon_manager() -> Node:
 	return get_tree().get_first_node_in_group("weapon_manager")
 
 
+## Armas del EQUIPO (coop: suma de los arsenales independientes de P1 y P2).
 func _get_weapon_count() -> int:
-	var manager: Node = _get_weapon_manager()
-	if not is_instance_valid(manager) or not manager.has_method("get_weapon_count"):
-		return 0
-	return int(manager.get_weapon_count())
+	var total: int = 0
+	for manager in _team_weapon_managers():
+		if manager.has_method("get_weapon_count"):
+			total += int(manager.get_weapon_count())
+	return total
 
 
 func _get_total_weapon_levels() -> int:
-	var manager: Node = _get_weapon_manager()
-	if not is_instance_valid(manager) or not manager.has_method("get_total_weapon_levels"):
-		return 0
-	return int(manager.get_total_weapon_levels())
+	var total: int = 0
+	for manager in _team_weapon_managers():
+		if manager.has_method("get_total_weapon_levels"):
+			total += int(manager.get_total_weapon_levels())
+	return total
+
+
+func _team_weapon_managers() -> Array:
+	var managers: Array = []
+	for p in _team_players():
+		if p.has_method("get_weapon_manager"):
+			var wm: Node = p.get_weapon_manager()
+			if is_instance_valid(wm):
+				managers.append(wm)
+	if managers.is_empty():
+		var fallback: Node = _get_weapon_manager()
+		if is_instance_valid(fallback):
+			managers.append(fallback)
+	return managers
 
 
 func _current_max_enemies() -> int:
@@ -418,7 +535,11 @@ func _current_max_enemies() -> int:
 	# Bajo estado critico se recorta el techo para recuperar FPS.
 	if _perf != null and _perf.is_critical():
 		cap = int(cap * 0.6)
-	var dynamic: float = base_max_enemies + _difficulty_score * enemies_per_point + extra
+	# MODO FASES: el tope de vivos lo define la fase (mas el margen coop).
+	if not _phase_profile.is_empty():
+		return mini(cap, int(_phase_profile.get("max_alive", 20)) + _coop_extra_enemies)
+	var dynamic: float = GameBalance.BASE_MAX_ENEMIES + _difficulty_score * GameBalance.ENEMIES_PER_POINT \
+		+ extra + float(_coop_extra_enemies)
 	return int(min(cap, dynamic))
 
 
@@ -443,10 +564,12 @@ func _on_spawn_timer_timeout() -> void:
 	_spawn_enemy()
 
 	# Mini-oleada: a veces aparecen varios de golpe (más probable con la presión).
-	# Se suprime bajo backpressure fuerte para no castigar cuando ya hay saturacion.
+	# Se suprime bajo backpressure fuerte y durante la ETAPA INICIAL (el arranque
+	# no castiga con oleadas antes de la primera build).
 	if _spawn_multiplier < 0.5:
 		return
 	var wave_chance: float = min(max_wave_chance, base_wave_chance + _difficulty_score * wave_chance_per_point)
+	wave_chance *= GameBalance.early_ramp(_elapsed_time / 60.0)
 	if randf() < wave_chance:
 		for _i in wave_extra_enemies:
 			if not _can_spawn_more():
@@ -455,46 +578,143 @@ func _on_spawn_timer_timeout() -> void:
 
 
 func _spawn_enemy() -> void:
+	var enemy_type: EnemyData
+	if _phase_profile.is_empty():
+		enemy_type = _pick_enemy_type()
+	else:
+		enemy_type = _pick_phase_enemy_type()
+		if enemy_type == null:
+			return  # sin hueco en presupuesto/limites: ventana de respiro natural
+	var anchor: Node2D = _spawn_anchor()
+	if not is_instance_valid(anchor):
+		return
+	_spawn_enemy_of(enemy_type, anchor.global_position + _spawn_offset())
+
+
+## Instancia y coloca un enemigo de un tipo concreto (comun a ambos modos).
+func _spawn_enemy_of(enemy_type: EnemyData, desired_pos: Vector2) -> void:
 	var enemy := enemy_scene.instantiate() as Node2D
 	if enemy == null:
 		return
 
-	var enemy_type: EnemyData = _pick_enemy_type()
 	if enemy.has_method("configure"):
 		enemy.call("configure", enemy_type, _health_multiplier(), _speed_multiplier(), _damage_multiplier())
 
-	# Elites: raros al principio (1.5%), hasta 10% con la dificultad alta. Dan XP x4.
-	var elite_chance: float = clampf(0.015 + _difficulty_score * 0.004, 0.0, 0.10)
-	if randf() < elite_chance and enemy.has_method("make_elite"):
+	# Elites por ESCALONES de minutos (GameBalance): 0% en la etapa inicial y
+	# subiendo por intervalos hasta el techo. Dan XP x4. Solo entre enemigos
+	# COMUNES: especiales y pesados ya son variantes con identidad propia.
+	var is_common: bool = enemy_type == null or enemy_type.tier == &"common"
+	var elite_chance: float = GameBalance.elite_chance(_elapsed_time / 60.0, _difficulty_score)
+	if is_common and randf() < elite_chance and enemy.has_method("make_elite"):
 		enemy.call("make_elite", ([&"veloz", &"blindado", &"gigante"] as Array[StringName]).pick_random())
 
-	enemy.global_position = _resolve_spawn_position(_player.global_position + _spawn_offset())
+	# Rework Coop: el spawn se ancla a un jugador activo al azar (no siempre P1),
+	# y se reintenta si el punto quedaria a la vista de CUALQUIER mitad (en split
+	# cada jugador ve su propia zona del mundo).
+	var spawn_pos: Vector2 = _resolve_spawn_position(desired_pos)
+	if _coop_bonus > 0.0:
+		for _attempt in 5:
+			if _far_from_all_players(spawn_pos, 420.0):
+				break
+			var anchor: Node2D = _spawn_anchor()
+			if not is_instance_valid(anchor):
+				break
+			spawn_pos = _resolve_spawn_position(anchor.global_position + _spawn_offset())
+	enemy.global_position = spawn_pos
 	if enemy.has_signal("died"):
 		enemy.connect("died", Callable(self, "_on_enemy_died"))
+
+	# Registro de amenaza y limites: el coste se libera al SALIR del arbol
+	# (cubre tanto muertes como la limpieza de emergencia).
+	if enemy_type != null:
+		_register_tracked_spawn(enemy, enemy_type)
 
 	# Los enemigos cuelgan del nivel para vivir aparte del spawner.
 	get_parent().add_child(enemy)
 	_alive_count += 1
 
 
+func _register_tracked_spawn(enemy: Node2D, enemy_type: EnemyData) -> void:
+	_threat_active += enemy_type.threat_cost
+	_alive_by_id[enemy_type.id] = int(_alive_by_id.get(enemy_type.id, 0)) + 1
+	_alive_by_tier[enemy_type.tier] = int(_alive_by_tier.get(enemy_type.tier, 0)) + 1
+	enemy.tree_exited.connect(_on_tracked_enemy_gone.bind(enemy_type.id, enemy_type.tier, enemy_type.threat_cost))
+
+
+func _on_tracked_enemy_gone(id: StringName, tier: StringName, cost: float) -> void:
+	_threat_active = maxf(0.0, _threat_active - cost)
+	_alive_by_id[id] = maxi(0, int(_alive_by_id.get(id, 0)) - 1)
+	_alive_by_tier[tier] = maxi(0, int(_alive_by_tier.get(tier, 0)) - 1)
+
+
+## Seleccion de tipo del MODO FASES: pondera los pesos de la fase (con la
+## identidad del mapa ya mezclada por el PhaseDirector) y descarta candidatos
+## sin hueco en el presupuesto de amenaza o en los limites por tipo/categoria.
+func _pick_phase_enemy_type() -> EnemyData:
+	var weights: Dictionary = _phase_profile.get("weights", {})
+	var candidates: Array = []
+	var total: float = 0.0
+	for id in weights:
+		var w: float = float(weights[id])
+		if w <= 0.0:
+			continue
+		var data: EnemyData = RunPhaseConfig.load_enemy_data(id)
+		if data == null or not _phase_slot_available(data):
+			continue
+		candidates.append([data, w])
+		total += w
+	if candidates.is_empty() or total <= 0.0:
+		return null
+	var roll: float = randf() * total
+	for pair in candidates:
+		roll -= pair[1]
+		if roll <= 0.0:
+			return pair[0]
+	return candidates[candidates.size() - 1][0]
+
+
+## Hay hueco para este tipo? Presupuesto de amenaza + limite por tipo + limite
+## por categoria. En coop el presupuesto sube UNA sola vez (RunPhaseConfig).
+func _phase_slot_available(data: EnemyData) -> bool:
+	if _phase_profile.is_empty():
+		return true
+	var budget: float = float(_phase_profile.get("budget", 0.0))
+	if budget <= 0.0:
+		return false
+	var budget_max: float = budget * (RunPhaseConfig.BUDGET_COOP_MULT if _coop_bonus > 0.0 else 1.0)
+	if _threat_active + data.threat_cost > budget_max:
+		return false
+	var type_caps: Dictionary = _phase_profile.get("type_caps", {})
+	if type_caps.has(data.id) and int(_alive_by_id.get(data.id, 0)) >= int(type_caps[data.id]):
+		return false
+	var tier_caps: Dictionary = _phase_profile.get("tier_caps", {})
+	if tier_caps.has(data.tier) and int(_alive_by_tier.get(data.tier, 0)) >= int(tier_caps[data.tier]):
+		return false
+	return true
+
+
+## Multiplicadores FINALES de enemigo, con TECHO TOTAL en GameBalance: la parte
+## por score esta acotada Y el producto con los multiplicadores externos
+## (mapa x plaga x dificultad x coop) tambien. Antes el producto externo era
+## ilimitado (vida x4.7 medida en coop dificil al minuto 3).
 func _health_multiplier() -> float:
-	return min(max_health_multiplier, 1.0 + _difficulty_score * health_per_point) * _map_health_mult
+	return GameBalance.health_multiplier(_difficulty_score, _map_health_mult)
 
 
 func _speed_multiplier() -> float:
-	return min(max_speed_multiplier, 1.0 + _difficulty_score * speed_per_point) * _map_speed_mult
+	return GameBalance.speed_multiplier(_difficulty_score, _map_speed_mult)
 
 
 func _damage_multiplier() -> float:
-	# El mult del mapa/dificultad de historia se aplica FUERA del tope: la
-	# dificultad elegida debe sentirse siempre, incluso con el score saturado.
-	return min(max_damage_multiplier, 1.0 + _difficulty_score * damage_per_point) * _map_damage_mult
+	return GameBalance.damage_multiplier(_difficulty_score, _map_damage_mult)
 
 
 ## Decide dónde aparece el enemigo: en el borde visible de la cámara (presión
 ## alta) o en el anillo lejano. La probabilidad de borde sube con la dificultad.
 func _spawn_offset() -> Vector2:
 	var edge_chance: float = min(max_edge_chance, base_edge_chance + _difficulty_score * edge_chance_per_point)
+	# Etapa inicial: sin spawns pegados a camara (presion de borde gradual).
+	edge_chance *= GameBalance.early_ramp(_elapsed_time / 60.0)
 	if randf() < edge_chance:
 		return _camera_edge_offset(randf() * TAU)
 	return _random_ring_offset()
@@ -505,9 +725,15 @@ func _spawn_offset() -> Vector2:
 func _camera_edge_offset(angle: float) -> Vector2:
 	var direction: Vector2 = Vector2.RIGHT.rotated(angle)
 	var half_extent: Vector2 = Vector2(960, 540)
-	var camera := get_viewport().get_camera_2d()
-	if camera != null:
-		half_extent = get_viewport_rect().size * 0.5 / camera.zoom
+	if _coop_bonus > 0.0:
+		# Coop split: la camara del viewport raiz esta "aparcada" (zoom extremo) y
+		# NO representa lo visible. Cota conservadora: media ventana completa con
+		# el zoom real de las mitades — fuera de la vista de cualquier mitad.
+		half_extent = get_viewport_rect().size * 0.5 / CoopConfig.SPLIT_BASE_ZOOM
+	else:
+		var camera := get_viewport().get_camera_2d()
+		if camera != null:
+			half_extent = get_viewport_rect().size * 0.5 / camera.zoom
 
 	# Proyecta la dirección al borde del rectángulo visible.
 	var scale_x: float = INF if is_zero_approx(direction.x) else half_extent.x / absf(direction.x)

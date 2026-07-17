@@ -6,7 +6,7 @@ extends Node2D
 ## de modo que lo visible coincide exactamente con las zonas reservadas de la logica.
 ## Los colores derivan del MapData para mantener la identidad de cada bioma.
 
-const CityPlan = preload("res://scripts/maps/city_plan.gd")
+# CityPlan es clase global (class_name): se usa sin preload.
 const CHUNK := Vector2(1024.0, 1024.0)
 
 var _map: MapData

@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemies/enemy_data.gd" id="1_enemy_data"]
+
+[resource]
+script = ExtResource("1_enemy_data")
+id = &"charger_zombie_dog"
+display_name = "Embestidor"
+max_health = 70
+speed = 70.0
+contact_damage = 16
+xp_value = 14
+tier = &"heavy"
+behavior = &"charger"
+threat_cost = 6.0
+spawn_weight = 0.0
+weight_growth = 0.0
+body_color = Color(0.55, 0.3, 0.2, 1)
+accent_color = Color(0.4, 0.2, 0.12, 1)
+eye_color = Color(1, 0.45, 0.2, 1)
+visual_scale = Vector2(1.4, 1.3)

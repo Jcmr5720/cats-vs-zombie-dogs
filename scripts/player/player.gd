@@ -21,10 +21,10 @@ signal revived(player_id: int)
 @export var speed: float = 250.0
 @export var max_health: int = 100
 ## Bajado de 10 a 8: la primera mejora llega antes y engancha desde el arranque.
-@export var starting_experience_to_level: int = 8
-## Cuánto crece la experiencia necesaria por nivel (1.35 = +35%). Bajado de 1.4
-## para que las cartas de mejora sigan fluyendo a mitad de partida (ritmo survivor).
-@export var experience_growth: float = 1.35
+@export var starting_experience_to_level: int = GameBalance.XP_FIRST_LEVEL
+## Cuánto crece la experiencia necesaria por nivel (1.35 = +35%). Centralizado
+## en GameBalance (Fase correccion): curvas de XP y dificultad en un solo sitio.
+@export var experience_growth: float = GameBalance.XP_GROWTH
 ## Tiempo de invulnerabilidad tras recibir daño (evita daño cada frame).
 @export var damage_cooldown: float = 0.5
 
@@ -32,6 +32,30 @@ signal revived(player_id: int)
 const MAX_SPEED: float = 420.0
 const MAX_HEALTH_CAP: int = 220
 const MAX_PICKUP_SCALE: float = 2.4
+
+## Identidad visual coop: colores centralizados en CoopConfig (mismos en la
+## pantalla dividida y el panel de cartas). El reparto de XP tambien vive alli.
+const P1_COLOR := CoopConfig.P1_COLOR
+const P2_COLOR := CoopConfig.P2_COLOR
+
+
+## Anillo de color bajo el gato: identidad visible en todo momento (coop).
+class IdentityRing:
+	extends Node2D
+	var color := Color.WHITE
+	## true = anillo SEGMENTADO (J2). La forma distingue a los jugadores ademas
+	## del color (apoyo para daltonismo).
+	var dashed := false
+
+	func _draw() -> void:
+		if dashed:
+			for i in 6:
+				var start: float = TAU * i / 6.0
+				draw_arc(Vector2.ZERO, 26.0, start, start + TAU / 9.0, 8,
+					Color(color.r, color.g, color.b, 0.85), 3.5, true)
+		else:
+			draw_arc(Vector2.ZERO, 26.0, 0.0, TAU, 40, Color(color.r, color.g, color.b, 0.8), 3.0, true)
+		draw_arc(Vector2.ZERO, 31.0, 0.0, TAU, 40, Color(color.r, color.g, color.b, 0.25), 5.0, true)
 
 var current_health: int
 var level: int = 1
@@ -95,6 +119,10 @@ func _ready() -> void:
 		add_to_group("player")
 	else:
 		_apply_second_player_look()
+	# En coop AMBOS jugadores llevan anillo de color + placa J1/J2: la identidad
+	# tiene que leerse de un vistazo (feedback directo de la beta).
+	if _is_coop():
+		_build_identity_marker()
 	# Emite el estado inicial para que el HUD arranque sincronizado.
 	health_changed.emit(current_health, max_health)
 	experience_changed.emit(experience, experience_to_level)
@@ -111,19 +139,39 @@ func _configure_input_profile() -> void:
 		_act_down = &"p2_move_down"
 
 
-## Look distintivo del Jugador 2: tinte frio + etiqueta "P2" flotante para que se
-## distinga del P1 de un vistazo. Solo cosmetico; no toca colision ni gameplay.
+## Look distintivo del Jugador 2: tinte frio. La placa y el anillo de identidad
+## los pone _build_identity_marker (para AMBOS jugadores, solo en coop).
 func _apply_second_player_look() -> void:
 	if is_instance_valid(_visual):
 		_visual.modulate = Color(0.62, 0.78, 1.15, 1.0)
-	var label := Label.new()
-	label.text = "P2"
-	label.position = Vector2(-10, -52)
-	label.add_theme_font_size_override("font_size", 16)
-	label.add_theme_color_override("font_color", Color(0.6, 0.85, 1.0))
-	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
-	label.add_theme_constant_override("outline_size", 4)
-	add_child(label)
+
+
+## Identidad coop: anillo de color bajo el gato (elipse en el suelo) + placa
+## "J1"/"J2" sobre la cabeza, con el color fijo del jugador. Solo cosmetico.
+func _build_identity_marker() -> void:
+	var color: Color = P1_COLOR if player_id <= 1 else P2_COLOR
+	var ring := IdentityRing.new()
+	ring.color = color
+	ring.dashed = player_id >= 2
+	ring.position = Vector2(0, 16)
+	ring.scale = Vector2(1.0, 0.55)
+	ring.z_index = -1
+	add_child(ring)
+
+	var badge := Label.new()
+	# Icono + numero: la FORMA identifica al jugador aunque no distinga colores.
+	badge.text = CoopConfig.player_tag(player_id)
+	badge.position = Vector2(-17, -60)
+	badge.add_theme_font_size_override("font_size", 13)
+	badge.add_theme_color_override("font_color", Color(0.08, 0.08, 0.1))
+	var chip := StyleBoxFlat.new()
+	chip.bg_color = color
+	chip.set_corner_radius_all(6)
+	chip.set_content_margin_all(3)
+	chip.content_margin_left = 7.0
+	chip.content_margin_right = 7.0
+	badge.add_theme_stylebox_override("normal", chip)
+	add_child(badge)
 
 
 func _physics_process(delta: float) -> void:
@@ -259,26 +307,35 @@ func get_pickup_radius() -> float:
 	return 90.0
 
 
-## Llamado por XPOrb al ser recogido.
-func add_experience(amount: int) -> void:
+## Llamado por XPOrb al ser recogido. En coop (Rework) cada jugador acumula SU
+## propia XP y sube SU propio nivel (cartas independientes). Reparto (Fase 3,
+## centralizado en CoopConfig): el recolector recibe XP_COLLECTOR_SHARE y el
+## companero XP_PARTNER_SHARE con decaimiento por distancia — el total del equipo
+## (~110%) ya no infla la progresion frente al modo solo, y separarse demasiado
+## reduce la XP compartida (incentivo suave a cooperar, sin correa).
+func add_experience(amount: int, from_share: bool = false) -> void:
 	if _is_dead or _is_downed:
 		return
 
-	# Coop: la XP es COMPARTIDA. Cualquier orbe que recoja el P2 se suma al
-	# portador de nivel del equipo (el jugador principal, unico que emite las
-	# cartas de mejora). Asi nivel y cartas nunca se duplican.
-	if not is_in_group("player"):
-		var primary := _primary_player()
-		if primary != null and primary != self and primary.has_method("add_experience"):
-			primary.add_experience(amount)
-			return
+	var gained: int = amount
+	var coop: bool = _is_coop()
+	if not from_share and coop:
+		gained = maxi(1, int(round(amount * CoopConfig.XP_COLLECTOR_SHARE)))
 
-	experience += max(1, int(round(amount * _xp_multiplier)))
+	experience += max(1, int(round(gained * _xp_multiplier)))
 	while experience >= experience_to_level:
 		experience -= experience_to_level
 		_level_up()
 
 	experience_changed.emit(experience, experience_to_level)
+
+	if not from_share and coop:
+		var partner := _partner_player()
+		if partner != null and partner is Node2D and partner.has_method("add_experience"):
+			var share: float = CoopConfig.xp_share_at_distance(
+				global_position.distance_to((partner as Node2D).global_position))
+			if share > 0.0:
+				partner.add_experience(maxi(1, int(ceil(amount * share))), true)
 
 
 ## Conectado a PickupArea.area_entered: recoge orbes de experiencia.
@@ -334,6 +391,22 @@ func apply_upgrade(upgrade_id: StringName, include_shared: bool = true) -> void:
 		&"colony_bond":
 			if is_instance_valid(companion_manager) and companion_manager.has_method("increase_colony_bond_bonus"):
 				companion_manager.increase_colony_bond_bonus(0.05)
+		# --- MUTACIONES (recompensa del mini-boss; mas fuertes que una carta) ---
+		&"mut_split_shots":
+			if is_instance_valid(_weapons) and _weapons.has_method("add_projectiles"):
+				_weapons.add_projectiles(2)
+		&"mut_savage_power":
+			if is_instance_valid(_weapons) and _weapons.has_method("multiply_damage"):
+				_weapons.multiply_damage(1.35)
+		&"mut_frenzy":
+			if is_instance_valid(_weapons) and _weapons.has_method("multiply_cooldown"):
+				_weapons.multiply_cooldown(0.70)
+		&"mut_iron_hide":
+			increase_max_health(40)
+			_permanent_damage_reduction = clampf(_permanent_damage_reduction + 0.10, 0.0, 0.35)
+		&"mut_wind_paws":
+			speed = min(speed * 1.15, MAX_SPEED)
+			_increase_pickup_range(1.5)
 
 	upgrades_chosen += 1
 
@@ -476,11 +549,12 @@ func _is_story_run() -> bool:
 	return gf != null and gf.has_method("is_story_run") and gf.is_story_run()
 
 
-## Jugador principal (portador de XP/nivel del equipo). En coop, el P1 en grupo
-## "player"; en solo, este mismo.
-func _primary_player() -> Node:
-	var p: Node = get_tree().get_first_node_in_group("player")
-	return p if p != null else self
+## El OTRO jugador del equipo en coop (para el reparto de XP). Null en solo.
+func _partner_player() -> Node:
+	for p in get_tree().get_nodes_in_group("players"):
+		if p != self and is_instance_valid(p):
+			return p
+	return null
 
 
 ## Coop: cae derribado. Detiene movimiento, apaga las armas y avisa al
@@ -507,7 +581,9 @@ func revive_player(health_percent: float = 0.4) -> void:
 		return
 	_is_downed = false
 	current_health = max(1, int(round(max_health * clampf(health_percent, 0.05, 1.0))))
-	_damage_timer = damage_cooldown  # breve invulnerabilidad al levantarse
+	# Invulnerabilidad al levantarse (Fase 9): al menos REVIVE_INVULN_SECONDS para
+	# no revivir dentro de dano inevitable (horda encima del cuerpo).
+	_damage_timer = maxf(damage_cooldown, CoopConfig.REVIVE_INVULN_SECONDS)
 	_set_weapons_enabled(true)
 	# Restaurar SIEMPRE el procedural (aunque este oculto en modo sprite: asi
 	# un cambio de modo posterior no hereda la pose de derribado).
@@ -544,7 +620,7 @@ func _die() -> void:
 	died.emit()
 
 
-func _play_audio(name: StringName) -> void:
+func _play_audio(sound_name: StringName) -> void:
 	var audio: Node = get_node_or_null("/root/AudioManager")
 	if audio != null and audio.has_method("play_sfx"):
-		audio.play_sfx(name)
+		audio.play_sfx(sound_name)

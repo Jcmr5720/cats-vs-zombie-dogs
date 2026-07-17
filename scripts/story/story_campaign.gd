@@ -7,6 +7,7 @@ extends RefCounted
 
 # Preload explicito (no depender de la cache global de class_name: los tests
 # headless con -s corren sin escaneo previo del proyecto).
+@warning_ignore("shadowed_global_identifier")
 const ChapterData = preload("res://scripts/story/chapter_data.gd")
 
 const CHAPTER_PATHS: Array[String] = [

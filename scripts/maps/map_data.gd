@@ -5,7 +5,9 @@ extends Resource
 ## reparte a los sistemas (fondo, EnemySpawner, RescueSpawner, WaveEventManager).
 ## Pensado para extenderse: agregar un mapa = crear un .tres, sin tocar codigo.
 
+@warning_ignore("shadowed_global_identifier")
 const BossData = preload("res://scripts/bosses/boss_data.gd")
+@warning_ignore("shadowed_global_identifier")
 const ObstacleData = preload("res://scripts/maps/obstacle_data.gd")
 
 @export var id: StringName = &"map"
@@ -59,6 +61,12 @@ const ObstacleData = preload("res://scripts/maps/obstacle_data.gd")
 @export var rescue_spawn_modifier: float = 1.0
 ## Distancia extra a la que aparecen los rescates (mapas peligrosos).
 @export var rescue_distance_bonus: float = 0.0
+
+@export_group("Identidad por fases (Partidas rapidas)")
+## Multiplicadores de peso por id de enemigo sobre la composicion de cada fase
+## (RunPhaseConfig). Ej: { &"pack_zombie_dog": 1.6 } = mas perros de manada en
+## este mapa. Solo modifica tipos que la fase ya permite (no salta limites).
+@export var phase_weight_overrides: Dictionary = {}
 
 @export_group("Eventos del mapa")
 ## Tiempo de aparicion del jefe principal (segundos). 0 = sin jefe programado.

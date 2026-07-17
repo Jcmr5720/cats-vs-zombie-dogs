@@ -5,6 +5,7 @@ extends Control
 ## primaria Comprar. Se abre con M al terminar la partida (dentro del HUD) o desde
 ## el menú principal (MetaProgressionMenu, que fija on_close para volver).
 
+@warning_ignore("shadowed_global_identifier")
 const MenuTheme = preload("res://scripts/menus/menu_theme.gd")
 
 const CATEGORY_ICON: Dictionary = {
@@ -362,7 +363,7 @@ func _hsep() -> Control:
 	return line
 
 
-func _play_ui(name: StringName) -> void:
+func _play_ui(sound_name: StringName) -> void:
 	var audio: Node = get_node_or_null("/root/AudioManager")
 	if audio != null and audio.has_method("play_ui"):
-		audio.play_ui(name)
+		audio.play_ui(sound_name)

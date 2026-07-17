@@ -45,13 +45,21 @@ func _exit_tree() -> void:
 
 
 func shutdown() -> void:
+	# Liberar los reproductores de forma explicita (no solo stop()): al salir del
+	# proceso, dejar un playback activo hace que el AudioServer no alcance a soltar
+	# el stream/playback antes del chequeo de fugas del motor. free() destruye el
+	# nodo en el acto y libera su playback interno de forma sincrona.
 	for player in _sfx_pool:
 		if is_instance_valid(player):
 			player.stop()
 			player.stream = null
+			player.free()
+	_sfx_pool.clear()
 	if is_instance_valid(_music_player):
 		_music_player.stop()
 		_music_player.stream = null
+		_music_player.free()
+	_music_player = null
 	_sfx.clear()
 	_music.clear()
 	_music_gain_db.clear()
@@ -60,25 +68,25 @@ func shutdown() -> void:
 	_last_played.clear()
 
 
-func play_sfx(name: StringName) -> void:
-	_play(name, "SFX")
+func play_sfx(sound_name: StringName) -> void:
+	_play(sound_name, "SFX")
 
 
-func play_ui(name: StringName) -> void:
-	_play(name, "UI")
+func play_ui(sound_name: StringName) -> void:
+	_play(sound_name, "UI")
 
 
-func play_music(name: StringName) -> void:
-	if _muted or not _music.has(name):
+func play_music(sound_name: StringName) -> void:
+	if _muted or not _music.has(sound_name):
 		return
 	if not is_instance_valid(_music_player):
 		return
-	if _current_music == name and _music_player.playing:
+	if _current_music == sound_name and _music_player.playing:
 		return
-	_current_music = name
+	_current_music = sound_name
 	_music_player.stop()
-	_music_player.stream = _music[name]
-	_music_player.volume_db = float(_music_gain_db.get(name, 0.0))
+	_music_player.stream = _music[sound_name]
+	_music_player.volume_db = float(_music_gain_db.get(sound_name, 0.0))
 	_music_player.play()
 
 
@@ -129,25 +137,25 @@ func is_muted() -> bool:
 	return _muted
 
 
-func _play(name: StringName, bus: String) -> void:
-	if _muted or not _sfx.has(name):
+func _play(sound_name: StringName, bus: String) -> void:
+	if _muted or not _sfx.has(sound_name):
 		return
 	var now: int = Time.get_ticks_msec()
-	var cooldown: int = int(_cooldowns_ms.get(name, DEFAULT_SFX_COOLDOWN_MS))
-	if now - int(_last_played.get(name, -999999)) < cooldown:
+	var cooldown: int = int(_cooldowns_ms.get(sound_name, DEFAULT_SFX_COOLDOWN_MS))
+	if now - int(_last_played.get(sound_name, -999999)) < cooldown:
 		return
-	var limit: int = int(_limits.get(name, DEFAULT_SIMULTANEOUS_LIMIT))
-	if _active_count(name) >= limit:
+	var limit: int = int(_limits.get(sound_name, DEFAULT_SIMULTANEOUS_LIMIT))
+	if _active_count(sound_name) >= limit:
 		return
 	var player := _free_sfx_player()
 	if player == null:
 		return
-	_last_played[name] = now
+	_last_played[sound_name] = now
 	player.stop()
 	player.bus = bus
-	player.stream = _sfx[name]
+	player.stream = _sfx[sound_name]
 	player.pitch_scale = randf_range(0.96, 1.04)
-	player.set_meta("audio_name", name)
+	player.set_meta("audio_name", sound_name)
 	player.play()
 
 
@@ -158,10 +166,10 @@ func _free_sfx_player() -> AudioStreamPlayer:
 	return null
 
 
-func _active_count(name: StringName) -> int:
+func _active_count(sound_name: StringName) -> int:
 	var count: int = 0
 	for player in _sfx_pool:
-		if player.playing and player.has_meta("audio_name") and player.get_meta("audio_name") == name:
+		if player.playing and player.has_meta("audio_name") and player.get_meta("audio_name") == sound_name:
 			count += 1
 	return count
 
@@ -237,17 +245,17 @@ func _build_streams() -> void:
 	_music_gain_db[&"shelter"] = 5.0
 
 
-func _add_tone(name: StringName, freq: float, duration: float, volume: float, shape: String, cooldown_ms: int, limit: int) -> void:
-	_sfx[name] = _make_tone(freq, duration, volume, shape)
-	_cooldowns_ms[name] = cooldown_ms
-	_limits[name] = limit
+func _add_tone(sound_name: StringName, freq: float, duration: float, volume: float, shape: String, cooldown_ms: int, limit: int) -> void:
+	_sfx[sound_name] = _make_tone(freq, duration, volume, shape)
+	_cooldowns_ms[sound_name] = cooldown_ms
+	_limits[sound_name] = limit
 
 
 func _apply_real_ui_streams() -> void:
-	for name in UI_REAL_STREAMS.keys():
-		var stream := _load_first_audio_stream(UI_REAL_STREAMS[name])
+	for key in UI_REAL_STREAMS.keys():
+		var stream := _load_first_audio_stream(UI_REAL_STREAMS[key])
 		if stream != null:
-			_sfx[name] = stream
+			_sfx[key] = stream
 
 
 func _load_first_audio_stream(file_names: Array) -> AudioStream:

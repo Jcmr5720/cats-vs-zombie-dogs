@@ -43,6 +43,47 @@ var _flash_tween: Tween
 var _elite_kind: StringName = &""
 var _elite_aura: Polygon2D
 
+# --- Partidas rapidas por fases: comportamiento por tipo (EnemyData.behavior) ---
+## Rama de comportamiento activa (&"" = persecucion clasica).
+var _behavior: StringName = &""
+## Cooldown general del comportamiento (embestida, salto, aullido, escupitajo).
+var _behavior_timer: float = 0.0
+## Sub-estado (embestidor/cazador/explosivo/sanador) y su temporizador.
+var _behavior_state: int = 0
+var _behavior_state_timer: float = 0.0
+## Direccion fijada durante una embestida o salto.
+var _behavior_dir: Vector2 = Vector2.ZERO
+var _behavior_hit_done: bool = false
+## Flanqueador: lado elegido al nacer (no cambia de lado constantemente).
+var _flank_side: float = 1.0
+## Perro de manada: bonus activo (0..PACK_BONUS_CAP) y anillo visual.
+var _pack_bonus: float = 0.0
+var _pack_scan_timer: float = 0.0
+var _pack_ring: Polygon2D
+## Potenciacion temporal del Aullador (no se apila: gana la mayor).
+var _buff_mult: float = 1.0
+var _buff_timer: float = 0.0
+## Cazador: objetivo mantenido un tiempo minimo.
+var _hunter_target: Node2D
+var _hunter_target_timer: float = 0.0
+## Esbirros del jefe: jefe vinculado y curacion restante del sanador.
+var _boss: Node2D
+var _heal_left: int = 0
+var _heal_tick_timer: float = 0.0
+## Telegrafo del embestidor (linea) y del vinculo del sanador.
+var _charge_line: Line2D
+var _healer_link: Line2D
+
+const PACK_BONUS_PER_DOG: float = 0.07
+const PACK_BONUS_CAP: float = 0.21
+const PACK_RADIUS: float = 200.0
+const CHARGER_TRIGGER_RANGE: float = 340.0
+const HUNTER_LEAP_RANGE: float = 300.0
+const HEALER_TOTAL_HEAL: int = 150
+const ENEMY_PROJECTILE_SCRIPT := preload("res://scripts/enemies/enemy_projectile.gd")
+const HAZARD_ZONE_SCRIPT := preload("res://scripts/enemies/hazard_zone.gd")
+const PUP_DATA_PATH := "res://data/enemies/pup_zombie_dog.tres"
+
 # Steering lateral para rodear obstaculos cuando move_and_slide choca contra uno.
 var _avoid: Vector2 = Vector2.ZERO
 var _subtarget: Vector2 = Vector2.ZERO
@@ -136,11 +177,30 @@ func _physics_process(delta: float) -> void:
 		return
 
 	_time += delta
+
+	# Potenciacion del Aullador: decae sola (no se apila).
+	if _buff_timer > 0.0:
+		_buff_timer -= delta
+		if _buff_timer <= 0.0:
+			_buff_mult = 1.0
+
+	# Comportamientos por fase: efectos periodicos (aullido, escupitajo, manada)
+	# y estados con control TOTAL del movimiento (embestida, salto, mecha, canal).
+	if _behavior != &"":
+		_behavior_tick(delta)
+		if _behavior_full_control(delta):
+			if _attack_anim_timer > 0.0:
+				_attack_anim_timer -= delta
+			_animate_visual()
+			return
+
 	_nearest_companion_cached(delta)
 	_chase_target = _pick_chase_target()
 	var target_position: Vector2 = _player.global_position
 	if is_instance_valid(_chase_target):
 		target_position = _chase_target.global_position
+	if _behavior != &"":
+		target_position = _behavior_target_position(target_position)
 	var direction: Vector2 = _steered_direction(target_position, delta)
 	# Zigzag suave: cada enemigo serpentea con fase y fuerza propias.
 	var wobble: float = sin(_time * _wobble_speed + _wobble_phase) * _wobble_strength
@@ -151,7 +211,8 @@ func _physics_process(delta: float) -> void:
 		_slow_timer -= delta
 		if _slow_timer <= 0.0:
 			_slow_mult = 1.0
-	velocity = direction * speed * _speed_jitter * _slow_mult + _separation(delta) + _knockback + _avoid
+	velocity = direction * speed * _speed_jitter * _slow_mult * _buff_mult * (1.0 + _pack_bonus) \
+		+ _separation(delta) + _knockback + _avoid
 	move_and_slide()
 	if velocity.length_squared() > 1.0:
 		_face_angle = lerp_angle(_face_angle, velocity.angle(), 0.16)
@@ -193,6 +254,19 @@ func configure(enemy_type: EnemyData, health_multiplier: float = 1.0, speed_mult
 func take_damage(amount: int, knockback_dir: Vector2 = Vector2.ZERO) -> void:
 	if _is_dead:
 		return
+
+	# Blindado: resiste parcialmente los ataques FRONTALES (debil de lado/atras).
+	# El disparo viaja en knockback_dir: es frontal si llega contra la cara.
+	if _behavior == &"armored" and knockback_dir != Vector2.ZERO:
+		var facing := Vector2.RIGHT.rotated(_face_angle)
+		if facing.dot(-knockback_dir.normalized()) > 0.35:
+			amount = maxi(1, int(round(amount * 0.4)))
+			# Chispa gris: se LEE que el golpe reboto en el blindaje frontal.
+			Feedback.hit_effect(global_position, Color(0.7, 0.75, 0.85, 0.8), 0.18, 0.9)
+
+	# Embestidor aturdido tras fallar/chocar: ventana de vulnerabilidad.
+	if _behavior == &"charger" and _behavior_state == 3:
+		amount = int(round(amount * 1.5))
 
 	# Objetivo prioritario del Gato Policia: el enemigo marcado recibe daño
 	# extra de TODO el equipo (jugadores, compañeros y torretas).
@@ -492,6 +566,9 @@ func _die() -> void:
 	set_deferred("collision_layer", 0)
 	call_deferred("set_physics_process", false)
 
+	# Efectos de muerte por comportamiento (division, zona infecciosa, guardian).
+	_behavior_on_death()
+
 	died.emit(global_position, xp_value)
 	var audio: Node = get_node_or_null("/root/AudioManager")
 	if audio != null and audio.has_method("play_sfx"):
@@ -599,6 +676,28 @@ func _apply_config() -> void:
 			eye_glow.self_modulate = Color(1, 1, 1, 1)
 			eye_glow.scale = Vector2.ONE
 
+	# Comportamiento por fase (EnemyData.behavior): grupos y arranque de timers.
+	_behavior = enemy_data.behavior if enemy_data != null else &""
+	if enemy_data != null and enemy_data.role == &"boss_minion":
+		add_to_group("boss_minions")
+	match _behavior:
+		&"pack":
+			add_to_group("pack_dogs")
+			_ensure_pack_ring()
+		&"flanker":
+			_flank_side = 1.0 if randf() < 0.5 else -1.0
+		&"howler":
+			_behavior_timer = 2.0  # primer aullido temprano: su rol se lee pronto
+		&"spitter":
+			_behavior_timer = 1.6
+		&"charger":
+			_behavior_timer = 2.2
+			knockback_strength = 40.0
+		&"hunter":
+			_behavior_timer = 2.0
+		&"boss_healer":
+			_heal_left = HEALER_TOTAL_HEAL
+
 	_base_scale = scale
 	current_health = max_health
 	if _elite_kind != &"":
@@ -674,3 +773,487 @@ func _tint(body_color: Color, accent_color: Color, eye_color: Color) -> void:
 	var glow := get_node_or_null("Visual/EyeGlow") as Polygon2D
 	if glow != null:
 		glow.color = Color(eye_color.r, eye_color.g, eye_color.b, 0.14)
+
+
+# --- Comportamientos de fase (Partidas rapidas por fases) ----------------------
+# Cada rama es pequeña y legible: efectos periodicos en _behavior_tick, estados
+# con control total del movimiento en _behavior_full_control y desvios de
+# objetivo en _behavior_target_position. Los limites globales (proyectiles,
+# zonas) viven en RunPhaseConfig.
+
+
+## Efectos periodicos del comportamiento (aullido, escupitajo, bonus de manada).
+func _behavior_tick(delta: float) -> void:
+	match _behavior:
+		&"pack":
+			_pack_tick(delta)
+		&"howler":
+			_behavior_timer -= delta
+			if _behavior_timer <= 0.0:
+				_behavior_timer = 6.0
+				_howl()
+		&"spitter":
+			_behavior_timer -= delta
+			if _behavior_timer <= 0.0 and is_instance_valid(_player):
+				var d: float = global_position.distance_to(_player.global_position)
+				if d < 560.0 and get_tree().get_node_count_in_group(ENEMY_PROJECTILE_SCRIPT.GROUP) \
+						< RunPhaseConfig.MAX_ENEMY_PROJECTILES:
+					_behavior_timer = 2.8
+					_spit()
+		&"boss_healer":
+			_update_healer_link()
+
+
+## true si el comportamiento tomo control TOTAL del movimiento este frame.
+func _behavior_full_control(delta: float) -> bool:
+	match _behavior:
+		&"charger":
+			return _charger_process(delta)
+		&"hunter":
+			return _hunter_process(delta)
+		&"boss_exploder":
+			return _exploder_process(delta)
+		&"boss_healer":
+			return _healer_channel_process(delta)
+	return false
+
+
+## Desvio del punto objetivo segun el comportamiento (rodeos, kiting, jefe).
+func _behavior_target_position(default_target: Vector2) -> Vector2:
+	match _behavior:
+		&"flanker":
+			# Rodea: apunta a un punto LATERAL fijo del objetivo hasta acercarse
+			# (el lado se elige al nacer y no cambia constantemente).
+			if global_position.distance_to(default_target) > 220.0:
+				var to_me: Vector2 = (global_position - default_target).normalized()
+				var side: Vector2 = Vector2(-to_me.y, to_me.x) * _flank_side
+				return default_target + side * 170.0
+			return default_target
+		&"spitter":
+			# Mantiene distancia: huye si lo acorralan, avanza si queda lejos.
+			if not is_instance_valid(_player):
+				return default_target
+			var d: float = global_position.distance_to(_player.global_position)
+			if d < 240.0:
+				return global_position + (global_position - _player.global_position).normalized() * 200.0
+			if d < 420.0:
+				return global_position
+			return default_target
+		&"hunter":
+			if is_instance_valid(_hunter_target):
+				return _hunter_target.global_position
+			return default_target
+		&"boss_guardian":
+			# Se interpone entre el jefe y el jugador.
+			_resolve_boss()
+			if _valid_boss():
+				return _boss.global_position + _boss.global_position.direction_to(default_target) * 110.0
+			return default_target
+		&"boss_healer":
+			_resolve_boss()
+			if _valid_boss():
+				return _boss.global_position
+			return default_target
+	return default_target
+
+
+# --- Perro de manada ------------------------------------------------------------
+
+func _pack_tick(delta: float) -> void:
+	_pack_scan_timer -= delta
+	if _pack_scan_timer > 0.0:
+		return
+	_pack_scan_timer = 0.5
+	var near: int = 0
+	for other in get_tree().get_nodes_in_group("pack_dogs"):
+		if other == self or not is_instance_valid(other):
+			continue
+		if global_position.distance_to((other as Node2D).global_position) <= PACK_RADIUS:
+			near += 1
+			if near >= 3:
+				break
+	# Bonus LIMITADO (tope PACK_BONUS_CAP): nunca se acumula indefinidamente.
+	_pack_bonus = minf(PACK_BONUS_CAP, float(near) * PACK_BONUS_PER_DOG)
+	if is_instance_valid(_pack_ring):
+		_pack_ring.visible = _pack_bonus > 0.0
+
+
+func _ensure_pack_ring() -> void:
+	if _pack_ring != null:
+		return
+	_pack_ring = Polygon2D.new()
+	var pts := PackedVector2Array()
+	for i in 16:
+		var a: float = TAU * float(i) / 16.0
+		pts.append(Vector2(cos(a) * 22.0, sin(a) * 18.0))
+	_pack_ring.polygon = pts
+	_pack_ring.color = Color(1.0, 0.75, 0.25, 0.16)
+	_pack_ring.visible = false
+	add_child(_pack_ring)
+	move_child(_pack_ring, 0)
+
+
+# --- Aullador ---------------------------------------------------------------------
+
+func _howl() -> void:
+	if not is_instance_valid(_player) or global_position.distance_to(_player.global_position) > 700.0:
+		return
+	# Aviso visual y sonoro inconfundible: debe volverse objetivo prioritario.
+	Feedback.hit_effect(global_position, Color(1.0, 0.95, 0.5, 0.85), 0.7, 3.2)
+	Feedback.hit_effect(global_position, Color(1.0, 0.9, 0.4, 0.6), 0.35, 1.8)
+	var audio: Node = get_node_or_null("/root/AudioManager")
+	if audio != null and audio.has_method("play_sfx"):
+		audio.play_sfx(&"event_alert")
+	for other in get_tree().get_nodes_in_group("enemies"):
+		if other == self or not is_instance_valid(other) or not (other is Node2D):
+			continue
+		if global_position.distance_to((other as Node2D).global_position) <= 260.0 \
+				and other.has_method("apply_howler_buff"):
+			other.apply_howler_buff(1.3, 4.0)
+
+
+## Potenciacion temporal del Aullador. No se apila: gana la mas fuerte, con tope
+## duro x1.5, y los aulladores no se potencian entre si.
+func apply_howler_buff(mult: float, duration: float) -> void:
+	if _is_dead or _behavior == &"howler":
+		return
+	_buff_mult = clampf(maxf(_buff_mult, mult), 1.0, 1.5)
+	_buff_timer = maxf(_buff_timer, duration)
+
+
+## Empuje externo simple (el Embestidor arrolla a la horda a su paso).
+func apply_push(impulse: Vector2) -> void:
+	if _is_dead:
+		return
+	_knockback += impulse
+
+
+# --- Escupidor ---------------------------------------------------------------------
+
+func _spit() -> void:
+	var proj := Node2D.new()
+	proj.set_script(ENEMY_PROJECTILE_SCRIPT)
+	proj.set("velocity", global_position.direction_to(_player.global_position) * 220.0)
+	proj.set("damage", maxi(1, int(round(6.0 * _damage_multiplier))))
+	proj.position = global_position
+	get_parent().add_child(proj)
+	# Destello de aviso en el momento del disparo.
+	Feedback.hit_effect(global_position, Color(0.6, 1.0, 0.4, 0.7), 0.25, 1.2)
+
+
+# --- Embestidor ----------------------------------------------------------------------
+
+func _charger_process(delta: float) -> bool:
+	_behavior_timer -= delta
+	match _behavior_state:
+		1:  # Telegrafo: linea visible que reapunta levemente.
+			velocity = velocity.move_toward(Vector2.ZERO, speed * 6.0 * delta)
+			move_and_slide()
+			if is_instance_valid(_player):
+				_behavior_dir = _behavior_dir.lerp(
+					global_position.direction_to(_player.global_position), 0.05).normalized()
+			_update_charge_line()
+			_behavior_state_timer -= delta
+			if _behavior_state_timer <= 0.0:
+				_behavior_state = 2
+				_behavior_state_timer = 0.55
+				_behavior_hit_done = false
+				if is_instance_valid(_charge_line):
+					_charge_line.visible = false
+				Feedback.shake(0.12)
+			return true
+		2:  # Embestida fuerte y recta; arrolla a otros enemigos a su paso.
+			velocity = _behavior_dir * speed * 4.2
+			var collided := move_and_slide()
+			_face_angle = lerp_angle(_face_angle, _behavior_dir.angle(), 0.3)
+			if not _behavior_hit_done and is_instance_valid(_player) \
+					and global_position.distance_to(_player.global_position) <= contact_range + 14.0:
+				if _player.has_method("take_damage"):
+					_player.take_damage(int(round(contact_damage * 1.5)))
+				_behavior_hit_done = true
+			_push_enemies_in_path()
+			_behavior_state_timer -= delta
+			if collided or _behavior_state_timer <= 0.0:
+				# Queda VULNERABLE si choca con un obstaculo o falla la carga.
+				_behavior_state = 3
+				_behavior_state_timer = 1.3 if collided else 0.9
+				if collided:
+					Feedback.shake(0.2)
+					Feedback.hit_effect(global_position, Color(1.0, 0.6, 0.3, 0.7), 0.4, 1.6)
+			return true
+		3:  # Aturdido: quieto y vulnerable (take_damage x1.5).
+			velocity = Vector2.ZERO
+			_behavior_state_timer -= delta
+			if _behavior_state_timer <= 0.0:
+				_behavior_state = 0
+				_behavior_timer = 3.2
+			return true
+	# Estado 0 (acecho): persecucion normal; entra en telegrafo por cercania.
+	if _behavior_timer <= 0.0 and is_instance_valid(_player) \
+			and global_position.distance_to(_player.global_position) < CHARGER_TRIGGER_RANGE:
+		_behavior_state = 1
+		_behavior_state_timer = 0.9
+		_behavior_dir = global_position.direction_to(_player.global_position)
+		_ensure_charge_line()
+		_charge_line.visible = true
+	return false
+
+
+func _push_enemies_in_path() -> void:
+	var pushed: int = 0
+	for other in get_tree().get_nodes_in_group("enemies"):
+		if other == self or not is_instance_valid(other) or not other.has_method("apply_push"):
+			continue
+		if global_position.distance_to((other as Node2D).global_position) <= 48.0:
+			other.apply_push(_behavior_dir * 260.0)
+			pushed += 1
+			if pushed >= 6:
+				break
+
+
+func _ensure_charge_line() -> void:
+	if _charge_line != null:
+		return
+	_charge_line = Line2D.new()
+	_charge_line.width = 7.0
+	_charge_line.default_color = Color(1.0, 0.35, 0.25, 0.55)
+	_charge_line.z_index = -1
+	add_child(_charge_line)
+
+
+func _update_charge_line() -> void:
+	if not is_instance_valid(_charge_line):
+		return
+	# Longitud aproximada del recorrido real de la carga, compensando la escala
+	# del nodo (los hijos heredan visual_scale).
+	var length: float = speed * 2.6 / maxf(scale.x, 0.01)
+	_charge_line.points = PackedVector2Array([Vector2.ZERO, _behavior_dir * length])
+	_charge_line.default_color.a = 0.3 + 0.4 * absf(sin(_time * 14.0))
+
+
+# --- Cazador ----------------------------------------------------------------------------
+
+func _hunter_process(delta: float) -> bool:
+	_behavior_timer -= delta
+	_hunter_retarget(delta)
+	match _behavior_state:
+		1:  # Anuncio del salto: se detiene y avisa (doble anillo ya emitido).
+			velocity = velocity.move_toward(Vector2.ZERO, speed * 6.0 * delta)
+			move_and_slide()
+			_behavior_state_timer -= delta
+			if _behavior_state_timer <= 0.0:
+				if is_instance_valid(_hunter_target):
+					_behavior_state = 2
+					_behavior_state_timer = 0.4
+					_behavior_hit_done = false
+					_behavior_dir = global_position.direction_to(_hunter_target.global_position)
+				else:
+					_behavior_state = 0
+			return true
+		2:  # Salto rapido y recto.
+			velocity = _behavior_dir * speed * 3.6
+			move_and_slide()
+			_face_angle = lerp_angle(_face_angle, _behavior_dir.angle(), 0.3)
+			if not _behavior_hit_done and is_instance_valid(_hunter_target) \
+					and global_position.distance_to(_hunter_target.global_position) <= contact_range + 10.0:
+				if _hunter_target.has_method("take_damage"):
+					_hunter_target.take_damage(int(round(contact_damage * 1.3)))
+				_behavior_hit_done = true
+			_behavior_state_timer -= delta
+			if _behavior_state_timer <= 0.0:
+				_behavior_state = 3
+				_behavior_state_timer = 0.6
+			return true
+		3:  # Recuperacion breve tras el salto.
+			velocity = velocity.move_toward(Vector2.ZERO, speed * 4.0 * delta)
+			move_and_slide()
+			_behavior_state_timer -= delta
+			if _behavior_state_timer <= 0.0:
+				_behavior_state = 0
+				_behavior_timer = 4.0
+			return true
+	if _behavior_timer <= 0.0 and is_instance_valid(_hunter_target) \
+			and global_position.distance_to(_hunter_target.global_position) < HUNTER_LEAP_RANGE:
+		_behavior_state = 1
+		_behavior_state_timer = 0.7
+		# Salto claramente anunciado ANTES de ejecutarse.
+		Feedback.hit_effect(global_position, Color(1.0, 0.25, 0.25, 0.85), 0.5, 2.2)
+		Feedback.hit_effect(global_position, Color(1.0, 0.5, 0.3, 0.6), 0.25, 1.3)
+	return false
+
+
+## El Cazador elige al jugador MAS VULNERABLE (menor % de vida; en coop prioriza
+## al herido) y lo mantiene un tiempo minimo: no cambia de objetivo sin parar.
+func _hunter_retarget(delta: float) -> void:
+	_hunter_target_timer -= delta
+	if _hunter_target_timer > 0.0 and is_instance_valid(_hunter_target) \
+			and (not _hunter_target.has_method("is_active") or _hunter_target.is_active()):
+		return
+	_hunter_target_timer = 4.0
+	var best: Node2D = null
+	var best_ratio: float = INF
+	for p in get_tree().get_nodes_in_group("players"):
+		if not is_instance_valid(p) or not (p is Node2D):
+			continue
+		if p.has_method("is_active") and not p.is_active():
+			continue
+		var max_h: float = maxf(1.0, float(p.get("max_health")))
+		var ratio: float = float(p.get("current_health")) / max_h
+		if ratio < best_ratio:
+			best_ratio = ratio
+			best = p
+	_hunter_target = best if best != null else _player
+
+
+# --- Esbirros del jefe -------------------------------------------------------------------
+
+func _exploder_process(delta: float) -> bool:
+	if _behavior_state != 1:
+		# Persecucion normal (rapida); enciende la mecha al acercarse.
+		if is_instance_valid(_player) and global_position.distance_to(_player.global_position) < 95.0:
+			_behavior_state = 1
+			_behavior_state_timer = 0.8
+		return false
+	# Mecha encendida: quieto, parpadea en rojo y crece (señal clara y esquivable).
+	velocity = Vector2.ZERO
+	_behavior_state_timer -= delta
+	var blink: float = 0.5 + 0.5 * absf(sin(_time * 22.0))
+	modulate = Color(1.0 + blink, 1.0 - blink * 0.5, 1.0 - blink * 0.5, 1.0)
+	scale = _base_scale * (1.0 + (0.8 - _behavior_state_timer) * 0.35)
+	if _behavior_state_timer <= 0.0:
+		_explode()
+	return true
+
+
+## Explosion del Explosivo: daña a jugadores Y a enemigos/jefe cercanos — bien
+## posicionada, el jugador puede volverla en contra del propio jefe.
+func _explode() -> void:
+	var radius: float = 130.0
+	Feedback.hit_effect(global_position, Color(1.0, 0.55, 0.2, 0.9), 0.8, 3.4)
+	Feedback.shake(0.25)
+	var audio: Node = get_node_or_null("/root/AudioManager")
+	if audio != null and audio.has_method("play_sfx"):
+		audio.play_sfx(&"enemy_die")
+	for p in get_tree().get_nodes_in_group("players"):
+		if not is_instance_valid(p) or not (p is Node2D):
+			continue
+		if global_position.distance_to((p as Node2D).global_position) <= radius \
+				and p.has_method("take_damage"):
+			p.take_damage(16)
+	for other in get_tree().get_nodes_in_group("enemies"):
+		if other == self or not is_instance_valid(other) or not (other is Node2D):
+			continue
+		if global_position.distance_to((other as Node2D).global_position) <= radius \
+				and other.has_method("take_damage"):
+			other.take_damage(25, global_position.direction_to((other as Node2D).global_position))
+	_die()
+
+
+func _healer_channel_process(delta: float) -> bool:
+	_resolve_boss()
+	if not _valid_boss():
+		return false  # sin jefe vivo se comporta como enemigo normal
+	if _behavior_state != 1:
+		# Camina hacia el jefe (_behavior_target_position); canaliza al llegar.
+		if global_position.distance_to(_boss.global_position) < 90.0:
+			_behavior_state = 1
+			_behavior_state_timer = 2.4
+			_heal_tick_timer = 0.0
+		return false
+	velocity = Vector2.ZERO
+	_behavior_state_timer -= delta
+	_heal_tick_timer -= delta
+	if _heal_tick_timer <= 0.0 and _heal_left > 0:
+		_heal_tick_timer = 0.4
+		var chunk: int = mini(12, _heal_left)
+		_heal_left -= chunk
+		if _boss.has_method("receive_minion_heal"):
+			_boss.receive_minion_heal(chunk)
+		Feedback.hit_effect(_boss.global_position, Color(0.4, 1.0, 0.6, 0.5), 0.3, 1.4)
+	if _behavior_state_timer <= 0.0 or _heal_left <= 0:
+		_die()  # se consume al terminar la canalizacion
+	return true
+
+
+## Conexion VISUAL del sanador con su jefe (linea verde pulsante).
+func _update_healer_link() -> void:
+	_resolve_boss()
+	if not _valid_boss():
+		if is_instance_valid(_healer_link):
+			_healer_link.visible = false
+		return
+	if _healer_link == null:
+		_healer_link = Line2D.new()
+		_healer_link.width = 3.0
+		_healer_link.default_color = Color(0.4, 1.0, 0.6, 0.45)
+		_healer_link.z_index = -1
+		add_child(_healer_link)
+	_healer_link.visible = true
+	var to_boss: Vector2 = (_boss.global_position - global_position) / maxf(scale.x, 0.01)
+	_healer_link.points = PackedVector2Array([Vector2.ZERO, to_boss])
+	_healer_link.default_color.a = 0.3 + 0.25 * absf(sin(_time * 6.0))
+
+
+func _resolve_boss() -> void:
+	if _valid_boss():
+		return
+	_boss = null
+	for b in get_tree().get_nodes_in_group("boss"):
+		if is_instance_valid(b) and b is Node2D:
+			_boss = b
+			return
+	for mb in get_tree().get_nodes_in_group("miniboss"):
+		if is_instance_valid(mb) and mb is Node2D:
+			_boss = mb
+			return
+
+
+func _valid_boss() -> bool:
+	return _boss != null and is_instance_valid(_boss) and _boss.is_inside_tree()
+
+
+## Vincula el esbirro a su jefe (lo llama el jefe al invocarlo).
+func bind_boss(boss_node: Node2D) -> void:
+	_boss = boss_node
+
+
+# --- Efectos de muerte por comportamiento ---------------------------------------------------
+
+func _behavior_on_death() -> void:
+	match _behavior:
+		&"splitter":
+			_split_on_death()
+		&"infection_carrier":
+			_leave_hazard_zone()
+		&"boss_guardian":
+			# Su muerte abre una ventana de vulnerabilidad en el jefe.
+			if _valid_boss() and _boss.has_method("notify_guardian_down"):
+				_boss.notify_guardian_down()
+
+
+## El Mutante Divisor genera DOS cachorros pequeños al morir. Solo se divide una
+## vez, y los cachorros (comunes) no pueden volver a dividirse.
+func _split_on_death() -> void:
+	var pup_data: EnemyData = load(PUP_DATA_PATH)
+	var scene := load("res://scenes/enemies/Enemy.tscn") as PackedScene
+	if scene == null or pup_data == null:
+		return
+	for i in 2:
+		var child := scene.instantiate() as Node2D
+		if child == null:
+			continue
+		if child.has_method("configure"):
+			child.call("configure", pup_data, 0.8, 1.0, 1.0)
+		child.position = global_position + Vector2(24.0 if i == 0 else -24.0, 0.0)
+		get_parent().add_child.call_deferred(child)
+
+
+## El Portador deja una zona peligrosa claramente señalada (limite global).
+func _leave_hazard_zone() -> void:
+	if get_tree().get_node_count_in_group(HAZARD_ZONE_SCRIPT.GROUP) >= RunPhaseConfig.MAX_HAZARD_ZONES:
+		return
+	var zone := Node2D.new()
+	zone.set_script(HAZARD_ZONE_SCRIPT)
+	zone.position = global_position
+	zone.set("damage_per_tick", maxi(1, int(round(4.0 * _damage_multiplier))))
+	get_parent().add_child.call_deferred(zone)

@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bvc99balancesim"]
+
+[ext_resource type="Script" path="res://tests/test_balance_sim.gd" id="1_test"]
+
+[node name="TestBalanceSim" type="Node"]
+script = ExtResource("1_test")

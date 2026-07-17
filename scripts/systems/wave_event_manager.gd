@@ -47,6 +47,18 @@ var _map_miniboss_times: PackedFloat32Array = PackedFloat32Array()
 var _map_applied: bool = false
 
 
+## Partidas rapidas por fases: un director externo (PhaseDirector) asume el
+## calendario COMPLETO (hordas, mini-jefes y jefe). Con esto activo, este nodo
+## no dispara ningun evento propio (y las reprogramaciones quedan bloqueadas).
+var _external_director: bool = false
+
+
+func set_external_director(active: bool) -> void:
+	_external_director = active
+	if active:
+		_events.clear()
+
+
 ## La llama MapManager: fija los tiempos de jefe/mini-jefes del mapa y reprograma.
 func apply_map_schedule(boss_time: float, miniboss_times: PackedFloat32Array) -> void:
 	_map_boss_time = boss_time
@@ -66,6 +78,8 @@ func _ready() -> void:
 ## Construye la lista de eventos por tiempo. Editable via los @export de arriba.
 func _build_schedule() -> void:
 	_events.clear()
+	if _external_director:
+		return
 	_add_event(&"horde", horde_first_time, horde_duration, horde_intensity,
 		"¡Horda entrante!", horde_repeat)
 	_add_event(&"runner_pack", runner_first_time, runner_duration, 1.0,

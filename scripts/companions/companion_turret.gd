@@ -7,6 +7,7 @@ extends Node2D
 ## periodico a los jugadores cercanos.
 
 const CompanionBalance = preload("res://scripts/companions/companion_balance.gd")
+const Targeting = preload("res://scripts/weapons/targeting.gd")
 
 var _projectile_scene: PackedScene
 var _damage: int = 8
@@ -71,27 +72,22 @@ func _process(delta: float) -> void:
 		_head.rotation = global_position.direction_to(_target.global_position).angle()
 
 
-## Prioridad: marcado por el Policia > elite > mas cercano. Un solo recorrido
-## del grupo por tick (0.3 s), sin nodos ni calculos extra por enemigo.
+## Prioridad: marcado por el Policia > elite > amenaza/cercania. Usa el helper
+## compartido de apuntado (Targeting) con un refuerzo duro para la marca: un solo
+## recorrido del grupo por tick (0.3 s), sin nodos ni calculos extra por enemigo.
 func _pick_target() -> Node2D:
-	var best: Node2D = null
-	var best_score: float = -INF
-	var range_sq: float = _range * _range
-	for enemy in get_tree().get_nodes_in_group("enemies"):
-		if not is_instance_valid(enemy) or not (enemy is Node2D):
-			continue
-		var dist_sq: float = global_position.distance_squared_to((enemy as Node2D).global_position)
-		if dist_sq > range_sq:
-			continue
-		var score: float = -dist_sq
-		if enemy.has_meta(&"companion_mark"):
-			score += range_sq * 4.0
-		elif enemy.get("_elite_kind") != null and enemy.get("_elite_kind") != &"":
-			score += range_sq * 2.0
-		if score > best_score:
-			best_score = score
-			best = enemy
-	return best
+	var candidates: Array[Dictionary] = Targeting.gather_candidates(
+		get_tree().get_nodes_in_group("enemies"), global_position, global_position, _range)
+	if candidates.is_empty():
+		return null
+	# La marca gana SIEMPRE (sinergia Policia + Ingeniero).
+	for candidate in candidates:
+		if candidate["is_marked"]:
+			return candidate.get("enemy")
+	var picked: Dictionary = Targeting.pick_laser_target(candidates, global_position)
+	if picked.is_empty():
+		return null
+	return picked.get("enemy")
 
 
 func _fire() -> void:
@@ -100,7 +96,11 @@ func _fire() -> void:
 	var projectile := _projectile_scene.instantiate() as Node2D
 	if projectile == null:
 		return
-	var direction: Vector2 = global_position.direction_to(_target.global_position)
+	# Tiro liderado (mismo intercept que jugador y compañeros).
+	var target_body := _target as CharacterBody2D
+	var target_velocity: Vector2 = target_body.velocity if target_body != null else Vector2.ZERO
+	var direction: Vector2 = Targeting.intercept_direction(
+		global_position, _target.global_position, target_velocity, 520.0)
 	projectile.global_position = global_position + direction * 14.0
 	projectile.modulate = _base_color
 	projectile.call("setup", direction, 520.0, _damage)

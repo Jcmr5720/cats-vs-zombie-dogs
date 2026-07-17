@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1_wdata"]
+
+[resource]
+script = ExtResource("1_wdata")
+id = &"gatling_meow"
+display_name = "Ametralladora Maulladora"
+description = "Rafaga triple incesante. Evolucion de la Pistola Gatuna."
+weapon_type = &"projectile"
+damage = 18
+cooldown = 0.33
+range = 540.0
+projectile_speed = 680.0
+projectile_count = 3
+spread_degrees = 9.0
+knockback = 130.0
+visual_color = Color(1, 0.82, 0.25, 1)
+rarity = &"legendary"
+rarity_weight = 0.0
+max_level = 3

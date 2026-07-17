@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://8k23pjvwkcrw"]
+
+[ext_resource type="Script" path="res://tests/test_difficulty_telemetry.gd" id="1_test"]
+
+[node name="TestDifficultyTelemetry" type="Node"]
+script = ExtResource("1_test")

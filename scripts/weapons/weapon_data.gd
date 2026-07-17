@@ -20,6 +20,7 @@ extends Resource
 @export_group("Combate")
 @export var damage: int = 8
 @export var cooldown: float = 0.55
+@warning_ignore("shadowed_global_identifier")
 @export var range: float = 500.0
 @export var projectile_speed: float = 600.0
 @export var projectile_count: int = 1
@@ -29,6 +30,14 @@ extends Resource
 @export var pierce: int = 0
 @export var knockback: float = 120.0
 @export var tick_interval: float = 0.4
+
+@export_group("Evolucion")
+## WeaponData en el que evoluciona esta arma al alcanzar nivel maximo habiendo
+## elegido la carta de stat `evolution_requirement` en la run. null = no evoluciona.
+## (Tipo Resource y no WeaponData para evitar referencia circular de tipos.)
+@export var evolution: Resource
+## Id de la carta de stat requerida (p.ej. &"extra_projectile"). Vacio = sin requisito.
+@export var evolution_requirement: StringName = &""
 
 @export_group("Presentacion / progresion")
 @export var visual_color: Color = Color(1.0, 0.95, 0.7, 1.0)

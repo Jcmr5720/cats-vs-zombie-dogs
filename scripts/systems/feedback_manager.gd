@@ -68,6 +68,7 @@ func register_kill() -> void:
 		shake(0.25)
 		var player := get_tree().get_first_node_in_group("player") as Node2D
 		if player != null and player.has_method("add_experience"):
+			@warning_ignore("integer_division")
 			player.add_experience(2 + _combo / 15)
 			hit_effect(player.global_position, Color(0.45, 0.86, 1.0, 0.85), 0.3, 2.0)
 

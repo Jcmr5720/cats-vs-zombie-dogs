@@ -8,16 +8,20 @@ var _duration: float = 3.0
 var _tick_interval: float = 0.4
 var _tick_timer: float = 0.0
 var _life: float = 0.0
+## Agujero negro (evolucion del Ovillo): la zona ATRAE a los enemigos hacia el
+## centro en cada tick en vez de empujarlos hacia fuera.
+var _pull: bool = false
 
 @onready var _visual: Polygon2D = $Visual
 @onready var _inner: Polygon2D = $Inner
 @onready var _ring: Polygon2D = $Ring
 
 
-func setup(damage: int, radius: float, duration: float, tick_interval: float, color: Color) -> void:
+func setup(damage: int, radius: float, duration: float, tick_interval: float, color: Color, pull: bool = false) -> void:
 	_damage = damage
 	_radius = radius
 	_duration = duration
+	_pull = pull
 	_tick_interval = max(0.1, tick_interval)
 	if not is_node_ready():
 		await ready
@@ -76,7 +80,10 @@ func _apply_tick() -> void:
 			continue
 		var offset: Vector2 = (enemy as Node2D).global_position - global_position
 		if offset.length_squared() <= radius_sq:
-			enemy.take_damage(_damage, offset.normalized() if offset.length_squared() > 0.01 else Vector2.UP)
+			var dir: Vector2 = offset.normalized() if offset.length_squared() > 0.01 else Vector2.UP
+			if _pull:
+				dir = -dir
+			enemy.take_damage(_damage, dir)
 
 
 func _fade_out() -> void:

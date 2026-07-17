@@ -5,6 +5,7 @@ extends Control
 ## No se activa si la partida ya terminó (lo maneja MapManager) ni durante la
 ## selección de cartas de mejora.
 
+@warning_ignore("shadowed_global_identifier")
 const MenuTheme = preload("res://scripts/menus/menu_theme.gd")
 
 var _settings: Node
@@ -75,6 +76,7 @@ func _refresh_info() -> void:
 	for child in _info_chips.get_children():
 		child.queue_free()
 	var total: int = int(info.get("time", 0.0))
+	@warning_ignore("integer_division")
 	_info_chips.add_child(MenuTheme.make_chip("%02d:%02d" % [total / 60, total % 60], MenuTheme.CYAN, &"clock"))
 	_info_chips.add_child(MenuTheme.make_chip("Nivel %d" % int(info.get("level", 1)), MenuTheme.CYAN, &"upgrade"))
 	_info_chips.add_child(MenuTheme.make_chip("%d bajas" % int(info.get("kills", 0)), MenuTheme.DANGER, &"boss"))
@@ -236,7 +238,7 @@ func _spacer(h: int) -> Control:
 	return s
 
 
-func _play_ui(name: StringName) -> void:
+func _play_ui(sound_name: StringName) -> void:
 	var audio: Node = get_node_or_null("/root/AudioManager")
 	if audio != null and audio.has_method("play_ui"):
-		audio.play_ui(name)
+		audio.play_ui(sound_name)
