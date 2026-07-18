@@ -12,7 +12,7 @@ config_version=5
 
 config/name="CatsVsZombieDogs"
 run/main_scene="res://scenes/menus/MainMenu.tscn"
-config/features=PackedStringArray("4.7", "Forward Plus")
+config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
 [autoload]
@@ -25,6 +25,7 @@ Missions="*res://scripts/systems/mission_manager.gd"
 Shelter="*res://scripts/shelter/shelter_manager.gd"
 MetaProgression="*res://scripts/meta/permanent_upgrade_manager.gd"
 Settings="*res://scripts/systems/settings_manager.gd"
+UITheme="*res://scripts/ui/ui_theme.gd"
 GameFlow="*res://scripts/systems/game_flow_manager.gd"
 
 [display]
@@ -145,4 +146,5 @@ p2_card_confirm={
 
 [rendering]
 
-rendering_device/driver.windows="d3d12"
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

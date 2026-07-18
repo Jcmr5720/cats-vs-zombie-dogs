@@ -30,7 +30,7 @@ class StubBoss:
 	var max_health: int = 1400
 	var elite_calls: int = 0
 	var enrage_calls: int = 0
-	func transform_elite() -> void:
+	func request_elite_transform() -> void:
 		elite_calls += 1
 	func enrage() -> void:
 		enrage_calls += 1
@@ -182,13 +182,10 @@ func _run() -> void:
 	_expect(bs.miniboss_calls == 1, "mini-boss invocado UNA vez (2:35)")
 	_expect(bs.boss_calls == 1, "boss invocado UNA vez (3:20)")
 	var boss: StubBoss = a["boss"]
-	_expect(boss.elite_calls == 1, "transformacion elite aplicada al MISMO jefe (4:15)")
+	# El director PIDE la transformacion elite a 4:15 (el jefe decide cuando es
+	# seguro y abre su segunda barra; eso se valida a fondo en TestBossElite).
+	_expect(boss.elite_calls == 1, "transformacion elite pedida al jefe (4:15)")
 	var hud: StubHud = a["hud"]
-	var elite_bar := false
-	for bar in hud.boss_bars:
-		if String(bar[0]).contains("Primigenio"):
-			elite_bar = true
-	_expect(elite_bar, "la barra del HUD muestra el nombre elite")
 
 	# Mini-boss derrotado -> Mutacion garantizada.
 	bs.miniboss_defeated.emit(null)

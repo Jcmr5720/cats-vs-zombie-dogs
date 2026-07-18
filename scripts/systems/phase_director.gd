@@ -63,6 +63,11 @@ func _ready() -> void:
 	if is_instance_valid(_wave_events) and _wave_events.has_method("set_external_director"):
 		_wave_events.set_external_director(true)
 
+	# Enciende la puerta temporal de la primera tarjeta (segundo 12) solo en la
+	# partida real; los tests unitarios del flujo de cartas no la sufren.
+	if is_instance_valid(_upgrade_manager) and _upgrade_manager.has_method("set_first_card_gate"):
+		_upgrade_manager.set_first_card_gate()
+
 	if is_instance_valid(_boss_spawner):
 		if _boss_spawner.has_signal("miniboss_defeated"):
 			_boss_spawner.connect("miniboss_defeated", Callable(self, "_on_miniboss_defeated"))
@@ -164,24 +169,16 @@ func _apply_phase(phase: int) -> void:
 
 
 ## 4:15 — el jefe actual SE TRANSFORMA en su version elite (no se crea otro).
+## El propio jefe decide CUANDO es seguro (espera a que acabe el ataque activo) y
+## abre su SEGUNDA barra via senal; aqui solo se pide la transformacion. Si el
+## jefe ya se auto-transformo al 35%, la peticion es idempotente.
 func _transform_boss_elite() -> void:
 	if not is_instance_valid(_boss_node):
 		# Si el jugador ya mato al jefe, la victoria la gestiono MapManager.
 		return
-	if _boss_node.has_method("transform_elite"):
-		_boss_node.transform_elite()
-		# La barra del HUD se actualiza con el nombre elite.
-		if is_instance_valid(_hud) and _hud.has_method("show_boss_bar"):
-			var elite_name: String = "Jefe elite"
-			var data = _boss_node.get("data")
-			if data != null:
-				elite_name = data.elite_name if data.elite_name != "" else "%s ELITE" % data.display_name
-			_hud.show_boss_bar(elite_name, int(_boss_node.get("max_health")))
+	if _boss_node.has_method("request_elite_transform"):
+		_boss_node.request_elite_transform()
 		_announce("¡¡El jefe se transforma!!")
-		# Refuerzo musical: reinicia el tema de jefe (no hay pista elite propia).
-		var audio: Node = get_node_or_null("/root/AudioManager")
-		if audio != null and audio.has_method("play_music"):
-			audio.play_music(&"boss")
 
 
 ## 5:00 — furia final: paran los spawns comunes y el jefe se acelera (evitable).
@@ -255,8 +252,14 @@ func _update_hud_phase() -> void:
 	_hud.set_phase_info("%s · %d:%02d" % [label, total / 60, total % 60])
 
 
+## Avisos de fase (FURIA FINAL, transformación élite): impacto en Lilita One si
+## el HUD lo soporta; si no, mensaje de evento clásico.
 func _announce(text: String) -> void:
-	if is_instance_valid(_hud) and _hud.has_method("show_event_message"):
+	if not is_instance_valid(_hud):
+		return
+	if _hud.has_method("show_announcement"):
+		_hud.show_announcement(text, 2.4)
+	elif _hud.has_method("show_event_message"):
 		_hud.show_event_message(text, 2.4)
 
 

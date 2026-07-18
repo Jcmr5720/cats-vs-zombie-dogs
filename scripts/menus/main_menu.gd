@@ -116,9 +116,11 @@ func _build_ui() -> void:
 	b_story.grab_focus.call_deferred()
 
 
-## Palabra del logo con contorno grueso y sombra propios.
+## Palabra del logo (Lilita One) con contorno grueso y sombra propios.
 func _logo_word(text: String, font_size: int, color: Color, outline: Color) -> Label:
-	var label := MenuTheme.make_title(text, font_size, color)
+	var label := MenuTheme.make_impact_title(text, font_size, color)
+	# El logo no obedece la escala de accesibilidad (ya ocupa la cabecera).
+	label.add_theme_font_size_override("font_size", font_size)
 	label.add_theme_color_override("font_outline_color", outline)
 	label.add_theme_constant_override("outline_size", 10)
 	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))

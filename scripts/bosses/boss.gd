@@ -14,6 +14,8 @@ const HAZARD_ZONE_SCRIPT := preload("res://scripts/enemies/hazard_zone.gd")
 
 signal health_changed(current: int, maximum: int, display_name: String)
 signal died(data: BossData)
+## Transformacion a la forma ELITE: el HUD abre una SEGUNDA barra (no es curacion).
+signal elite_transformed(display_name: String, maximum: int)
 
 enum State { CHASE, WINDUP, CHARGE, RECOVER, SUMMON }
 
@@ -21,6 +23,16 @@ enum State { CHASE, WINDUP, CHARGE, RECOVER, SUMMON }
 const MAX_HEALTH_CAP: int = 9000
 ## Tope de enemigos invocados vivos a la vez (evita acumulacion de nodos).
 const MAX_SUMMONED: int = 14
+## Transformacion elite (Partidas rapidas), en DOS pasos desacoplados:
+## 1) FORMA elite (visual + patrones intensos): se activa a 4:15 (via director) O
+##    al bajar del 35% de vida, lo primero, y nunca antes del tiempo minimo de
+##    combate. NO toca la vida (no es una curacion): solo cambia forma y patrones.
+## 2) SEGUNDA barra: al DERROTAR la forma normal (su barra llega a 0), en vez de
+##    morir aparece una barra nueva ~28% de la vida ORIGINAL (fase 2 clara). El
+##    total a derribar es ~128% de la vida original: mas dura, sin regalar daño.
+const ELITE_MIN_COMBAT_TIME: float = 12.0
+const ELITE_HP_TRIGGER: float = 0.35
+const ELITE_BAR_FRACTION: float = 0.28
 
 @export var windup_time: float = 0.9
 @export var charge_time: float = 0.55
@@ -51,8 +63,17 @@ var _flash_tween: Tween
 var _summon_pulse: float = 0.0
 
 # --- Partidas rapidas: elite, furia final y esbirros del jefe -------------------
-## Transformado en su version ELITE (4:15). No se crea otro enemigo.
+## FORMA elite activa (visual + patrones intensos). No se crea otro enemigo.
 var _elite: bool = false
+## Activacion de forma pedida pero pendiente (espera a que acabe el ataque activo).
+var _elite_pending: bool = false
+var _elite_requested: bool = false
+## Ya en la SEGUNDA barra (fase 2, tras derrotar la forma normal).
+var _second_bar: bool = false
+## Vida ORIGINAL de la forma normal (base de la barra elite ~28%).
+var _original_max: int = 0
+## Segundos de combate desde que aparecio (para el tiempo minimo de transform).
+var _alive_time: float = 0.0
 ## Furia final (5:00): mas velocidad/cadencia con tope; sigue siendo evitable.
 var _enraged: bool = false
 var _move_speed_mult: float = 1.0
@@ -117,6 +138,7 @@ func configure(boss_data: BossData, difficulty_score: float) -> void:
 		scaled *= GameBalance.BOSS_COOP_HEALTH_MULT
 	max_health = clampi(int(round(scaled)), data.max_health, MAX_HEALTH_CAP)
 	current_health = max_health
+	_original_max = max_health
 	phase = 1
 	_attack_timer = data.attack_cooldown
 	if is_node_ready():
@@ -158,12 +180,18 @@ func _physics_process(delta: float) -> void:
 		return
 
 	_anim_time += delta
+	_alive_time += delta
 	_update_phase()
 	_animate(delta)
 	if _contact_timer > 0.0:
 		_contact_timer -= delta
 	if _guardian_vuln_timer > 0.0:
 		_guardian_vuln_timer -= delta
+
+	# Activacion de la FORMA elite pendiente: cuando el jefe esta en un estado
+	# SEGURO (persiguiendo, sin telegrafo ni ataque en curso).
+	if _elite_pending and _can_transform_now():
+		_activate_elite_form()
 
 	match _state:
 		State.CHASE:
@@ -356,6 +384,9 @@ func _on_phase_changed() -> void:
 	# agresivo, los ojos estallan en blanco y la luz sube de energia.
 	Feedback.hitstop(0.06, 0.15)
 	_visual_action(&"phase_change")
+	# En forma elite se conserva la identidad magenta (no revertir a rojo).
+	if _elite:
+		return
 	var aggression: float = clampf(0.45 * float(phase - 1), 0.0, 0.9)
 	var phase_color: Color = data.accent_color.lerp(Color(1.0, 0.22, 0.16), aggression)
 	if is_instance_valid(_aura):
@@ -429,6 +460,19 @@ func take_damage(amount: int, _knockback_dir: Vector2 = Vector2.ZERO) -> void:
 	var audio: Node = get_node_or_null("/root/AudioManager")
 	if audio != null and audio.has_method("play_sfx"):
 		audio.play_sfx(&"boss_hit")
+
+	# Disparo por vida: la FORMA elite (visual/patrones) se activa al bajar del 35%
+	# (cumplido el tiempo minimo de combate), lo que ocurra antes que 4:15. No cura.
+	if not _elite and not _elite_requested and not _second_bar and _original_max > 0 \
+			and float(current_health) / float(_original_max) <= ELITE_HP_TRIGGER:
+		request_elite_transform()
+
+	# Derrota de la forma normal: en vez de morir, aparece la SEGUNDA barra (~28%).
+	# Solo se muere al vaciar esa segunda barra.
+	if current_health <= 0 and not _second_bar:
+		_enter_second_bar()
+		return
+
 	_emit_health()
 	if current_health <= 0:
 		_die()
@@ -548,26 +592,50 @@ func receive_minion_heal(amount: int) -> void:
 	_emit_health()
 
 
-## 4:15 — transformacion ELITE del jefe ACTUAL (no se crea otro enemigo):
-## cambio visual + animacion breve, nombre nuevo (el HUD lo actualiza el
-## PhaseDirector), recuperacion controlada del 30%, una habilidad extra (segunda
-## embestida encadenada; en el Parque ademas deja zonas), patrones mas intensos
-## pero evitables y esbirros reforzados. NO duplica vida ni daño.
+## Pide activar la FORMA elite (la llama el PhaseDirector a 4:15 o el propio jefe
+## al bajar del 35%). No cambia la vida: queda PENDIENTE y se activa en cuanto el
+## jefe esta en un estado seguro (persiguiendo, sin ataque en curso). Idempotente.
+func request_elite_transform() -> void:
+	if _is_dead or _elite or _elite_requested:
+		return
+	_elite_requested = true
+	_elite_pending = true
+
+
+## Alias historico (algunos llamadores/tests usan este nombre).
 func transform_elite() -> void:
+	request_elite_transform()
+
+
+## Seguro para activar la forma? Cumplido el tiempo minimo de combate, persiguiendo
+## y sin telegrafo/ataque en curso. Asi espera a que acabe la embestida.
+func _can_transform_now() -> bool:
+	if _alive_time < ELITE_MIN_COMBAT_TIME:
+		return false
+	if _state != State.CHASE:
+		return false
+	return not (is_instance_valid(_telegraph) and _telegraph.visible)
+
+
+## Activa la FORMA elite: identidad visual propia + patrones mas intensos. NO
+## toca la vida (no es una curacion). Idempotente. `abrupt` la usa la entrada a
+## la segunda barra para activarla al vuelo sin esperar estado seguro.
+func _activate_elite_form(abrupt: bool = false) -> void:
 	if _is_dead or _elite:
 		return
 	_elite = true
-	Feedback.hitstop(0.12, 0.1)
-	Feedback.shake(0.6)
+	_elite_pending = false
+	if not abrupt:
+		# Limpieza suave: cancela cualquier telegrafo pendiente al entrar en forma.
+		if is_instance_valid(_telegraph):
+			_telegraph.visible = false
+	Feedback.hitstop(0.1, 0.12)
+	Feedback.shake(0.5)
 	var elite_color := Color(1.0, 0.25, 0.55)
-	Feedback.hit_effect(global_position, elite_color, 1.0, 5.0)
-	Feedback.hit_effect(global_position, elite_color.lightened(0.3), 0.5, 2.6)
-	# Recuperacion CONTROLADA (30%, dentro del rango 25-35% del diseño).
-	current_health = mini(max_health, current_health + int(round(max_health * 0.30)))
-	# Patrones mas intensos pero legibles: carga algo mas rapida (los telegrafos
-	# no cambian) y cooldowns menores via _next_attack_cooldown.
+	Feedback.hit_effect(global_position, elite_color, 0.9, 4.6)
+	Feedback.hit_effect(global_position, elite_color.lightened(0.3), 0.45, 2.4)
+	# Patrones mas intensos pero legibles + identidad visual propia (una sola vez).
 	charge_speed *= 1.12
-	# Identidad visual propia: mas grande, aura y luz magenta, ojos blancos.
 	scale *= 1.15
 	if is_instance_valid(_aura):
 		_aura.color = Color(elite_color.r, elite_color.g, elite_color.b, 0.2)
@@ -578,11 +646,62 @@ func transform_elite() -> void:
 		if is_instance_valid(eye):
 			eye.color = Color(1.0, 0.95, 0.9)
 	_visual_action(&"phase_change")
+
+
+## Derrotada la forma normal (barra a 0): aparece la SEGUNDA barra ~28% de la
+## ORIGINAL como fase 2 clara. Fuerza la forma elite si aun no estaba activa,
+## limpia telegrafos/estados y reinicia fases y curacion de esbirros.
+func _enter_second_bar() -> void:
+	if _is_dead or _second_bar:
+		return
+	_second_bar = true
+	if not _elite:
+		_activate_elite_form(true)  # al vuelo: reemplaza a la muerte, sin esperar
+
+	# Limpieza segura: cancela ataque/telegrafo y vuelve a persecucion.
+	_state = State.CHASE
+	_state_timer = 0.0
+	_charge_hit_done = false
+	_second_charge_done = false
+	velocity = Vector2.ZERO
+	if is_instance_valid(_telegraph):
+		_telegraph.visible = false
+	_attack_timer = _next_attack_cooldown()
+
+	# SEGUNDA barra (fase nueva, NO curacion): 28% de la vida original, llena.
+	max_health = maxi(1, int(round(_original_max * ELITE_BAR_FRACTION)))
+	current_health = max_health
+	phase = 1
+	_minion_heal_total = 0
+
+	Feedback.hitstop(0.14, 0.08)
+	Feedback.shake(0.6)
+	var elite_color := Color(1.0, 0.25, 0.55)
+	Feedback.hit_effect(global_position, elite_color, 1.0, 5.2)
+	Feedback.hit_effect(global_position, elite_color.lightened(0.3), 0.5, 2.6)
+
+	# El HUD abre una barra NUEVA con el nombre elite (fase 2 clara).
+	elite_transformed.emit(_elite_display_name(), max_health)
 	_emit_health()
+
+
+## Nombre mostrado en la barra elite (BossData.elite_name o "<nombre> ELITE").
+func _elite_display_name() -> String:
+	if data == null:
+		return "Jefe elite"
+	return data.elite_name if data.elite_name != "" else "%s ELITE" % data.display_name
 
 
 func is_elite() -> bool:
 	return _elite
+
+
+func is_elite_pending() -> bool:
+	return _elite_pending
+
+
+func is_second_bar() -> bool:
+	return _second_bar
 
 
 ## Furia final (5:00): acelera al jefe con TOPE (presion final, no injusticia).

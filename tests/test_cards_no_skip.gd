@@ -106,6 +106,10 @@ func _check_solo_no_skip() -> void:
 	_player = get_tree().get_first_node_in_group("player")
 	var hud := _hud()
 	var um := _manager()
+	# Este test valida el flujo de cartas (no la puerta de la primera tarjeta):
+	# se desactiva la puerta que enciende el PhaseDirector para no esperar 12 s.
+	if um != null and um.has_method("set_first_card_gate"):
+		um.call("set_first_card_gate", 0.0)
 	_expect(um != null, "existe UpgradeManager")
 	_expect(hud != null and not hud.has_signal("skip_requested"), "el HUD ya no tiene señal skip_requested")
 	_expect(um != null and not um.has_method("request_skip"), "UpgradeManager ya no tiene request_skip")
@@ -241,6 +245,10 @@ func _check_coop_no_skip() -> void:
 	if p2 == null:
 		_finish()
 		return
+	# Puerta de la primera tarjeta desactivada tambien en coop (no es lo que valida).
+	var um := _manager()
+	if um != null and um.has_method("set_first_card_gate"):
+		um.call("set_first_card_gate", 0.0)
 	p2.call("add_experience", int(p2.get("experience_to_level")), true)
 	get_tree().create_timer(0.3).timeout.connect(func() -> void:
 		var panel := _coop_panel()

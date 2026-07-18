@@ -153,3 +153,13 @@ func _build_visual() -> void:
 	])
 	_head.color = Color(0.35, 0.30, 0.22, 1.0)
 	add_child(_head)
+	# Rotulo identificador: sin el no habia forma de saber que la invocacion es
+	# una herramienta aliada y no un elemento del mapa.
+	var tag := Label.new()
+	tag.text = "⚙ Torreta aliada"
+	tag.add_theme_font_size_override("font_size", 11)
+	tag.add_theme_color_override("font_color", Color(1.0, 0.85, 0.45, 0.95))
+	tag.add_theme_color_override("font_outline_color", Color(0.1, 0.08, 0.02, 0.9))
+	tag.add_theme_constant_override("outline_size", 4)
+	tag.position = Vector2(-42.0, -34.0)
+	add_child(tag)

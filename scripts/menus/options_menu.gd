@@ -12,6 +12,11 @@ const SHAKE_OPTIONS: Array[Dictionary] = [
 const QUALITY_OPTIONS: Array[Dictionary] = [
 	{"id": "baja", "label": "Baja"}, {"id": "media", "label": "Media"}, {"id": "alta", "label": "Alta"},
 ]
+## Accesibilidad: escala tipográfica global (UITheme.TEXT_SIZE_LEVELS).
+const TEXT_SIZE_CHOICES: Array[Dictionary] = [
+	{"id": "pequeno", "label": "Pequeño"}, {"id": "normal", "label": "Normal"},
+	{"id": "grande", "label": "Grande"}, {"id": "muy_grande", "label": "Muy grande"},
+]
 const TABS: Array[Dictionary] = [
 	{"id": &"video", "label": "Vídeo", "color": Color(0.45, 0.85, 1.0)},
 	{"id": &"juego", "label": "Juego", "color": Color(1.0, 0.6, 0.2)},
@@ -174,6 +179,11 @@ func _rebuild_content() -> void:
 			# Accesibilidad coop: elegir sola la carta resaltada tras 25 s de
 			# inactividad (p.ej. mando compartido/soltado). Desactivado por defecto.
 			_content_box.add_child(MenuTheme.make_setting_toggle("Carta automática por inactividad (coop)", "card_auto_pick"))
+			# Accesibilidad: tamaño de texto global. Escala HUD, menús, tarjetas y
+			# diálogos al instante (Theme global); el logo y los iconos no cambian.
+			_content_box.add_child(_choice_row("Tamaño de texto", "text_size", TEXT_SIZE_CHOICES, "normal"))
+			var size_hint := MenuTheme.make_text("El tamaño de texto se aplica a toda la interfaz al instante.", MenuTheme.FS_CAPTION, MenuTheme.TEXT_DIM)
+			_content_box.add_child(size_hint)
 		&"audio":
 			_content_box.add_child(MenuTheme.make_setting_slider("Master", "audio_master", MenuTheme.PURPLE))
 			_content_box.add_child(MenuTheme.make_setting_slider("Música", "audio_music", MenuTheme.PURPLE))

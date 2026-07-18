@@ -41,6 +41,11 @@ func _ready() -> void:
 	var packed: PackedScene = load(MAIN_LEVEL)
 	_level = packed.instantiate()
 	add_child(_level)
+	# Este test valida el flujo coop de cartas (no la puerta de la primera tarjeta):
+	# se desactiva la puerta que enciende el PhaseDirector para no esperar 12 s.
+	var um: Node = _level.get_node_or_null("UpgradeManager")
+	if um != null and um.has_method("set_first_card_gate"):
+		um.call("set_first_card_gate", 0.0)
 
 
 func _process(_delta: float) -> void:

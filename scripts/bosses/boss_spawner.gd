@@ -75,6 +75,10 @@ func spawn_boss(data: BossData = null) -> Node2D:
 		boss.connect("health_changed", Callable(self, "_on_boss_health_changed"))
 	if boss.has_signal("died"):
 		boss.connect("died", Callable(self, "_on_boss_died"))
+	# Transformacion elite: reabre la barra del HUD con el nombre y la vida nuevos
+	# (una SEGUNDA barra que se lee como fase 2, no como curacion).
+	if boss.has_signal("elite_transformed"):
+		boss.connect("elite_transformed", Callable(self, "_on_boss_elite_transformed"))
 	_active_boss = boss
 
 	if _hud != null and _hud.has_method("show_boss_bar"):
@@ -94,6 +98,18 @@ func spawn_boss(data: BossData = null) -> Node2D:
 func _on_boss_health_changed(current: int, maximum: int, _display_name: String) -> void:
 	if _hud != null and _hud.has_method("update_boss_bar"):
 		_hud.update_boss_bar(current, maximum)
+
+
+## La forma normal cayo: se abre una SEGUNDA barra con el nombre elite y su vida
+## nueva (~28% de la original). Aviso visual/sonoro de fase nueva.
+func _on_boss_elite_transformed(display_name: String, maximum: int) -> void:
+	if _hud != null and _hud.has_method("show_boss_bar"):
+		_hud.show_boss_bar(display_name, maximum)
+	_announce("¡%s!" % display_name)
+	_play_audio(&"boss_appear")
+	var audio: Node = get_node_or_null("/root/AudioManager")
+	if audio != null and audio.has_method("play_music"):
+		audio.play_music(&"boss")
 
 
 func _on_boss_died(data: BossData) -> void:
@@ -139,6 +155,12 @@ func _spawn_position(distance: float) -> Vector2:
 	return origin + Vector2.RIGHT.rotated(randf() * TAU) * distance
 
 
+## Apariciones de jefe: aviso de IMPACTO (Lilita One) si el HUD lo soporta;
+## los mensajes informativos ("derrotado") siguen usando show_event_message.
 func _announce(text: String) -> void:
-	if _hud != null and _hud.has_method("show_event_message"):
+	if _hud == null:
+		return
+	if _hud.has_method("show_announcement"):
+		_hud.show_announcement(text, 2.0)
+	elif _hud.has_method("show_event_message"):
 		_hud.show_event_message(text, 2.0)

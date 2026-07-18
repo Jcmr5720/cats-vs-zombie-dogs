@@ -58,8 +58,8 @@ theme_override_constants/separation = 5
 
 [node name="LevelLabel" type="Label" parent="TopLeft/Stats"]
 layout_mode = 2
+theme_type_variation = &"HudPrimary"
 theme_override_colors/font_color = Color(0.85, 0.94, 1, 1)
-theme_override_font_sizes/font_size = 16
 text = "Nv. 1"
 
 [node name="HealthBar" type="ProgressBar" parent="TopLeft/Stats"]
@@ -76,8 +76,8 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
+theme_type_variation = &"BarValue"
 theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 12
 text = "100 / 100"
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -103,19 +103,16 @@ theme_override_constants/separation = 6
 
 [node name="TimeLabel" type="Label" parent="TopCenter"]
 layout_mode = 2
+theme_type_variation = &"NumericCounter"
 theme_override_colors/font_color = Color(0.95, 0.97, 1, 1)
-theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.7)
-theme_override_constants/shadow_offset_x = 2
-theme_override_constants/shadow_offset_y = 2
-theme_override_font_sizes/font_size = 30
 text = "00:00"
 horizontal_alignment = 1
 
 [node name="RescueStatus" type="Label" parent="TopCenter"]
 visible = false
 layout_mode = 2
+theme_type_variation = &"HudEmphasis"
 theme_override_colors/font_color = Color(1, 0.9, 0.58, 1)
-theme_override_font_sizes/font_size = 18
 text = "Rescate disponible"
 horizontal_alignment = 1
 
@@ -143,8 +140,8 @@ vertical_alignment = 1
 [node name="EventMessage" type="Label" parent="TopCenter"]
 visible = false
 layout_mode = 2
+theme_type_variation = &"PhaseAnnouncement"
 theme_override_colors/font_color = Color(0.88, 0.98, 1, 1)
-theme_override_font_sizes/font_size = 18
 text = "Gato cercano"
 horizontal_alignment = 1
 
@@ -167,15 +164,15 @@ theme_override_constants/separation = 3
 
 [node name="Objective" type="Label" parent="TopRight/List"]
 layout_mode = 2
+theme_type_variation = &"HudPrimary"
 theme_override_colors/font_color = Color(1, 0.86, 0.5, 1)
-theme_override_font_sizes/font_size = 17
 text = "Sobrevive"
 horizontal_alignment = 2
 
 [node name="Cats" type="Label" parent="TopRight/List"]
 layout_mode = 2
+theme_type_variation = &"HudSecondary"
 theme_override_colors/font_color = Color(0.9, 0.94, 1, 1)
-theme_override_font_sizes/font_size = 15
 text = "Gatos 0/4"
 horizontal_alignment = 2
 
@@ -212,18 +209,18 @@ visible = false
 anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
-offset_left = -300.0
-offset_top = 70.0
-offset_right = 300.0
-offset_bottom = 116.0
+offset_left = -320.0
+offset_top = 96.0
+offset_right = 320.0
+offset_bottom = 150.0
 grow_horizontal = 2
 mouse_filter = 2
-theme_override_constants/separation = 4
+theme_override_constants/separation = 5
 
 [node name="BossName" type="Label" parent="BossBar"]
 layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.62, 0.62, 1)
-theme_override_font_sizes/font_size = 20
+theme_type_variation = &"BossName"
+theme_override_colors/font_color = Color(1, 0.7, 0.68, 1)
 text = "Jefe"
 horizontal_alignment = 1
 
@@ -274,7 +271,7 @@ theme_override_constants/separation = 18
 
 [node name="Title" type="Label" parent="UpgradePanel/Center/Content"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 26
+theme_type_variation = &"PanelTitle"
 text = "Elige una mejora"
 horizontal_alignment = 1
 
@@ -313,14 +310,14 @@ horizontal_alignment = 1
 
 [node name="Title" type="Label" parent="UpgradePanel/Center/Content/Cards/Card1/Margin/Content"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 20
+theme_type_variation = &"CardTitle"
 text = "Carta 1"
 horizontal_alignment = 1
 
 [node name="Description" type="Label" parent="UpgradePanel/Center/Content/Cards/Card1/Margin/Content"]
 layout_mode = 2
+theme_type_variation = &"CardDescription"
 theme_override_colors/font_color = Color(0.82, 0.86, 0.92, 1)
-theme_override_font_sizes/font_size = 15
 text = "Efecto"
 autowrap_mode = 3
 horizontal_alignment = 1
@@ -328,7 +325,7 @@ vertical_alignment = 1
 
 [node name="Meta" type="Label" parent="UpgradePanel/Center/Content/Cards/Card1/Margin/Content"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 12
+theme_type_variation = &"CardMeta"
 text = "STAT · COMUN"
 horizontal_alignment = 1
 
@@ -362,14 +359,14 @@ horizontal_alignment = 1
 
 [node name="Title" type="Label" parent="UpgradePanel/Center/Content/Cards/Card2/Margin/Content"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 20
+theme_type_variation = &"CardTitle"
 text = "Carta 2"
 horizontal_alignment = 1
 
 [node name="Description" type="Label" parent="UpgradePanel/Center/Content/Cards/Card2/Margin/Content"]
 layout_mode = 2
+theme_type_variation = &"CardDescription"
 theme_override_colors/font_color = Color(0.82, 0.86, 0.92, 1)
-theme_override_font_sizes/font_size = 15
 text = "Efecto"
 autowrap_mode = 3
 horizontal_alignment = 1
@@ -377,7 +374,7 @@ vertical_alignment = 1
 
 [node name="Meta" type="Label" parent="UpgradePanel/Center/Content/Cards/Card2/Margin/Content"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 12
+theme_type_variation = &"CardMeta"
 text = "STAT · COMUN"
 horizontal_alignment = 1
 
@@ -411,14 +408,14 @@ horizontal_alignment = 1
 
 [node name="Title" type="Label" parent="UpgradePanel/Center/Content/Cards/Card3/Margin/Content"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 20
+theme_type_variation = &"CardTitle"
 text = "Carta 3"
 horizontal_alignment = 1
 
 [node name="Description" type="Label" parent="UpgradePanel/Center/Content/Cards/Card3/Margin/Content"]
 layout_mode = 2
+theme_type_variation = &"CardDescription"
 theme_override_colors/font_color = Color(0.82, 0.86, 0.92, 1)
-theme_override_font_sizes/font_size = 15
 text = "Efecto"
 autowrap_mode = 3
 horizontal_alignment = 1
@@ -426,7 +423,7 @@ vertical_alignment = 1
 
 [node name="Meta" type="Label" parent="UpgradePanel/Center/Content/Cards/Card3/Margin/Content"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 12
+theme_type_variation = &"CardMeta"
 text = "STAT · COMUN"
 horizontal_alignment = 1
 
@@ -461,15 +458,15 @@ theme_override_constants/separation = 12
 
 [node name="Title" type="Label" parent="VictoryPanel/Center/Content"]
 layout_mode = 2
+theme_type_variation = &"ImpactTitle"
 theme_override_colors/font_color = Color(0.66, 1, 0.74, 1)
-theme_override_font_sizes/font_size = 44
 text = "ZONA ASEGURADA"
 horizontal_alignment = 1
 
 [node name="Subtitle" type="Label" parent="VictoryPanel/Center/Content"]
 layout_mode = 2
+theme_type_variation = &"Subheading"
 theme_override_colors/font_color = Color(1, 0.86, 0.5, 1)
-theme_override_font_sizes/font_size = 22
 text = "Mapa"
 horizontal_alignment = 1
 
@@ -482,8 +479,8 @@ horizontal_alignment = 1
 [node name="Details" type="Label" parent="VictoryPanel/Center/Content"]
 visible = false
 layout_mode = 2
+theme_type_variation = &"DialogText"
 theme_override_colors/font_color = Color(0.82, 0.88, 0.94, 1)
-theme_override_font_sizes/font_size = 15
 text = "Detalles"
 horizontal_alignment = 1
 
@@ -495,8 +492,8 @@ text = "Detalles"
 
 [node name="Hint" type="Label" parent="VictoryPanel/Center/Content"]
 layout_mode = 2
+theme_type_variation = &"HudSecondary"
 theme_override_colors/font_color = Color(0.8, 0.86, 0.9, 1)
-theme_override_font_sizes/font_size = 17
 text = "R Reintentar   ·   M Mejoras   ·   ESC Menu"
 horizontal_alignment = 1
 
@@ -531,15 +528,15 @@ theme_override_constants/separation = 12
 
 [node name="Title" type="Label" parent="GameOverPanel/Center/Content"]
 layout_mode = 2
+theme_type_variation = &"ImpactTitle"
 theme_override_colors/font_color = Color(1, 0.6, 0.58, 1)
-theme_override_font_sizes/font_size = 44
 text = "COLONIA PERDIDA"
 horizontal_alignment = 1
 
 [node name="Subtitle" type="Label" parent="GameOverPanel/Center/Content"]
 layout_mode = 2
+theme_type_variation = &"Subheading"
 theme_override_colors/font_color = Color(1, 0.86, 0.5, 1)
-theme_override_font_sizes/font_size = 22
 text = "Mapa"
 horizontal_alignment = 1
 
@@ -552,8 +549,8 @@ horizontal_alignment = 1
 [node name="Details" type="Label" parent="GameOverPanel/Center/Content"]
 visible = false
 layout_mode = 2
+theme_type_variation = &"DialogText"
 theme_override_colors/font_color = Color(0.82, 0.88, 0.94, 1)
-theme_override_font_sizes/font_size = 15
 text = "Detalles"
 horizontal_alignment = 1
 
@@ -565,7 +562,7 @@ text = "Detalles"
 
 [node name="Hint" type="Label" parent="GameOverPanel/Center/Content"]
 layout_mode = 2
+theme_type_variation = &"HudSecondary"
 theme_override_colors/font_color = Color(0.8, 0.86, 0.9, 1)
-theme_override_font_sizes/font_size = 17
 text = "R Reintentar   ·   M Mejoras   ·   ESC Menu"
 horizontal_alignment = 1

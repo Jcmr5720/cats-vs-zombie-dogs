@@ -359,42 +359,74 @@ func _draw_building(body: Color, outline: Color, vr: RandomNumberGenerator) -> v
 		draw_line(Vector2(gx, half.y), Vector2(gx + vr.randf_range(-6.0, 6.0), half.y - wall_h * 0.7), outline, 1.5)
 	# 4. Plano de techo desplazado hacia arriba wall_h.
 	var roof_rect := Rect2(Vector2(-half.x, -half.y - wall_h), Vector2(w, h))
-	draw_rect(roof_rect, roof, true)
-	draw_rect(roof_rect, outline, false, 3.0)
-	# Highlight NO del parapeto (bordes norte y oeste iluminados).
-	draw_line(roof_rect.position + Vector2(2, 2.5), roof_rect.position + Vector2(w - 2, 2.5), roof.lightened(0.18), 3.0)
-	draw_line(roof_rect.position + Vector2(2.5, 2), roof_rect.position + Vector2(2.5, h - 2), roof.lightened(0.14), 3.0)
-	# Gravilla del techo: punteado tenue.
-	for i in int(w * h / 2400.0):
-		draw_circle(roof_rect.position + Vector2(vr.randf() * w, vr.randf() * h), 1.4, roof.darkened(0.12))
-	# Mancha de agua.
-	if vr.randf() < 0.45:
-		_ellipse(roof_rect.get_center() + Vector2(vr.randf_range(-w * 0.2, w * 0.2), vr.randf_range(-h * 0.2, h * 0.2)), Vector2(vr.randf_range(9.0, 18.0), vr.randf_range(6.0, 12.0)), Color(0, 0, 0, 0.10))
-	if is_house and w > 70.0 and h > 70.0:
-		# Unidad de AC con ventilador y sombra propia.
-		var ac := roof_rect.position + Vector2(w * vr.randf_range(0.22, 0.66), h * vr.randf_range(0.22, 0.6))
-		draw_rect(Rect2(ac + Vector2(3, 4), Vector2(20, 16)), Color(0, 0, 0, 0.25), true)
-		draw_rect(Rect2(ac, Vector2(20, 16)), Color(0.60, 0.63, 0.66), true)
-		draw_rect(Rect2(ac, Vector2(20, 16)), outline, false, 1.5)
-		draw_circle(ac + Vector2(10, 8), 5.5, Color(0.34, 0.37, 0.41))
-		draw_circle(ac + Vector2(10, 8), 2.0, Color(0.2, 0.22, 0.25))
-		# Respiraderos.
-		for i in vr.randi_range(1, 2):
-			var vp := roof_rect.position + Vector2(w * vr.randf_range(0.12, 0.8), h * vr.randf_range(0.12, 0.78))
-			draw_rect(Rect2(vp + Vector2(2, 2), Vector2(10, 8)), Color(0, 0, 0, 0.2), true)
-			draw_rect(Rect2(vp, Vector2(10, 8)), roof.darkened(0.3), true)
-			draw_rect(Rect2(vp, Vector2(10, 8)), outline, false, 1.0)
-		# Claraboya con brillo.
-		if vr.randf() < 0.4 and w > 82.0:
-			var sk := roof_rect.position + Vector2(w * vr.randf_range(0.2, 0.66), h * vr.randf_range(0.2, 0.66))
-			draw_rect(Rect2(sk, Vector2(16, 12)), Color(0.15, 0.23, 0.33), true)
-			draw_line(sk + Vector2(2, 2), sk + Vector2(9, 6), Color(0.6, 0.75, 0.85, 0.5), 2.0)
-			draw_rect(Rect2(sk, Vector2(16, 12)), outline, false, 1.2)
-		# Antena.
-		if vr.randf() < 0.3:
-			var ant := roof_rect.position + Vector2(w * 0.85, h * 0.2)
-			draw_line(ant, ant + Vector2(0, -12), Color(0.5, 0.52, 0.56), 2.0)
-			draw_circle(ant + Vector2(0, -12), 2.0, Color(0.7, 0.72, 0.75))
+	if is_house:
+		# Casas: TEJADO A DOS AGUAS (deja de leerse como un cubo plano). El caballete
+		# corre por el eje largo; dos faldones sombreados (mas claro al NO, oscuro al
+		# SE) se encuentran en la cumbrera, con alero saliente y una chimenea.
+		_draw_gable_roof(roof_rect, roof, outline, data.detail_color, vr)
+	else:
+		# Muros y bloques: techo plano pseudo-3D (parapeto) como antes.
+		draw_rect(roof_rect, roof, true)
+		draw_rect(roof_rect, outline, false, 3.0)
+		draw_line(roof_rect.position + Vector2(2, 2.5), roof_rect.position + Vector2(w - 2, 2.5), roof.lightened(0.18), 3.0)
+		draw_line(roof_rect.position + Vector2(2.5, 2), roof_rect.position + Vector2(2.5, h - 2), roof.lightened(0.14), 3.0)
+		for i in int(w * h / 2400.0):
+			draw_circle(roof_rect.position + Vector2(vr.randf() * w, vr.randf() * h), 1.4, roof.darkened(0.12))
+		if vr.randf() < 0.45:
+			_ellipse(roof_rect.get_center() + Vector2(vr.randf_range(-w * 0.2, w * 0.2), vr.randf_range(-h * 0.2, h * 0.2)), Vector2(vr.randf_range(9.0, 18.0), vr.randf_range(6.0, 12.0)), Color(0, 0, 0, 0.10))
+
+
+## Tejado a dos aguas visto en perspectiva top-down: alero saliente, dos faldones
+## (NO claro / SE oscuro) que se juntan en la cumbrera con teja marcada, y chimenea.
+func _draw_gable_roof(roof_rect: Rect2, roof: Color, outline: Color, detail: Color, vr: RandomNumberGenerator) -> void:
+	var w: float = roof_rect.size.x
+	var h: float = roof_rect.size.y
+	var o: Vector2 = roof_rect.position
+	var eave: float = 5.0  # saliente del alero
+	# Alero: base del tejado algo mas grande que la planta, en tono oscuro.
+	var eave_rect := Rect2(o - Vector2(eave, eave), roof_rect.size + Vector2(eave, eave) * 2.0)
+	draw_rect(eave_rect, roof.darkened(0.4), true)
+	draw_rect(eave_rect, outline, false, 2.5)
+	var ridge_along_x: bool = w >= h
+	if ridge_along_x:
+		var cy: float = o.y + h * 0.5
+		# Faldon norte (hacia la luz): mas claro.
+		draw_colored_polygon(PackedVector2Array([
+			o, Vector2(o.x + w, o.y), Vector2(o.x + w, cy), Vector2(o.x, cy),
+		]), roof.lightened(0.16))
+		# Faldon sur: en sombra.
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(o.x, cy), Vector2(o.x + w, cy), Vector2(o.x + w, o.y + h), Vector2(o.x, o.y + h),
+		]), roof.darkened(0.14))
+		# Cumbrera + resalte.
+		draw_line(Vector2(o.x, cy), Vector2(o.x + w, cy), roof.lightened(0.3), 2.5)
+		draw_line(Vector2(o.x, cy - 2.0), Vector2(o.x + w, cy - 2.0), Color(1, 1, 1, 0.12), 1.5)
+		# Lineas de teja transversales (ambos faldones).
+		for i in range(1, maxi(2, int(w / 16.0))):
+			var x: float = o.x + w * float(i) / float(maxi(2, int(w / 16.0)))
+			draw_line(Vector2(x, o.y), Vector2(x, cy), roof.darkened(0.08), 1.0)
+			draw_line(Vector2(x, cy), Vector2(x, o.y + h), roof.darkened(0.18), 1.0)
+	else:
+		var cx: float = o.x + w * 0.5
+		draw_colored_polygon(PackedVector2Array([
+			o, Vector2(cx, o.y), Vector2(cx, o.y + h), Vector2(o.x, o.y + h),
+		]), roof.lightened(0.16))
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(cx, o.y), Vector2(o.x + w, o.y), Vector2(o.x + w, o.y + h), Vector2(cx, o.y + h),
+		]), roof.darkened(0.14))
+		draw_line(Vector2(cx, o.y), Vector2(cx, o.y + h), roof.lightened(0.3), 2.5)
+		draw_line(Vector2(cx - 2.0, o.y), Vector2(cx - 2.0, o.y + h), Color(1, 1, 1, 0.12), 1.5)
+		for i in range(1, maxi(2, int(h / 16.0))):
+			var y: float = o.y + h * float(i) / float(maxi(2, int(h / 16.0)))
+			draw_line(Vector2(o.x, y), Vector2(cx, y), roof.darkened(0.08), 1.0)
+			draw_line(Vector2(cx, y), Vector2(o.x + w, y), roof.darkened(0.18), 1.0)
+	# Chimenea con sombra propia (rompe la silueta plana).
+	if vr.randf() < 0.8:
+		var ch := o + Vector2(w * vr.randf_range(0.62, 0.82), h * vr.randf_range(0.18, 0.4))
+		draw_rect(Rect2(ch + Vector2(3, 4), Vector2(12, 14)), Color(0, 0, 0, 0.28), true)
+		draw_rect(Rect2(ch, Vector2(12, 14)), roof.darkened(0.3), true)
+		draw_rect(Rect2(ch, Vector2(12, 14)), outline, false, 1.5)
+		draw_rect(Rect2(ch + Vector2(1, -3), Vector2(10, 4)), detail.darkened(0.2), true)
 
 
 # --- Resto de categorias ----------------------------------------------------------

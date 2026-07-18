@@ -46,6 +46,8 @@ var _base_visual_scale: Vector2 = Vector2.ONE
 var _protection_timer: float = 0.0
 ## Tiempo acumulado derribado sin que nadie lo reviva (auto-respawn al limite).
 var _downed_timer: float = 0.0
+## Ping visual periodico mientras esta caido (localizable en pantalla).
+var _sos_ping_timer: float = 0.0
 ## Ritmo de revive externo (medico cercano). Expira solo si el medico se va.
 var _external_revive_rate: float = 0.0
 var _external_revive_expiry: float = 0.0
@@ -238,6 +240,12 @@ func _physics_process(delta: float) -> void:
 		if _downed_timer >= CompanionBalance.DOWNED_AUTO_RESPAWN_TIME:
 			_auto_respawn(leader)
 			return
+		# Ping SOS periodico: onda visible en el lugar del caido para poder
+		# localizarlo (el HUD ademas apunta una flecha verde hacia el).
+		_sos_ping_timer -= delta
+		if _sos_ping_timer <= 0.0:
+			_sos_ping_timer = 2.2
+			Feedback.hit_effect(global_position, Color(0.62, 1.0, 0.72, 0.65), 0.7, 2.6)
 		_update_revive(delta)
 		_animate_visual(delta)
 		return
@@ -1151,27 +1159,29 @@ func _update_state_visuals() -> void:
 	_revive_collision.disabled = not is_downed()
 	_revive_bar.visible = state == &"reviving"
 	_revive_label.visible = state == &"reviving"
+	# Rotacion DIRECTA por estado: el lerp anterior solo se aplicaba una vez por
+	# transicion, y al revivir el gato quedaba a medio enderezar (pose de caido).
 	match state:
 		&"active":
 			_status_label.text = companion_data.display_name
 			_status_label.modulate = Color(0.94, 0.97, 1.0, 0.95)
-			_visual.rotation = lerp_angle(_visual.rotation, 0.0, 0.35)
+			_visual.rotation = 0.0
 			_visual.modulate = Color(1, 1, 1, 1)
 		&"hurt":
 			_status_label.text = "Herido"
 			_status_label.modulate = Color(1.0, 0.88, 0.55, 0.95)
-			_visual.rotation = lerp_angle(_visual.rotation, 0.0, 0.35)
+			_visual.rotation = 0.0
 			_visual.modulate = Color(1.0, 0.95, 0.95, 1)
 		&"reviving":
 			_status_label.text = "Reviviendo"
 			_status_label.modulate = Color(0.75, 1.0, 0.76, 0.95)
-			_visual.rotation = lerp_angle(_visual.rotation, -0.85, 0.35)
+			_visual.rotation = -0.85
 			_visual.modulate = Color(0.82, 0.9, 0.82, 0.95)
 			_revive_label.text = "Reviviendo..."
 		_:
 			_status_label.text = "CAIDO"
 			_status_label.modulate = Color(1.0, 0.62, 0.62, 0.95)
-			_visual.rotation = lerp_angle(_visual.rotation, -1.10, 0.35)
+			_visual.rotation = -1.10
 			_visual.modulate = Color(0.72, 0.72, 0.72, 0.9)
 			_revive_label.text = "Ayuda"
 

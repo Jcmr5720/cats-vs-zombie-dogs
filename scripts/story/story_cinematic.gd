@@ -47,7 +47,11 @@ func _build_ui() -> void:
 
 	_title_label = Label.new()
 	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_title_label.add_theme_font_size_override("font_size", 38)
+	# Nombre de capitulo: fuente de impacto (Lilita One).
+	_title_label.add_theme_font_override("font", UIFonts.lilita())
+	_title_label.add_theme_font_size_override("font_size", UIFonts.scaled(38))
+	_title_label.add_theme_color_override("font_outline_color", Color(0.03, 0.04, 0.07, 0.92))
+	_title_label.add_theme_constant_override("outline_size", 7)
 	_title_label.add_theme_color_override("font_color", Color(1, 0.92, 0.75))
 	_title_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
 	_title_label.add_theme_constant_override("shadow_offset_x", 2)
@@ -58,7 +62,9 @@ func _build_ui() -> void:
 	_body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_body_label.custom_minimum_size = Vector2(720, 0)
-	_body_label.add_theme_font_size_override("font_size", 19)
+	_body_label.add_theme_font_override("font", UIFonts.nunito(400))
+	_body_label.add_theme_font_size_override("font_size", UIFonts.scaled(19))
+	_body_label.add_theme_constant_override("line_spacing", 5)
 	_body_label.add_theme_color_override("font_color", Color(0.88, 0.9, 0.96))
 	_body_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
 	_body_label.add_theme_constant_override("shadow_offset_x", 1)
@@ -68,14 +74,15 @@ func _build_ui() -> void:
 	_hint_label = Label.new()
 	_hint_label.text = "Pulsa una tecla para continuar  ·  ESC salta"
 	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hint_label.add_theme_font_size_override("font_size", 13)
+	_hint_label.add_theme_font_override("font", UIFonts.nunito(600))
+	_hint_label.add_theme_font_size_override("font_size", UIFonts.scaled(13))
 	_hint_label.add_theme_color_override("font_color", Color(0.6, 0.64, 0.72, 0.8))
 	_hint_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	_hint_label.position.y -= 34
 	add_child(_hint_label)
 
 	_progress_label = Label.new()
-	_progress_label.add_theme_font_size_override("font_size", 13)
+	_progress_label.add_theme_font_size_override("font_size", UIFonts.scaled(13))
 	_progress_label.add_theme_color_override("font_color", Color(0.6, 0.64, 0.72, 0.8))
 	_progress_label.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	_progress_label.position += Vector2(-56, 22)

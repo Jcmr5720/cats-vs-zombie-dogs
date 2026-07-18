@@ -81,7 +81,8 @@ func _build_side(index: int) -> void:
 	var title := Label.new()
 	title.name = "Title"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_font_override("font", UIFonts.fredoka(700))
+	title.add_theme_font_size_override("font_size", UIFonts.scaled(24))
 	title.add_theme_color_override("font_color", color)
 	title.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	title.add_theme_constant_override("outline_size", 5)
@@ -98,7 +99,8 @@ func _build_side(index: int) -> void:
 	hint.name = "Hint"
 	hint.text = CONTROLS[index]["hint"]
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.add_theme_font_size_override("font_size", 13)
+	hint.add_theme_font_override("font", UIFonts.nunito(600))
+	hint.add_theme_font_size_override("font_size", UIFonts.scaled(13))
 	hint.add_theme_color_override("font_color", Color(0.75, 0.8, 0.88, 0.9))
 	hint.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	hint.add_theme_constant_override("outline_size", 3)
@@ -111,7 +113,7 @@ func _build_side(index: int) -> void:
 	waiting.set_anchors_preset(Control.PRESET_CENTER)
 	waiting.position = Vector2(-160, -12)
 	waiting.custom_minimum_size = Vector2(320, 0)
-	waiting.add_theme_font_size_override("font_size", 18)
+	waiting.add_theme_font_size_override("font_size", UIFonts.scaled(18))
 	waiting.add_theme_color_override("font_color", Color(0.85, 0.9, 0.98, 0.95))
 	waiting.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	waiting.add_theme_constant_override("outline_size", 4)
@@ -236,21 +238,23 @@ func _fill_card(button: Button, card: Dictionary) -> void:
 	var name_label := Label.new()
 	name_label.text = str(card.get("name", "Mejora"))
 	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	name_label.add_theme_font_size_override("font_size", 16)
+	name_label.add_theme_font_override("font", UIFonts.fredoka(600))
+	name_label.add_theme_font_size_override("font_size", UIFonts.scaled(16))
 	name_label.add_theme_color_override("font_color", Color(0.96, 0.97, 1.0))
 	texts.add_child(name_label)
 
 	var desc_label := Label.new()
 	desc_label.text = str(card.get("description", ""))
 	desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc_label.add_theme_font_size_override("font_size", 12)
+	desc_label.add_theme_font_override("font", UIFonts.nunito(400))
+	desc_label.add_theme_font_size_override("font_size", UIFonts.scaled(13))
 	desc_label.add_theme_color_override("font_color", Color(0.78, 0.82, 0.9))
 	texts.add_child(desc_label)
 
 	var meta_label := Label.new()
 	var type_label: String = str(card.get("type_label", ""))
 	meta_label.text = style["label"] if type_label == "" else "%s · %s" % [type_label.to_upper(), style["label"]]
-	meta_label.add_theme_font_size_override("font_size", 10)
+	meta_label.add_theme_font_size_override("font_size", UIFonts.scaled(11))
 	meta_label.add_theme_color_override("font_color", accent)
 	texts.add_child(meta_label)
 

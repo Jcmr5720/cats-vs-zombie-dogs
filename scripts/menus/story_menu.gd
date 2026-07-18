@@ -145,7 +145,7 @@ func _build_ui() -> void:
 	detail.add_child(actions)
 	_play_button = MenuTheme.make_button("Jugar", MenuTheme.ACCENT, &"primary")
 	_play_button.custom_minimum_size = Vector2(230, 54)
-	_play_button.add_theme_font_size_override("font_size", MenuTheme.FS_H2)
+	_play_button.add_theme_font_size_override("font_size", UIFonts.scaled(MenuTheme.FS_H2))
 	_play_button.pressed.connect(_on_play_pressed)
 	actions.add_child(_play_button)
 	_cinematic_button = MenuTheme.make_button("Cinemática", MenuTheme.CYAN, &"secondary")

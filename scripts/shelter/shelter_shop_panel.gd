@@ -261,7 +261,9 @@ func _card_status(item, unlocked: bool) -> Control:
 	elif not _shelter.is_purchased(item.id):
 		icon = &"sardine"
 		text = str(item.price)
-		color = MenuTheme.GOLD
+		# Precio en rojo si no alcanza (lectura inmediata de "no puedo").
+		var sardines: int = _save.get_sardines() if _save != null else 0
+		color = MenuTheme.GOLD if sardines >= item.price else MenuTheme.DANGER
 	elif _shelter.is_placed(item.id):
 		icon = &"check"
 		var lvl: int = _shelter.get_level(item.id)
@@ -414,6 +416,10 @@ func _run_action(action: StringName) -> void:
 func _show_message(text: String, color: Color) -> void:
 	_message_label.text = text
 	_message_label.add_theme_color_override("font_color", color)
+	# Destello breve: el mensaje se percibe como respuesta inmediata a la accion.
+	_message_label.modulate = Color(1.7, 1.7, 1.7, 1.0)
+	var tween := create_tween()
+	tween.tween_property(_message_label, "modulate", Color(1, 1, 1, 1), 0.35)
 
 
 func _thin_rule() -> Control:

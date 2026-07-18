@@ -53,6 +53,8 @@ func defaults() -> Dictionary:
 		"fog": true,
 		"show_fps": false,
 		"skip_cinematics": false,
+		# Accesibilidad: escala tipográfica global (ver UITheme.TEXT_SIZE_LEVELS).
+		"text_size": "normal",
 		"audio_master": 0.80,
 		"audio_music": 0.60,
 		"audio_sfx": 0.75,

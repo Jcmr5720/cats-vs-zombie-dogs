@@ -61,6 +61,15 @@ const MUTATION_POOL: Array[Dictionary] = [
 ## ofensiva, una defensiva y una de movilidad, en ese orden.
 const FIRST_HAND_IDS: Array[StringName] = [&"weapon_damage", &"max_health", &"player_speed"]
 
+## Puerta temporal de la PRIMERA tarjeta: aunque el jugador complete la XP antes
+## (la manada inicial da de sobra), no se abre hasta el segundo 12; se muestra
+## idealmente entre 12 y 18. La XP no se pierde: la subida queda pendiente y se
+## resuelve al cruzar la puerta. Se mide en segundos de juego (el reloj no corre
+## durante la pausa de seleccion, igual que el resto de sistemas).
+## La puerta esta APAGADA por defecto (0) y la ENCIENDE el PhaseDirector en la
+## partida real; asi los tests unitarios del flujo de cartas no la sufren.
+const FIRST_CARD_MIN_TIME: float = 12.0
+
 const COOP_PANEL_SCRIPT := preload("res://scripts/ui/coop_upgrade_panel.gd")
 
 var _player: Node
@@ -73,6 +82,16 @@ var _pending_mutations: int = 0
 var _mutation_active: bool = false
 ## Primera seleccion garantizada ya mostrada (solo clasico).
 var _first_selection_done: bool = false
+## Reloj de segundos de juego (para la puerta de la primera tarjeta).
+var _run_time: float = 0.0
+## Umbral de la puerta de la primera tarjeta (0 = apagada). Lo enciende el
+## PhaseDirector en la partida real via set_first_card_gate().
+var _first_card_gate: float = 0.0
+
+
+## Enciende la puerta temporal de la primera tarjeta (segundos de juego minimos).
+func set_first_card_gate(seconds: float = FIRST_CARD_MIN_TIME) -> void:
+	_first_card_gate = maxf(0.0, seconds)
 
 # --- Estado coop (Rework Coop: cartas INDEPENDIENTES por jugador) ---
 var _coop: bool = false
@@ -105,11 +124,10 @@ func _ready() -> void:
 	# clasico se desvia por completo al panel coop (dos columnas simultaneas).
 	var gf: Node = get_node_or_null("/root/GameFlow")
 	_coop = gf != null and gf.has_method("is_coop") and gf.is_coop()
-	if _coop:
-		# El P2 spawnea diferido (PlayerManager): se vinculan jugadores por polling
-		# en _process hasta tener a los dos.
-		set_process(true)
-	elif _player != null and _player.has_signal("level_up_requested"):
+	# Proceso SIEMPRE activo: lleva el reloj de la puerta de la primera tarjeta (y
+	# en coop, ademas, vincula a los jugadores segun aparecen).
+	set_process(true)
+	if not _coop and _player != null and _player.has_signal("level_up_requested"):
 		_player.level_up_requested.connect(_on_player_level_up_requested)
 
 	if _hud != null and _hud.has_signal("upgrade_card_selected"):
@@ -139,6 +157,12 @@ func _show_next_selection() -> void:
 	if _pending_level_ups <= 0 and not mutation:
 		return
 	if _hud == null or not _hud.has_method("show_upgrade_selection"):
+		return
+
+	# Puerta temporal de la PRIMERA tarjeta: si el jugador completo la XP antes del
+	# segundo 12, la subida queda pendiente (no se pierde) y la libera _process al
+	# cruzar la puerta. Solo afecta a la primera carta normal (no a las mutaciones).
+	if not mutation and not _first_selection_done and _run_time < _first_card_gate:
 		return
 
 	_selection_active = true
@@ -522,13 +546,29 @@ func _get_weapon_manager() -> Node:
 # jugador decidio invertir su carta en el equipo. Sin reroll/veto en coop: la
 # seleccion simultanea debe ser rapida y legible.
 
-func _process(_delta: float) -> void:
-	if not _coop:
-		set_process(false)
+func _process(delta: float) -> void:
+	# El reloj solo corre con la partida en marcha (no durante la pausa de cartas).
+	if not get_tree().paused:
+		_run_time += delta
+
+	if _coop:
+		_coop_bind_new_players()
+		# Al cruzar la puerta, libera las primeras selecciones que quedaron en espera.
+		if _run_time >= _first_card_gate:
+			for pid in _coop_players.keys():
+				if int(_coop_pending.get(pid, 0)) > 0 and not _coop_panel_open(pid):
+					_coop_show_selection(pid)
 		return
-	_coop_bind_new_players()
-	if _coop_bound.size() >= 2:
-		set_process(false)
+
+	# Solo: si la primera tarjeta quedo en espera por la puerta, mostrarla ahora.
+	if not _selection_active and _run_time >= _first_card_gate \
+			and (_pending_level_ups > 0 or _pending_mutations > 0):
+		_show_next_selection()
+
+
+## Panel coop abierto para un jugador (defensivo: puede no existir aun).
+func _coop_panel_open(pid: int) -> bool:
+	return is_instance_valid(_coop_panel) and _coop_panel.is_open(pid)
 
 
 func _coop_bind_new_players() -> void:
@@ -576,6 +616,10 @@ func _coop_show_selection(pid: int) -> void:
 		return
 	var player: Node = _coop_players.get(pid)
 	if player == null or not is_instance_valid(player):
+		return
+	# Puerta temporal de la PRIMERA tarjeta (igual que en solo): la subida queda
+	# pendiente hasta el segundo 12; _process la libera. No aplica a mutaciones.
+	if not mutation and not bool(_coop_first_done.get(pid, false)) and _run_time < _first_card_gate:
 		return
 	# Derribado: no abre cartas. La subida queda PENDIENTE (no se pierde) y se
 	# ofrece al revivir (_on_coop_player_revived). No bloquea la pausa: la pausa

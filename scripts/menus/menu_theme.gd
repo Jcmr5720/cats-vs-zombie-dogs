@@ -33,6 +33,9 @@ const GAP_L := 20
 const GAP_XL := 32
 
 # --- Escala tipográfica --------------------------------------------------------
+# Tamaños BASE: siempre pasan por UIFonts.scaled() (ajuste de accesibilidad
+# "Tamaño de texto" + mínimo legible). Las fuentes vienen de UIFonts:
+# Fredoka (principal), Nunito Sans (lectura), Lilita One (impacto).
 const FS_DISPLAY := 52
 const FS_H1 := 32
 const FS_H2 := 22
@@ -58,7 +61,8 @@ static func make_button(text: String, accent: Color = ACCENT, variant: StringNam
 	button.text = text
 	button.custom_minimum_size = Vector2(240, 48)
 	button.focus_mode = Control.FOCUS_ALL
-	button.add_theme_font_size_override("font_size", FS_H3 + 3)
+	button.add_theme_font_override("font", UIFonts.fredoka(600))
+	button.add_theme_font_size_override("font_size", UIFonts.scaled(FS_H3 + 3))
 	var use_accent: Color = DANGER if variant == &"danger" else accent
 	_apply_button_variant(button, use_accent, variant)
 	_wire_button_feedback(button)
@@ -153,6 +157,9 @@ static func make_icon_button(icon: StringName, tooltip: String = "", accent: Col
 	glyph.icon_type = icon
 	glyph.accent = accent
 	glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Sin minimo propio: el IconDrawer trae 38px por defecto y desbordaba el
+	# boton (la ✕ se salia de la caja en tienda/inventario).
+	glyph.custom_minimum_size = Vector2.ZERO
 	glyph.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var pad: float = size * 0.24
 	glyph.offset_left = pad
@@ -168,19 +175,53 @@ static func make_icon_button(icon: StringName, tooltip: String = "", accent: Col
 # Tipografía y encabezados
 # ==============================================================================
 
+## Título (Fredoka Bold): jerarquía alta con outline sutil para contraste.
 static func make_title(text: String, size: int = FS_DISPLAY, color: Color = TEXT) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", size)
+	label.add_theme_font_override("font", UIFonts.fredoka(700))
+	label.add_theme_font_size_override("font_size", UIFonts.scaled(size))
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_color_override("font_outline_color", Color(0.03, 0.04, 0.07, 0.9))
+	label.add_theme_constant_override("outline_size", 3 if size < FS_H1 else 5)
+	return label
+
+
+## Título de IMPACTO (Lilita One): solo textos cortos y memorables
+## (logo, VICTORIA, DERROTA, BOSS). No usar en HUD permanente ni botones.
+static func make_impact_title(text: String, size: int = FS_DISPLAY, color: Color = TEXT) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_override("font", UIFonts.lilita())
+	label.add_theme_font_size_override("font_size", UIFonts.scaled(size))
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_color_override("font_outline_color", Color(0.03, 0.04, 0.07, 0.92))
+	label.add_theme_constant_override("outline_size", 8)
+	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.5))
+	label.add_theme_constant_override("shadow_offset_y", 3)
+	return label
+
+
+## Etiqueta estándar (Fredoka Medium, hereda la fuente del Theme global).
+static func make_label(text: String, size: int = FS_BODY, color: Color = TEXT) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", UIFonts.scaled(size))
 	label.add_theme_color_override("font_color", color)
 	return label
 
 
-static func make_label(text: String, size: int = FS_BODY, color: Color = TEXT) -> Label:
+## Texto de LECTURA (Nunito Sans): descripciones, explicaciones, ajustes,
+## créditos... Interlineado cómodo y autowrap activado por defecto.
+static func make_text(text: String, size: int = FS_BODY, color: Color = TEXT, weight: int = 400) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_font_size_override("font_size", size)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_override("font", UIFonts.nunito(weight))
+	label.add_theme_font_size_override("font_size", UIFonts.scaled(size))
+	label.add_theme_constant_override("line_spacing", 3)
 	label.add_theme_color_override("font_color", color)
 	return label
 
@@ -204,42 +245,36 @@ static func make_section_header(text: String, accent: Color = ACCENT) -> Control
 	return row
 
 
-## Botón "Volver" estándar: píldora con chevron dibujado + texto, igual en TODAS
-## las pantallas (antes era un cuadrado solo-icono poco legible).
+## Botón "Volver" estándar: píldora con flecha en el propio texto (siempre
+## alineada, sin icono suelto que se descuadre), igual en TODAS las pantallas.
 static func make_back_button(on_back: Callable, accent: Color = TEXT) -> Button:
 	var button := Button.new()
-	button.text = "Volver"
+	button.text = "←  Volver"
 	button.tooltip_text = "ESC"
-	button.custom_minimum_size = Vector2(118, 44)
+	button.custom_minimum_size = Vector2(140, 46)
 	button.focus_mode = Control.FOCUS_ALL
-	button.add_theme_font_size_override("font_size", FS_BODY)
+	button.clip_contents = false
+	button.add_theme_font_override("font", UIFonts.fredoka(600))
+	button.add_theme_font_size_override("font_size", UIFonts.scaled(FS_BODY))
 	button.add_theme_color_override("font_color", TEXT)
-	button.add_theme_color_override("font_hover_color", TEXT)
+	button.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
 	button.add_theme_color_override("font_pressed_color", TEXT)
-	button.add_theme_color_override("font_focus_color", TEXT)
+	button.add_theme_color_override("font_focus_color", Color(1, 1, 1, 1))
 	for state in ["normal", "hover", "pressed", "focus"]:
 		var box := StyleBoxFlat.new()
 		var hovered: bool = state != "normal"
-		box.bg_color = Color(1, 1, 1, 0.10) if hovered else Color(1, 1, 1, 0.04)
-		box.border_color = Color(accent.r, accent.g, accent.b, 0.62 if hovered else 0.30)
+		box.bg_color = Color(1, 1, 1, 0.12) if hovered else Color(1, 1, 1, 0.05)
+		box.border_color = Color(accent.r, accent.g, accent.b, 0.75 if hovered else 0.38)
 		box.set_border_width_all(1)
-		box.set_corner_radius_all(22)
-		box.content_margin_left = 34.0
-		box.content_margin_right = 16.0
-		box.content_margin_top = 8.0
-		box.content_margin_bottom = 8.0
+		if hovered:
+			box.border_width_left = 3
+		box.set_corner_radius_all(23)
+		# Margenes simetricos: el texto (flecha incluida) queda centrado en la pildora.
+		box.content_margin_left = 20.0
+		box.content_margin_right = 20.0
+		box.content_margin_top = 9.0
+		box.content_margin_bottom = 9.0
 		button.add_theme_stylebox_override(state, box)
-	# Chevron dibujado a la izquierda del texto.
-	var glyph := IconDrawer.new()
-	glyph.icon_type = &"back"
-	glyph.accent = TEXT
-	glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	glyph.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
-	glyph.offset_left = 12.0
-	glyph.offset_right = 28.0
-	glyph.offset_top = 13.0
-	glyph.offset_bottom = -13.0
-	button.add_child(glyph)
 	button.pressed.connect(on_back)
 	_wire_button_feedback(button)
 	return button
@@ -300,7 +335,8 @@ static func make_badge(text: String, accent: Color = ACCENT, fg: Color = TEXT) -
 	var label := Label.new()
 	label.text = text
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", FS_MICRO + 1)
+	label.add_theme_font_override("font", UIFonts.fredoka(600))
+	label.add_theme_font_size_override("font_size", UIFonts.scaled(FS_MICRO + 1))
 	label.add_theme_color_override("font_color", fg)
 	var box := StyleBoxFlat.new()
 	box.bg_color = accent.lerp(Color(0.10, 0.12, 0.15, 1.0), 0.68)
@@ -333,6 +369,8 @@ static func make_stat_card(value: String, label_text: String, accent: Color = CY
 		ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		v.add_child(ic)
 	var val := make_label(value, FS_H1 - 4, accent.lightened(0.15))
+	# Valor numérico grande: Fredoka Bold con cifras tabulares (no "baila").
+	val.add_theme_font_override("font", UIFonts.fredoka_numeric(700))
 	val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	val.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_child(val)
@@ -359,7 +397,8 @@ static func make_segmented(options: Array, selected_id: Variant, on_select: Call
 		seg.custom_minimum_size = Vector2(0, 38)
 		seg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		seg.focus_mode = Control.FOCUS_ALL
-		seg.add_theme_font_size_override("font_size", FS_CAPTION + 1)
+		seg.add_theme_font_override("font", UIFonts.fredoka(600))
+		seg.add_theme_font_size_override("font_size", UIFonts.scaled(FS_CAPTION + 1))
 		seg.set_meta("seg_id", oid)
 		seg.set_meta("seg_accent", opt.get("color", accent))
 		seg.pressed.connect(func() -> void:

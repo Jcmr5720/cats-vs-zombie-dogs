@@ -104,3 +104,13 @@ func _build_visual() -> void:
 	_ring.width = 4.0
 	_ring.default_color = Color(0.45, 0.72, 1.0, 0.85)
 	add_child(_ring)
+	# Rotulo identificador: la zona se lee como herramienta del Gato Policia
+	# (ralentiza enemigos), no como decoracion del mapa.
+	var tag := Label.new()
+	tag.text = "⛨ Barricada policial"
+	tag.add_theme_font_size_override("font_size", 11)
+	tag.add_theme_color_override("font_color", Color(0.6, 0.82, 1.0, 0.95))
+	tag.add_theme_color_override("font_outline_color", Color(0.02, 0.06, 0.14, 0.9))
+	tag.add_theme_constant_override("outline_size", 4)
+	tag.position = Vector2(-52.0, -_radius - 22.0)
+	add_child(tag)

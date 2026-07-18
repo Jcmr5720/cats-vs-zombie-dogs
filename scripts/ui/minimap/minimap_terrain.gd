@@ -38,7 +38,7 @@ func update_region(focus_world: Vector2, world_radius: float, map_scale: float, 
 		return
 	var half := Vector2.ONE * (world_radius * 1.15)
 	_region = Rect2(focus_world - half, half * 2.0)
-	var generated: bool = bool(source.call("ensure_region", _region, 3))
+	var generated: bool = bool(source.call("ensure_region", _region, MinimapConfig.TERRAIN_CHUNK_BUDGET))
 	var from := Vector2i(floori(_region.position.x / CHUNK_SIZE.x), floori(_region.position.y / CHUNK_SIZE.y))
 	var to := Vector2i(floori(_region.end.x / CHUNK_SIZE.x), floori(_region.end.y / CHUNK_SIZE.y))
 	var dirty: bool = generated or from != _chunk_from or to != _chunk_to \

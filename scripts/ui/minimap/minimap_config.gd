@@ -77,12 +77,17 @@ const BOSS_MINION_DOT: float = 4.5
 
 # --- Terreno (Fase correccion: estructura del mapa en el radar) -----------------------
 ## Cadencia del tick de terreno (asegurar chunks + decidir redibujado).
-const TERRAIN_INTERVAL: float = 0.3
+const TERRAIN_INTERVAL: float = 0.2
+## Chunks nuevos generados como maximo por tick (el arranque llena el radar en
+## 1-2 ticks; antes con 3 podia tardar varios segundos en modo ampliado).
+const TERRAIN_CHUNK_BUDGET: int = 12
 ## Fondo oscuro del panel = zona "exterior"; las vias claras = transitable.
-const ROAD_AVENUE_COLOR := Color(0.80, 0.83, 0.92, 0.20)
-const ROAD_STREET_COLOR := Color(0.80, 0.83, 0.92, 0.13)
-const PATH_COLOR := Color(0.88, 0.82, 0.62, 0.18)
-const RAIL_COLOR := Color(0.75, 0.62, 0.45, 0.25)
+## Alfas subidos (0.13-0.25 -> 0.22-0.34): los caminos se perdian bajo los
+## puntos de la horda y parecian "no cargar".
+const ROAD_AVENUE_COLOR := Color(0.80, 0.83, 0.92, 0.32)
+const ROAD_STREET_COLOR := Color(0.80, 0.83, 0.92, 0.22)
+const PATH_COLOR := Color(0.88, 0.82, 0.62, 0.30)
+const RAIL_COLOR := Color(0.75, 0.62, 0.45, 0.34)
 const WATER_COLOR := Color(0.30, 0.50, 0.72, 0.42)
 ## Siluetas de estructuras (edificios, muros, contenedores, coches grandes).
 const STRUCT_COLOR := Color(0.60, 0.64, 0.76, 0.38)

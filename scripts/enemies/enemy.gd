@@ -94,6 +94,14 @@ var _stuck_check_timer: float = 0.0
 var _recovery_timer: float = 0.0
 var _avoidance_skill: float = 1.0
 var _lookahead_distance: float = 48.0
+## Atasco DURO: en layouts de semilla estrechos un enemigo puede quedar acuñado
+## entre obstaculos donde el rodeo lateral no basta. Se mide el tiempo acumulado
+## realmente atascado; superado un umbral, entra en modo "fantasma": atraviesa
+## los obstaculos brevemente y avanza recto hacia el objetivo para desatascarse.
+var _hard_stuck_time: float = 0.0
+var _ghost_timer: float = 0.0
+const HARD_STUCK_LIMIT: float = 2.4
+const GHOST_DURATION: float = 0.7
 
 # Knockback: impulso que decae y se suma a la velocidad de persecución.
 var _knockback: Vector2 = Vector2.ZERO
@@ -118,6 +126,9 @@ var _slow_timer: float = 0.0
 ## se hace en ticks (0.25 s), no cada frame por enemigo (rendimiento en hordas).
 var _companion_scan_timer: float = 0.0
 var _cached_companion: Node2D
+## Cache del jugador objetivo: mismo criterio (el grupo "players" se recorria
+## cada frame de fisica POR ENEMIGO; con hordas grandes era coste puro).
+var _target_scan_timer: float = 0.0
 
 ## Controlador visual de sprites (ETAPA ARTISTICA 2/3). Puede no existir.
 @onready var _sprite_visual: Node = get_node_or_null("SpriteVisual")
@@ -170,13 +181,24 @@ func _physics_process(delta: float) -> void:
 	if _is_dead:
 		return
 
-	# Reevalua el jugador objetivo (coop: el vivo mas cercano puede cambiar).
-	_player = _resolve_target_player()
+	# Reevalua el jugador objetivo (coop: el vivo mas cercano puede cambiar) en
+	# ticks de 0.2 s, no cada frame: con 50+ enemigos el escaneo continuo pesaba.
+	_target_scan_timer -= delta
+	if _target_scan_timer <= 0.0 or not is_instance_valid(_player):
+		_target_scan_timer = 0.2
+		_player = _resolve_target_player()
 	if not is_instance_valid(_player):
 		velocity = Vector2.ZERO
 		return
 
 	_time += delta
+
+	# Modo fantasma para salir de un acuñamiento duro: mientras dura, no colisiona
+	# con obstaculos (se restaura la mascara al expirar).
+	if _ghost_timer > 0.0:
+		_ghost_timer -= delta
+		if _ghost_timer <= 0.0:
+			set_collision_mask_value(5, true)
 
 	# Potenciacion del Aullador: decae sola (no se apila).
 	if _buff_timer > 0.0:
@@ -378,8 +400,13 @@ func _update_stuck_state(delta: float, target_position: Vector2) -> void:
 	var blocked: bool = get_slide_collision_count() > 0 or _would_hit_obstacle(global_position.direction_to(target_position))
 	if moved < 4.0 and blocked:
 		_stuck_time += _stuck_check_timer
+		# El atasco DURO solo cuenta cuando el rodeo lateral ya no progresa (poco
+		# movimiento real pese a estar bloqueado varias comprobaciones seguidas).
+		if moved < 4.0:
+			_hard_stuck_time += _stuck_check_timer
 	else:
 		_stuck_time = max(0.0, _stuck_time - _stuck_check_timer * 1.5)
+		_hard_stuck_time = max(0.0, _hard_stuck_time - _stuck_check_timer * 2.0)
 		if is_in_group("stuck_enemies") and _stuck_time <= 0.05:
 			remove_from_group("stuck_enemies")
 	if _stuck_time > 0.75:
@@ -390,6 +417,18 @@ func _update_stuck_state(delta: float, target_position: Vector2) -> void:
 		_avoid = side * speed * (0.7 + _avoidance_skill * 0.25)
 		_recovery_timer = 0.45
 		_stuck_time = 0.25
+	# Acuñado sin salida: activa el modo fantasma para atravesar el obstaculo y
+	# avanzar recto hacia el objetivo. Ultimo recurso, breve y poco frecuente.
+	if _hard_stuck_time > HARD_STUCK_LIMIT and _ghost_timer <= 0.0:
+		_ghost_timer = GHOST_DURATION
+		set_collision_mask_value(5, false)
+		_has_subtarget = false
+		_avoid = Vector2.ZERO
+		_set_subtarget(target_position)
+		_hard_stuck_time = 0.0
+		_stuck_time = 0.0
+		if is_in_group("stuck_enemies"):
+			remove_from_group("stuck_enemies")
 	_last_position = global_position
 	_stuck_check_timer = 0.0
 

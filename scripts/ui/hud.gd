@@ -84,6 +84,8 @@ var _defeat_tiles: GridContainer
 ## Botón "Reintentar" de cada panel (foco inicial para navegación con gamepad).
 var _victory_retry: Button
 var _defeat_retry: Button
+## Tarjetas de fondo de fin de partida (se reajustan al tamaño del viewport).
+var _run_end_cards: Array[Control] = []
 @onready var _upgrade_buttons: Array[Button] = [
 	$UpgradePanel/Center/Content/Cards/Card1,
 	$UpgradePanel/Center/Content/Cards/Card2,
@@ -187,13 +189,85 @@ func _ready() -> void:
 	_defeat_details_button.pressed.connect(func() -> void: _play_ui(&"ui_click"))
 
 	_perf = get_node_or_null("/root/Performance")
+	_build_boss_bar_bg()
 	_build_combo_label()
 	_build_phase_label()
 	_build_debug_overlay()
+	_build_run_end_cards()
 	_victory_retry = _build_run_end_buttons($VictoryPanel/Center/Content)
 	_defeat_retry = _build_run_end_buttons($GameOverPanel/Center/Content)
 	_victory_tiles = _make_summary_tiles($VictoryPanel/Center/Content, _victory_summary)
 	_defeat_tiles = _make_summary_tiles($GameOverPanel/Center/Content, _defeat_summary)
+
+
+## Tarjeta de fondo del panel de fin de partida: da marco y jerarquia al resumen
+## (antes el contenido "flotaba" sobre el oscurecido). Se inserta DETRAS del
+## contenido centrado, sin tocar el arbol que referencian los @onready.
+func _build_run_end_cards() -> void:
+	_make_run_end_card($VictoryPanel, $VictoryPanel/Center, Color(0.55, 1.0, 0.72), Color(0.09, 0.13, 0.11, 0.96))
+	_make_run_end_card($GameOverPanel, $GameOverPanel/Center, Color(1.0, 0.5, 0.5), Color(0.14, 0.09, 0.10, 0.96))
+	# Reajusta las tarjetas si cambia el tamaño de la ventana (stretch "expand").
+	get_viewport().size_changed.connect(_fit_run_end_cards)
+
+
+## Tamaño de tarjeta acotado por el viewport: nunca se sale de pantalla.
+func _fit_run_end_card(card: Control) -> void:
+	if not is_instance_valid(card):
+		return
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	var half_w: float = minf(400.0, (vp.x - 24.0) * 0.5)
+	var half_h: float = minf(330.0, (vp.y - 16.0) * 0.5)
+	card.offset_left = -half_w
+	card.offset_right = half_w
+	card.offset_top = -half_h
+	card.offset_bottom = half_h
+
+
+func _fit_run_end_cards() -> void:
+	for card in _run_end_cards:
+		_fit_run_end_card(card)
+
+
+func _make_run_end_card(panel: Control, center: Control, accent: Color, bg: Color) -> void:
+	if panel == null or center == null:
+		return
+	var card := Panel.new()
+	card.name = "Card"
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Centrada y ADAPTADA al viewport: una tarjeta de tamaño fijo se cortaba por
+	# abajo en la resolucion base (648 px de alto < 660 de tarjeta).
+	card.anchor_left = 0.5
+	card.anchor_top = 0.5
+	card.anchor_right = 0.5
+	card.anchor_bottom = 0.5
+	_run_end_cards.append(card)
+	_fit_run_end_card(card)
+	var box := StyleBoxFlat.new()
+	box.bg_color = bg
+	box.border_color = Color(accent.r, accent.g, accent.b, 0.9)
+	box.set_border_width_all(2)
+	box.border_width_top = 5
+	box.set_corner_radius_all(22)
+	box.content_margin_left = 44.0
+	box.content_margin_right = 44.0
+	box.content_margin_top = 34.0
+	box.content_margin_bottom = 34.0
+	box.shadow_color = Color(0, 0, 0, 0.55)
+	box.shadow_size = 26
+	card.add_theme_stylebox_override("panel", box)
+	panel.add_child(card)
+	# Detras del contenido centrado (que se dibuja despues) pero sobre el oscurecido.
+	panel.move_child(card, center.get_index())
+	# Banda de acento superior (remate fino bajo el borde).
+	var strip := ColorRect.new()
+	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	strip.color = Color(accent.r, accent.g, accent.b, 0.16)
+	strip.anchor_right = 1.0
+	strip.offset_top = 5.0
+	strip.offset_bottom = 92.0
+	strip.offset_left = 2.0
+	strip.offset_right = -2.0
+	card.add_child(strip)
 
 
 ## Botones clicables de fin de partida (además de los atajos R/M/ESC). Devuelve el
@@ -270,21 +344,61 @@ func _build_vignette() -> void:
 	move_child(rect, 0)
 
 
+## Fondo propio de la barra de boss: panel oscuro redondeado detras del nombre y
+## la barra, para que no se solape/mezcle con las etiquetas del centro superior.
+var _boss_bar_bg: Panel
+
+
+func _build_boss_bar_bg() -> void:
+	_boss_bar_bg = Panel.new()
+	_boss_bar_bg.name = "BossBarBg"
+	_boss_bar_bg.visible = false
+	_boss_bar_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_boss_bar_bg.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	# Cubre la banda de la barra de boss con un margen; centrado y ancho fijo.
+	_boss_bar_bg.anchor_left = 0.5
+	_boss_bar_bg.anchor_right = 0.5
+	_boss_bar_bg.offset_left = -340.0
+	_boss_bar_bg.offset_right = 340.0
+	_boss_bar_bg.offset_top = 88.0
+	_boss_bar_bg.offset_bottom = 158.0
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(0.05, 0.045, 0.06, 0.82)
+	box.border_color = Color(0.82, 0.24, 0.28, 0.85)
+	box.set_border_width_all(2)
+	box.border_width_top = 3
+	box.set_corner_radius_all(10)
+	box.shadow_color = Color(0, 0, 0, 0.5)
+	box.shadow_size = 10
+	_boss_bar_bg.add_theme_stylebox_override("panel", box)
+	add_child(_boss_bar_bg)
+	# Debajo de la barra en el arbol (se dibuja antes = queda por detras).
+	move_child(_boss_bar_bg, _boss_bar.get_index())
+
+
 ## Rotulo de racha de bajas: aparece a partir de 4 bajas encadenadas, con punch
-## en cada baja y color que se calienta con la racha.
+## en cada baja y color que se calienta con la racha. Se coloca en una banda
+## centrada BAJO la barra de boss (antes iba en el centro superior y se solapaba).
 func _build_combo_label() -> void:
+	var band := CenterContainer.new()
+	band.name = "ComboBand"
+	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	band.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	band.offset_top = 176.0
+	band.offset_bottom = 214.0
+	add_child(band)
 	_combo_label = Label.new()
 	_combo_label.visible = false
-	_combo_label.add_theme_font_size_override("font_size", 24)
+	# Racha: Lilita One (impacto corto) con outline para leerse sobre el combate.
+	_combo_label.add_theme_font_override("font", UIFonts.lilita())
+	_combo_label.add_theme_font_size_override("font_size", UIFonts.scaled(24))
+	_combo_label.add_theme_color_override("font_outline_color", Color(0.03, 0.04, 0.07, 0.92))
+	_combo_label.add_theme_constant_override("outline_size", 5)
 	_combo_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
-	_combo_label.add_theme_constant_override("shadow_offset_x", 2)
+	_combo_label.add_theme_constant_override("shadow_offset_x", 0)
 	_combo_label.add_theme_constant_override("shadow_offset_y", 2)
 	_combo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var center := $TopCenter as Control
-	if center != null:
-		center.add_child(_combo_label)
-	else:
-		add_child(_combo_label)
+	band.add_child(_combo_label)
 
 
 ## Rotulo de fase de las Partidas rapidas: "Fase · tiempo restante" bajo el
@@ -296,11 +410,8 @@ func _build_phase_label() -> void:
 	_phase_label = Label.new()
 	_phase_label.name = "PhaseLabel"
 	_phase_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_phase_label.add_theme_font_size_override("font_size", 15)
+	_phase_label.theme_type_variation = &"HudSecondary"
 	_phase_label.add_theme_color_override("font_color", Color(0.85, 0.9, 1.0, 0.95))
-	_phase_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
-	_phase_label.add_theme_constant_override("shadow_offset_x", 1)
-	_phase_label.add_theme_constant_override("shadow_offset_y", 1)
 	_phase_label.text = ""
 	var center := $TopCenter as Control
 	if center != null:
@@ -370,12 +481,13 @@ func _show_next_mission_toast() -> void:
 	panel.add_child(v)
 	var title := Label.new()
 	title.text = "★ Mision completada"
-	title.add_theme_font_size_override("font_size", 13)
+	title.add_theme_font_override("font", UIFonts.fredoka(600))
+	title.add_theme_font_size_override("font_size", UIFonts.scaled(13))
 	title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
 	v.add_child(title)
 	var body := Label.new()
 	body.text = "%s   +%d 🐟" % [data["name"], int(data["reward"])]
-	body.add_theme_font_size_override("font_size", 17)
+	body.add_theme_font_size_override("font_size", UIFonts.scaled(17))
 	body.add_theme_color_override("font_color", Color(0.95, 0.96, 1.0))
 	v.add_child(body)
 	add_child(panel)
@@ -451,6 +563,7 @@ func _draw_health_ghost() -> void:
 
 func _process(_delta: float) -> void:
 	_update_rescue_arrow()
+	_update_downed_arrow()
 	if _debug_label != null and _debug_label.visible and _perf != null and _perf.has_method("get_debug_line"):
 		var map_line: String = _map_debug_line()
 		_debug_label.text = _perf.get_debug_line() + ("\n" + map_line if map_line != "" else "")
@@ -661,6 +774,8 @@ func _make_companion_dot(snapshot: Dictionary, style: Dictionary, tooltip: Strin
 
 func show_boss_bar(boss_name: String, max_health: int) -> void:
 	_boss_bar.visible = true
+	if _boss_bar_bg != null:
+		_boss_bar_bg.visible = true
 	_boss_name_label.text = boss_name
 	_boss_health_bar.max_value = max(1, max_health)
 	_boss_health_bar.value = max_health
@@ -673,6 +788,8 @@ func update_boss_bar(current: int, maximum: int) -> void:
 
 func hide_boss_bar() -> void:
 	_boss_bar.visible = false
+	if _boss_bar_bg != null:
+		_boss_bar_bg.visible = false
 
 
 ## --- Mapa y objetivos ---------------------------------------------------------
@@ -709,6 +826,17 @@ func get_run_info() -> Dictionary:
 
 ## --- Fin de partida -----------------------------------------------------------
 
+## Oculta el HUD de combate al abrir un panel de fin de partida: los rotulos de
+## racha/fase/armas se colaban ENCIMA del resumen y lo hacian ver desordenado.
+func _hide_gameplay_chrome() -> void:
+	for node in [$TopLeft, $TopCenter, $TopRight, _weapons_bar, _companion_bar,
+			_combo_label, _phase_label, _announcement_label, event_label,
+			_downed_arrow, _downed_tag, rescue_arrow, rescue_status_label]:
+		if node != null and is_instance_valid(node):
+			(node as CanvasItem).visible = false
+	_rescue_target_active = false
+
+
 func show_run_end(summary: Dictionary) -> void:
 	if bool(summary.get("victory", false)):
 		show_victory(summary)
@@ -718,12 +846,16 @@ func show_run_end(summary: Dictionary) -> void:
 
 func show_victory(summary: Dictionary) -> void:
 	hide_boss_bar()
+	_hide_gameplay_chrome()
 	_victory_title.text = summary.get("victory_message", "ZONA ASEGURADA").to_upper()
 	_victory_subtitle.text = summary.get("map_name", "") + _mode_suffix() + _record_suffix(summary)
 	_fill_summary_tiles(_victory_tiles, summary)
 	_victory_details.text = _summary_details(summary)
 	_victory_details.visible = false
+	if is_instance_valid(_victory_tiles):
+		_victory_tiles.visible = true
 	_victory_details_button.text = "Detalles"
+	_fit_run_end_cards()
 	_victory_panel.visible = true
 	_animate_victory_panel()
 	if is_instance_valid(_victory_retry):
@@ -732,12 +864,16 @@ func show_victory(summary: Dictionary) -> void:
 
 func show_defeat(summary: Dictionary) -> void:
 	hide_boss_bar()
+	_hide_gameplay_chrome()
 	_defeat_title.text = summary.get("victory_message", _game_over_title).to_upper()
 	_defeat_subtitle.text = summary.get("map_name", _map_name) + _mode_suffix() + _record_suffix(summary)
 	_fill_summary_tiles(_defeat_tiles, summary)
 	_defeat_details.text = _summary_details(summary)
 	_defeat_details.visible = false
+	if is_instance_valid(_defeat_tiles):
+		_defeat_tiles.visible = true
 	_defeat_details_button.text = "Detalles"
+	_fit_run_end_cards()
 	game_over_panel.visible = true
 	if is_instance_valid(_defeat_retry):
 		_defeat_retry.call_deferred("grab_focus")
@@ -750,6 +886,7 @@ func _make_summary_tiles(content: Node, summary_label: Label) -> GridContainer:
 		return null
 	var grid := GridContainer.new()
 	grid.columns = 3
+	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	grid.add_theme_constant_override("h_separation", MenuTheme.GAP_S)
 	grid.add_theme_constant_override("v_separation", MenuTheme.GAP_S)
 	content.add_child(grid)
@@ -836,11 +973,17 @@ func _score_breakdown_lines(summary: Dictionary) -> Array[String]:
 func _toggle_victory_details() -> void:
 	_victory_details.visible = not _victory_details.visible
 	_victory_details_button.text = "Ocultar" if _victory_details.visible else "Detalles"
+	# Los detalles REEMPLAZAN al mosaico: sumados, el contenido superaba el alto
+	# de la pantalla y el panel se salia por abajo.
+	if is_instance_valid(_victory_tiles):
+		_victory_tiles.visible = not _victory_details.visible
 
 
 func _toggle_defeat_details() -> void:
 	_defeat_details.visible = not _defeat_details.visible
 	_defeat_details_button.text = "Ocultar" if _defeat_details.visible else "Detalles"
+	if is_instance_valid(_defeat_tiles):
+		_defeat_tiles.visible = not _defeat_details.visible
 
 
 func _sardine_breakdown_lines(summary: Dictionary) -> Array[String]:
@@ -931,6 +1074,9 @@ func _spawn_victory_confetti() -> void:
 		piece.position = Vector2(randf_range(140.0, get_viewport().get_visible_rect().size.x - 140.0), randf_range(60.0, 180.0))
 		piece.color = [Color(0.55, 1.0, 0.75, 0.9), Color(1.0, 0.84, 0.35, 0.9), Color(0.55, 0.85, 1.0, 0.9)][i % 3]
 		_victory_panel.add_child(piece)
+		# Detras de la tarjeta central (indice 1: tras el fondo, antes del Card):
+		# el confeti celebra sin ensuciar el resumen.
+		_victory_panel.move_child(piece, 1)
 		var tween := create_tween()
 		tween.set_parallel(true)
 		tween.tween_property(piece, "position:y", piece.position.y + randf_range(120.0, 240.0), randf_range(1.0, 1.8))
@@ -989,12 +1135,13 @@ func _prepare_upgrade_card_layout(index: int) -> void:
 	button.clip_contents = true
 	button.pivot_offset = button.custom_minimum_size * 0.5
 
+	# Fuente y tamaño vienen de las variaciones del Theme global (CardTitle /
+	# CardDescription / CardMeta): sin overrides duplicados por carta.
 	var title := _upgrade_titles[index]
 	title.custom_minimum_size = Vector2(188, 48)
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 18)
 	title.set("max_lines_visible", 2)
 
 	var desc := _upgrade_descriptions[index]
@@ -1002,13 +1149,11 @@ func _prepare_upgrade_card_layout(index: int) -> void:
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	desc.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	desc.add_theme_font_size_override("font_size", 14)
 	desc.set("max_lines_visible", 2)
 
 	var meta := _upgrade_metas[index]
 	meta.custom_minimum_size = Vector2(188, 18)
 	meta.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	meta.add_theme_font_size_override("font_size", 11)
 
 
 func _compact_card_title(text: String) -> String:
@@ -1153,7 +1298,7 @@ func _make_action_button(parent: Control, text: String) -> Button:
 		box.set_corner_radius_all(10)
 		box.set_content_margin_all(8)
 		button.add_theme_stylebox_override(state, box)
-	button.add_theme_font_size_override("font_size", 14)
+	button.add_theme_font_size_override("font_size", UIFonts.scaled(14))
 	parent.add_child(button)
 	return button
 
@@ -1233,6 +1378,107 @@ func _update_rescue_arrow() -> void:
 	rescue_arrow.rotation = direction.angle() + PI * 0.5
 	rescue_arrow_glyph.modulate.a = 0.76 + sin(Time.get_ticks_msec() * 0.01) * 0.18
 	rescue_arrow.visible = true
+
+
+## Flecha VERDE hacia el companero caido mas cercano: sin ella no habia forma de
+## saber donde quedo un gato derribado fuera de camara. Se crea en codigo (clon
+## del patron de la flecha de rescate) y solo aparece si hay un caido lejos.
+var _downed_arrow: Control
+var _downed_arrow_glyph: Label
+var _downed_tag: Label
+
+
+func _update_downed_arrow() -> void:
+	var camera := get_viewport().get_camera_2d()
+	var target: Node2D = null
+	if camera != null:
+		var best: float = INF
+		var center: Vector2 = camera.get_screen_center_position()
+		for c in get_tree().get_nodes_in_group("companions"):
+			if not is_instance_valid(c) or not (c is Node2D):
+				continue
+			if not c.has_method("is_downed") or not c.is_downed():
+				continue
+			var d: float = center.distance_to((c as Node2D).global_position)
+			if d < best:
+				best = d
+				target = c
+		# Cerca de camara ya se ve el ping/etiqueta del propio gato: sin flecha.
+		if target != null and best < 320.0:
+			target = null
+	if target == null:
+		if _downed_arrow != null:
+			_downed_arrow.visible = false
+			_downed_tag.visible = false
+		return
+	if _downed_arrow == null:
+		_downed_arrow = Control.new()
+		_downed_arrow.name = "DownedArrow"
+		_downed_arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_downed_arrow.set_anchors_preset(Control.PRESET_CENTER_TOP)
+		_downed_arrow.position = Vector2(get_viewport().get_visible_rect().size.x * 0.5, 150.0)
+		add_child(_downed_arrow)
+		_downed_arrow_glyph = Label.new()
+		_downed_arrow_glyph.text = "▲"
+		_downed_arrow_glyph.add_theme_font_size_override("font_size", 30)
+		_downed_arrow_glyph.add_theme_color_override("font_color", Color(0.62, 1.0, 0.72))
+		_downed_arrow_glyph.position = Vector2(-12.0, -34.0)
+		_downed_arrow.add_child(_downed_arrow_glyph)
+		# Rotulo FIJO (no rota con la flecha) bajo el ancla.
+		_downed_tag = Label.new()
+		_downed_tag.name = "DownedTag"
+		_downed_tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_downed_tag.text = "GATO CAIDO"
+		_downed_tag.add_theme_font_size_override("font_size", 12)
+		_downed_tag.add_theme_color_override("font_color", Color(0.62, 1.0, 0.72, 0.9))
+		_downed_tag.position = _downed_arrow.position + Vector2(-38.0, 40.0)
+		add_child(_downed_tag)
+	var dir: Vector2 = camera.get_screen_center_position().direction_to(target.global_position)
+	if dir == Vector2.ZERO:
+		dir = Vector2.UP
+	_downed_arrow.rotation = dir.angle() + PI * 0.5
+	_downed_arrow_glyph.modulate.a = 0.76 + sin(Time.get_ticks_msec() * 0.012) * 0.2
+	_downed_arrow.visible = true
+	_downed_tag.visible = true
+
+
+## Aviso de IMPACTO (Lilita One): apariciones de boss/mini-boss, fases especiales.
+## Texto corto y grande, con entrada elástica y salida rápida; no bloquea la vista.
+## Para mensajes informativos ("Arma: X", "Gato cercano") usar show_event_message.
+var _announcement_label: Label
+var _announcement_tween: Tween
+
+
+func show_announcement(text: String, duration: float = 1.6) -> void:
+	if _announcement_label == null:
+		var band := CenterContainer.new()
+		band.name = "AnnouncementBand"
+		band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		band.set_anchors_preset(Control.PRESET_TOP_WIDE)
+		band.offset_top = 218.0
+		band.offset_bottom = 290.0
+		add_child(band)
+		_announcement_label = Label.new()
+		_announcement_label.theme_type_variation = &"BossAnnouncement"
+		_announcement_label.add_theme_color_override("font_color", Color(1.0, 0.82, 0.5))
+		_announcement_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		band.add_child(_announcement_label)
+	if _announcement_tween != null and _announcement_tween.is_valid():
+		_announcement_tween.kill()
+	_announcement_label.text = text
+	_announcement_label.visible = true
+	_announcement_label.modulate.a = 0.0
+	_announcement_label.pivot_offset = _announcement_label.size * 0.5
+	_announcement_label.scale = Vector2(0.7, 0.7)
+	_announcement_tween = create_tween()
+	_announcement_tween.set_parallel(true)
+	_announcement_tween.tween_property(_announcement_label, "modulate:a", 1.0, 0.12)
+	_announcement_tween.tween_property(_announcement_label, "scale", Vector2.ONE, 0.28) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_announcement_tween.chain().tween_interval(duration)
+	_announcement_tween.chain().tween_property(_announcement_label, "modulate:a", 0.0, 0.22)
+	_announcement_tween.chain().tween_callback(func() -> void:
+		_announcement_label.visible = false)
 
 
 func show_event_message(text: String, duration: float = 1.8) -> void:

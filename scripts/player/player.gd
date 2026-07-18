@@ -162,6 +162,7 @@ func _build_identity_marker() -> void:
 	# Icono + numero: la FORMA identifica al jugador aunque no distinga colores.
 	badge.text = CoopConfig.player_tag(player_id)
 	badge.position = Vector2(-17, -60)
+	badge.add_theme_font_override("font", UIFonts.fredoka(700))
 	badge.add_theme_font_size_override("font_size", 13)
 	badge.add_theme_color_override("font_color", Color(0.08, 0.08, 0.1))
 	var chip := StyleBoxFlat.new()

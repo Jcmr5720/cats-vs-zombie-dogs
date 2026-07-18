@@ -26,7 +26,9 @@ const XP_GROWTH: float = 1.5
 
 # --- Score de dificultad ----------------------------------------------------------
 ## Peso de los minutos sobrevividos (fuente principal y predecible del escalado).
-const TIME_WEIGHT: float = 1.15
+## Subido (1.15 -> 1.6) en la Fase re-balance: la curva era demasiado plana y la
+## partida entera se sentia facil.
+const TIME_WEIGHT: float = 1.75
 ## Pesos de la potencia del jugador. NOTA de auditoria: la formula anterior
 ## contaba el mismo poder TRES veces por subida de nivel (nivel 0.9 + mejora
 ## elegida 0.35 + nivel de arma 0.18 ≈ +1.43 de score por carta). Ahora el nivel
@@ -50,36 +52,38 @@ const POWER_SMOOTH_SECONDS: float = 25.0
 const POWER_POLL_SECONDS: float = 2.0
 
 # --- Etapas -------------------------------------------------------------------------
-## Fin de la etapa de inicio (min). Antes: sin elites ni mini-oleadas.
-const EARLY_STAGE_MINUTES: float = 3.0
+## Fin de la etapa de inicio (min). Antes: sin elites ni mini-oleadas. Acortada
+## (3.0 -> 1.5) en la Fase re-balance: el arranque era un paseo; la presion de
+## borde/oleadas/elites entra mucho antes.
+const EARLY_STAGE_MINUTES: float = 1.5
 
 # --- Ritmo de aparicion ----------------------------------------------------------------
-const BASE_SPAWN_INTERVAL: float = 0.95
+const BASE_SPAWN_INTERVAL: float = 0.72
 ## Reduccion del intervalo por punto de score (antes 0.05: tocaba suelo al min 3).
 const INTERVAL_PER_POINT: float = 0.030
 ## Suelo del intervalo: alto al inicio y baja con los minutos (la cantidad es la
 ## fuente de presion de MITAD de partida, no del arranque).
-const SPAWN_FLOOR_EARLY: float = 0.62
-const SPAWN_FLOOR_LATE: float = 0.30
+const SPAWN_FLOOR_EARLY: float = 0.48
+const SPAWN_FLOOR_LATE: float = 0.26
 ## Minutos entre los que el suelo desciende de EARLY a LATE.
-const SPAWN_FLOOR_RAMP_START_MIN: float = 2.0
-const SPAWN_FLOOR_RAMP_END_MIN: float = 12.0
+const SPAWN_FLOOR_RAMP_START_MIN: float = 1.5
+const SPAWN_FLOOR_RAMP_END_MIN: float = 10.0
 ## Enemigos vivos permitidos: base + score * pendiente (antes 3.0).
-const BASE_MAX_ENEMIES: float = 20.0
-const ENEMIES_PER_POINT: float = 2.2
+const BASE_MAX_ENEMIES: float = 28.0
+const ENEMIES_PER_POINT: float = 2.4
 
 # --- Multiplicadores de enemigos (parte por score + TECHO TOTAL) -------------------------
 ## La parte por score crece lenta; el TECHO TOTAL acota el producto final con
 ## TODOS los externos (mapa x plaga x dificultad x coop). Antes no existia techo
 ## total: en Extremo+Plaga 5+coop la vida pasaba de x7.
-const HEALTH_PER_POINT: float = 0.040
-const HEALTH_SCORE_CAP: float = 2.30
+const HEALTH_PER_POINT: float = 0.046
+const HEALTH_SCORE_CAP: float = 2.45
 const HEALTH_TOTAL_CAP: float = 4.50
-const DAMAGE_PER_POINT: float = 0.024
-const DAMAGE_SCORE_CAP: float = 1.80
+const DAMAGE_PER_POINT: float = 0.036
+const DAMAGE_SCORE_CAP: float = 2.10
 const DAMAGE_TOTAL_CAP: float = 2.60
-const SPEED_PER_POINT: float = 0.014
-const SPEED_SCORE_CAP: float = 1.30
+const SPEED_PER_POINT: float = 0.016
+const SPEED_SCORE_CAP: float = 1.32
 ## Velocidad total con techo duro: por encima de esto los enemigos alcanzan
 ## al jugador (250 px/s) incluso con mejoras de velocidad.
 const SPEED_TOTAL_CAP: float = 1.45
@@ -87,17 +91,20 @@ const SPEED_TOTAL_CAP: float = 1.45
 # --- Elites (por intervalos, no continuo) --------------------------------------------------
 ## Sin elites antes de EARLY_STAGE_MINUTES; despues, la probabilidad sube por
 ## ESCALONES cada ELITE_STEP_MINUTES hasta el tope.
-const ELITE_STEP_CHANCE: float = 0.022
-const ELITE_STEP_MINUTES: float = 4.0
-const ELITE_CHANCE_CAP: float = 0.10
+const ELITE_STEP_CHANCE: float = 0.032
+const ELITE_STEP_MINUTES: float = 3.0
+const ELITE_CHANCE_CAP: float = 0.14
 
 # --- Jefes y mini-jefes -----------------------------------------------------------------
 ## Tope del factor de vida por score de un jefe: vida = base * min(CAP, 1 + score
 ## * boss_data.difficulty_multiplier). Con el score tambien acotado, un jefe
 ## tardio es resistente pero nunca una esponja imposible. (Ademas sobreviven los
 ## topes absolutos en px de vida: boss.MAX_HEALTH_CAP / mini_boss.MAX_HEALTH_CAP.)
-const BOSS_HEALTH_SCORE_FACTOR_CAP: float = 4.0
-const MINIBOSS_HEALTH_SCORE_FACTOR_CAP: float = 3.5
+## Bajados en la Fase re-balance (4.0/3.5 -> 3.6/3.2): la dificultad extra viene
+## de la HORDA (mas presion y dano), no de convertir al jefe en esponja — la
+## partida debe poder cerrarse en la ventana de 5:00-5:30.
+const BOSS_HEALTH_SCORE_FACTOR_CAP: float = 3.6
+const MINIBOSS_HEALTH_SCORE_FACTOR_CAP: float = 3.2
 ## Vida extra de jefes en coop (una sola vez, al configurarse).
 const BOSS_COOP_HEALTH_MULT: float = 1.45
 ## Los jefes NO escalan su dano con el score (dano fijo por BossData): techo

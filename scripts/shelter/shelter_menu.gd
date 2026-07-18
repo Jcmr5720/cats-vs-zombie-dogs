@@ -191,7 +191,7 @@ func _build_ui() -> void:
 	# Aviso del modo colocacion.
 	_placing_hint = Label.new()
 	_placing_hint.visible = false
-	_placing_hint.add_theme_font_size_override("font_size", 16)
+	_placing_hint.add_theme_font_size_override("font_size", UIFonts.scaled(16))
 	_placing_hint.add_theme_color_override("font_color", Color(0.6, 1.0, 0.65))
 	_placing_hint.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
 	_placing_hint.add_theme_constant_override("shadow_offset_y", 2)
@@ -272,7 +272,7 @@ func _add_remove_button(slot: Button) -> void:
 	remove.position = Vector2(96, 6)
 	remove.visible = false
 	remove.mouse_filter = Control.MOUSE_FILTER_STOP
-	remove.add_theme_font_size_override("font_size", 18)
+	remove.add_theme_font_size_override("font_size", UIFonts.scaled(18))
 	remove.add_theme_color_override("font_color", Color(1.0, 0.82, 0.7))
 	for state in ["normal", "hover", "pressed", "focus"]:
 		var box := StyleBoxFlat.new()
@@ -342,14 +342,15 @@ func _refresh_inventory() -> void:
 	if not any:
 		var empty := Label.new()
 		empty.text = "Sin objetos libres"
-		empty.add_theme_font_size_override("font_size", 18)
+		empty.add_theme_font_size_override("font_size", UIFonts.scaled(18))
 		empty.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
 		_inventory_grid.add_child(empty)
 
 
 func _make_inventory_item(item) -> Control:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(185, 98)
+	panel.custom_minimum_size = Vector2(196, 98)
+	panel.tooltip_text = "%s\n%s" % [item.display_name, item.description]
 	MenuTheme.style_panel(panel, item.accent_color, Color(0.10, 0.09, 0.08, 0.94))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
@@ -365,12 +366,12 @@ func _make_inventory_item(item) -> Control:
 	var name := Label.new()
 	name.text = item.display_name
 	name.clip_text = true
-	name.add_theme_font_size_override("font_size", 13)
+	name.add_theme_font_size_override("font_size", UIFonts.scaled(13))
 	name.add_theme_color_override("font_color", MenuTheme.TEXT)
 	text_col.add_child(name)
 	var level := Label.new()
 	level.text = "Nv. %d" % _shelter.get_level(item.id)
-	level.add_theme_font_size_override("font_size", 12)
+	level.add_theme_font_size_override("font_size", UIFonts.scaled(12))
 	level.add_theme_color_override("font_color", item.accent_color)
 	text_col.add_child(level)
 	var place := _small_icon_button("+", "Colocar")
@@ -385,7 +386,7 @@ func _small_icon_button(text: String, tooltip: String) -> Button:
 	var button := Button.new()
 	button.text = text
 	button.tooltip_text = tooltip
-	button.add_theme_font_size_override("font_size", 18)
+	button.add_theme_font_size_override("font_size", UIFonts.scaled(18))
 	button.add_theme_color_override("font_color", Color(1, 1, 1))
 	for state in ["normal", "hover", "pressed", "focus"]:
 		var box := StyleBoxFlat.new()
@@ -403,13 +404,22 @@ func _start_placement(item_id: StringName) -> void:
 	_placing_item_id = item_id
 	_close_modals()
 	var item = _shelter.get_item(item_id)
-	_placing_hint.text = "Elige un slot verde"
-	_placing_hint.tooltip_text = item.display_name if item != null else ""
-	_placing_hint.visible = true
+	var valid_slots: int = 0
 	for slot in _slots:
 		var free: bool = _shelter.get_item_in_slot(slot.slot_id) == &""
 		slot.highlight_for_placement = free and _shelter.slot_accepts(slot.slot_id, item_id)
+		if slot.highlight_for_placement:
+			valid_slots += 1
 		slot.queue_redraw()
+	# Aviso en tiempo real: sin huecos compatibles el modo colocacion no tiene
+	# sentido (antes se quedaba en silencio y parecia roto).
+	if valid_slots == 0:
+		_cancel_placement()
+		_show_toast("No hay slots libres para este objeto. Quita algo primero (× en el slot).", Color(1.0, 0.55, 0.5))
+		return
+	_placing_hint.text = "Elige un slot verde (%d disponible%s) · ESC cancela" % [valid_slots, "" if valid_slots == 1 else "s"]
+	_placing_hint.tooltip_text = item.display_name if item != null else ""
+	_placing_hint.visible = true
 
 
 func _cancel_placement() -> void:
@@ -429,12 +439,138 @@ func _on_slot_pressed(slot: Button) -> void:
 			_play_ui(&"ui_click")
 			_play_slot_feedback(slot)
 			_cancel_placement()
+		elif not slot.highlight_for_placement:
+			_show_toast("Este slot no acepta ese objeto.", Color(1.0, 0.75, 0.4))
 		return
 	var occupied: StringName = _shelter.get_item_in_slot(slot.slot_id)
 	if occupied != &"":
+		# Ficha del objeto EQUIPADO: descripcion, bonus y acciones directas
+		# (mejorar/quitar) sin pasar por la tienda.
 		_play_slot_feedback(slot, Color(0.75, 0.9, 1.0))
+		_open_slot_detail(occupied, slot)
 	else:
 		_open_inventory()
+
+
+# --- Ficha de objeto equipado -------------------------------------------------------
+
+var _slot_detail_panel: PanelContainer
+
+
+func _open_slot_detail(item_id: StringName, slot: Button) -> void:
+	var item = _shelter.get_item(item_id)
+	if item == null:
+		return
+	if _slot_detail_panel != null:
+		_slot_detail_panel.queue_free()
+	_slot_detail_panel = PanelContainer.new()
+	_slot_detail_panel.custom_minimum_size = Vector2(420, 0)
+	MenuTheme.style_panel(_slot_detail_panel, item.accent_color, Color(0.07, 0.065, 0.06, 0.98))
+	_modal_center.add_child(_slot_detail_panel)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", MenuTheme.GAP_S)
+	_slot_detail_panel.add_child(col)
+
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", MenuTheme.GAP_S)
+	col.add_child(head)
+	var title := MenuTheme.make_title(item.display_name, MenuTheme.FS_H3 + 3, item.accent_color)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
+	var close_btn := MenuTheme.make_icon_button(&"close", "Cerrar", MenuTheme.TEXT_DIM, 34)
+	close_btn.pressed.connect(_close_modals)
+	head.add_child(close_btn)
+
+	var level: int = _shelter.get_level(item_id)
+	var state := MenuTheme.make_label(
+		"Nv %d/%d · en %s" % [level, item.max_level,
+			str(_shelter.get_slot(slot.slot_id).get("label", "slot"))],
+		MenuTheme.FS_CAPTION, MenuTheme.ZOMBIE)
+	col.add_child(state)
+
+	var desc := MenuTheme.make_label(item.description, MenuTheme.FS_BODY, MenuTheme.TEXT_DIM)
+	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(desc)
+
+	var current := MenuTheme.make_label(
+		"Bonus actual: %s" % ShelterBonusCalculator.format_effect(item.effect_type, item.effect_value_per_level, level),
+		MenuTheme.FS_BODY, MenuTheme.ZOMBIE)
+	current.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(current)
+	if level < item.max_level:
+		var next := MenuTheme.make_label(
+			"Siguiente nivel: %s" % ShelterBonusCalculator.format_effect(item.effect_type, item.effect_value_per_level, level + 1),
+			MenuTheme.FS_BODY, MenuTheme.CYAN)
+		next.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		col.add_child(next)
+
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", MenuTheme.GAP_S)
+	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_child(buttons)
+	if level < item.max_level:
+		var cost: int = _shelter.get_upgrade_cost(item_id)
+		var upgrade := MenuTheme.make_button("Mejorar · %d" % cost, MenuTheme.ZOMBIE, &"primary")
+		upgrade.custom_minimum_size = Vector2(170, 44)
+		upgrade.disabled = not _shelter.can_upgrade(item_id)
+		if upgrade.disabled:
+			upgrade.tooltip_text = "Sardinas insuficientes"
+		upgrade.pressed.connect(func() -> void:
+			if _shelter.upgrade(item_id):
+				_play_ui(&"ui_buy")
+				_show_toast("%s mejorado a Nv %d." % [item.display_name, _shelter.get_level(item_id)], Color(0.6, 1.0, 0.65))
+				_open_slot_detail(item_id, slot)  # reabre con datos frescos
+			else:
+				_show_toast("No tienes sardinas suficientes.", Color(1.0, 0.55, 0.5)))
+		buttons.add_child(upgrade)
+	else:
+		var maxed := MenuTheme.make_label("Nivel máximo", MenuTheme.FS_BODY, MenuTheme.GOLD)
+		buttons.add_child(maxed)
+	var remove := MenuTheme.make_button("Quitar", MenuTheme.DANGER, &"danger")
+	remove.custom_minimum_size = Vector2(130, 44)
+	remove.pressed.connect(func() -> void:
+		if _shelter.remove_from_slot(slot.slot_id):
+			_play_ui(&"ui_click")
+			_show_toast("%s devuelto al inventario." % item.display_name, Color(0.75, 0.9, 1.0))
+			_close_modals())
+	buttons.add_child(remove)
+
+	_show_modal(_slot_detail_panel)
+
+
+# --- Toast de aviso (mensajes en tiempo real) ---------------------------------------
+
+var _toast_label: Label
+var _toast_tween: Tween
+
+
+func _show_toast(text: String, color: Color) -> void:
+	if _toast_label == null:
+		_toast_label = Label.new()
+		_toast_label.z_index = 60
+		_toast_label.add_theme_font_override("font", UIFonts.fredoka(600))
+		_toast_label.add_theme_font_size_override("font_size", UIFonts.scaled(17))
+		_toast_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+		_toast_label.add_theme_constant_override("shadow_offset_y", 2)
+		_toast_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+		_toast_label.add_theme_constant_override("outline_size", 4)
+		_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_toast_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+		_toast_label.offset_top = -86
+		_toast_label.offset_bottom = -52
+		add_child(_toast_label)
+	_toast_label.text = text
+	_toast_label.add_theme_color_override("font_color", color)
+	_toast_label.visible = true
+	_toast_label.modulate.a = 1.0
+	if _toast_tween != null and _toast_tween.is_valid():
+		_toast_tween.kill()
+	_toast_tween = create_tween()
+	_toast_tween.tween_interval(2.2)
+	_toast_tween.tween_property(_toast_label, "modulate:a", 0.0, 0.5)
+	_play_ui(&"ui_notification")
 
 
 # --- Refresco ----------------------------------------------------------------------
@@ -474,20 +610,21 @@ func _refresh_bonuses() -> void:
 		shown += 1
 		var label := Label.new()
 		label.text = "• %s" % line
-		label.add_theme_font_size_override("font_size", 14)
+		label.add_theme_font_override("font", UIFonts.nunito(400))
+		label.add_theme_font_size_override("font_size", UIFonts.scaled(14))
 		label.add_theme_color_override("font_color", MenuTheme.TEXT)
 		_bonus_list.add_child(label)
 	var hidden: int = max(0, total - shown)
 	if hidden > 0:
 		var more := Label.new()
 		more.text = "+%d" % hidden
-		more.add_theme_font_size_override("font_size", 13)
+		more.add_theme_font_size_override("font_size", UIFonts.scaled(13))
 		more.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
 		_bonus_list.add_child(more)
 	if not any:
 		var empty := Label.new()
 		empty.text = "—"
-		empty.add_theme_font_size_override("font_size", 13)
+		empty.add_theme_font_size_override("font_size", UIFonts.scaled(13))
 		empty.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
 		_bonus_list.add_child(empty)
 

@@ -145,7 +145,8 @@ func _build_overlay(index: int, color: Color) -> void:
 	var badge := Label.new()
 	# Icono + numero: identidad legible tambien sin distinguir colores.
 	badge.text = CoopConfig.player_tag(index + 1)
-	badge.add_theme_font_size_override("font_size", 18)
+	badge.add_theme_font_override("font", UIFonts.fredoka(700))
+	badge.add_theme_font_size_override("font_size", UIFonts.scaled(18))
 	badge.add_theme_color_override("font_color", Color(0.08, 0.08, 0.1))
 	var badge_box := StyleBoxFlat.new()
 	badge_box.bg_color = color
@@ -166,7 +167,8 @@ func _build_overlay(index: int, color: Color) -> void:
 	_style_bar(hp_bar, Color(0.9, 0.36, 0.38))
 	bars.add_child(hp_bar)
 	var hp_label := Label.new()
-	hp_label.add_theme_font_size_override("font_size", 11)
+	hp_label.add_theme_font_override("font", UIFonts.fredoka(600))
+	hp_label.add_theme_font_size_override("font_size", UIFonts.scaled(11))
 	hp_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
 	hp_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	hp_label.add_theme_constant_override("outline_size", 3)
@@ -180,7 +182,8 @@ func _build_overlay(index: int, color: Color) -> void:
 	bars.add_child(xp_bar)
 
 	var level_label := Label.new()
-	level_label.add_theme_font_size_override("font_size", 17)
+	level_label.add_theme_font_override("font", UIFonts.fredoka(600))
+	level_label.add_theme_font_size_override("font_size", UIFonts.scaled(17))
 	level_label.add_theme_color_override("font_color", color)
 	level_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	level_label.add_theme_constant_override("outline_size", 4)
@@ -205,7 +208,9 @@ func _build_overlay(index: int, color: Color) -> void:
 	var downed_title := Label.new()
 	downed_title.text = "¡DERRIBADO!"
 	downed_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	downed_title.add_theme_font_size_override("font_size", 30)
+	# Impacto corto: Lilita One.
+	downed_title.add_theme_font_override("font", UIFonts.lilita())
+	downed_title.add_theme_font_size_override("font_size", UIFonts.scaled(30))
 	downed_title.add_theme_color_override("font_color", Color(1.0, 0.42, 0.38))
 	downed_title.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.95))
 	downed_title.add_theme_constant_override("outline_size", 6)
@@ -213,7 +218,8 @@ func _build_overlay(index: int, color: Color) -> void:
 
 	var downed_hint := Label.new()
 	downed_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	downed_hint.add_theme_font_size_override("font_size", 15)
+	downed_hint.add_theme_font_override("font", UIFonts.nunito(600))
+	downed_hint.add_theme_font_size_override("font_size", UIFonts.scaled(15))
 	downed_hint.add_theme_color_override("font_color", Color(1, 1, 1, 0.92))
 	downed_hint.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	downed_hint.add_theme_constant_override("outline_size", 4)
@@ -236,7 +242,8 @@ func _build_overlay(index: int, color: Color) -> void:
 	overlay.add_child(arrow)
 
 	var arrow_label := Label.new()
-	arrow_label.add_theme_font_size_override("font_size", 13)
+	arrow_label.add_theme_font_override("font", UIFonts.fredoka(600))
+	arrow_label.add_theme_font_size_override("font_size", UIFonts.scaled(13))
 	arrow_label.add_theme_color_override("font_color", partner_color)
 	arrow_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	arrow_label.add_theme_constant_override("outline_size", 4)
@@ -248,7 +255,8 @@ func _build_overlay(index: int, color: Color) -> void:
 	rescue_label.text = "Reviviendo al companero..."
 	rescue_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	rescue_label.position = Vector2(-110, -64)
-	rescue_label.add_theme_font_size_override("font_size", 16)
+	rescue_label.add_theme_font_override("font", UIFonts.fredoka(600))
+	rescue_label.add_theme_font_size_override("font_size", UIFonts.scaled(16))
 	rescue_label.add_theme_color_override("font_color", Color(0.6, 1.0, 0.75))
 	rescue_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	rescue_label.add_theme_constant_override("outline_size", 4)

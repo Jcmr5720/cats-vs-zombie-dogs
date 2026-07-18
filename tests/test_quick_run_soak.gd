@@ -6,8 +6,19 @@ extends Node
 ##   godot --headless --path . res://tests/TestQuickRunSoak.tscn
 ## Variables de entorno:
 ##   SOAK_MODE  "solo" (defecto) | "coop"
-##   SOAK_POWER "normal" (defecto) | "high" (daño x40: valida la VICTORIA)
+##   SOAK_POWER "flow" (defecto) | "build"
 ##   SOAK_SCALE Engine.time_scale (defecto 8)
+##
+## Modos de potencia (ya NO existe el daño artificial x4/x40 del balance):
+## - flow: prueba TECNICA pura, sin refuerzos. Ejercita el flujo completo
+##   (fases, jefes, limite absoluto, caps, sin errores). El desenlace tipico es
+##   DERROTA por tiempo (un jugador estatico sin punteria no derriba al jefe):
+##   NO se afirma nada del balance con esto.
+## - build: aproximacion a una BUILD NORMAL. Inyecta progresion de XP realista
+##   (~6-8 cartas en 5 min: el arsenal crece solo con las cartas auto-elegidas) y
+##   un factor de dano MODERADO que compensa que el jugador de prueba no se mueve
+##   ni apunta. Sirve para comprobar que una build competente PUEDE ganar y recibe
+##   la Mutacion; NO es una medida fina de balance (eso requiere prueba humana).
 
 const MAIN_LEVEL := "res://scenes/levels/MainLevel.tscn"
 
@@ -44,7 +55,7 @@ func _ready() -> void:
 		_mode = "solo"
 	_power = OS.get_environment("SOAK_POWER")
 	if _power == "":
-		_power = "normal"
+		_power = "flow"
 	var scale_env: String = OS.get_environment("SOAK_SCALE")
 	Engine.time_scale = float(scale_env) if scale_env != "" else 8.0
 
@@ -64,7 +75,9 @@ func _process(delta: float) -> void:
 	_keep_players_alive()
 	_collect_nearby_orbs()
 	_auto_resolve_cards()
-	_apply_power_once()
+	if _power == "build":
+		_inject_build_progression()
+		_apply_build_damage_once()
 	_track_phase()
 
 	var fps: float = float(Engine.get_frames_per_second())
@@ -143,20 +156,40 @@ func _find_upgrade_manager() -> Node:
 	return _level_node.get_node_or_null("UpgradeManager")
 
 
-## El jugador headless es estatico y sin punteria: sus kills/min de base son
-## ~0-4 (dato de las telemetrias guardadas), lejos de un jugador real. Se
-## aproxima con daño x4 en modo normal (ritmo de horda realista) y x40 en modo
-## high (valida la ruta de VICTORIA matando al jefe elite).
-func _apply_power_once() -> void:
+## Progresion realista de una BUILD NORMAL: se inyecta XP para que el jugador
+## alcance ~6-8 niveles a lo largo de los 5 min (el arsenal crece SOLO con las
+## cartas que se auto-eligen: armas nuevas, mejoras de arma, stats). Es la MISMA
+## tecnica que la telemetria; el balance no se declara con esto.
+func _inject_build_progression() -> void:
+	if get_tree().paused:
+		return
+	# ~1.5 niveles/min -> ~7 niveles al minuto 5 (dentro del objetivo 6-8 cartas).
+	var target_level: int = mini(12, 1 + int(_elapsed / 60.0 * 1.5))
+	for p in get_tree().get_nodes_in_group("players"):
+		if not is_instance_valid(p) or not p.has_method("add_experience"):
+			continue
+		if int(p.get("level")) < target_level:
+			p.add_experience(int(p.get("experience_to_level")), true)
+			return  # una subida por frame: deja que la seleccion se resuelva
+
+
+## Factor de dano MODERADO (una vez) que compensa que el jugador de prueba no se
+## mueve ni apunta: un jugador real acorrala a la horda, kitea y focaliza al jefe,
+## logrando bastante mas DPS efectivo que uno estatico. Es una APROXIMACION (x3,
+## no god-mode: el x40 se elimino), no una medida de balance. Por jugador, asi que
+## en coop el equipo suma ~2x este proxy (dos arsenales), como es de esperar.
+const BUILD_DAMAGE_PROXY: float = 3.0
+
+
+func _apply_build_damage_once() -> void:
 	if _power_applied or _elapsed < 1.0:
 		return
-	var mult: float = 40.0 if _power == "high" else 4.0
 	for p in get_tree().get_nodes_in_group("players"):
 		if not is_instance_valid(p) or not p.has_method("get_weapon_manager"):
 			continue
 		var wm: Node = p.get_weapon_manager()
 		if wm != null and wm.has_method("multiply_damage"):
-			wm.multiply_damage(mult)
+			wm.multiply_damage(BUILD_DAMAGE_PROXY)
 			_power_applied = true
 
 
@@ -206,8 +239,10 @@ func _finish() -> void:
 	var final_phase: int = int(director.get_phase()) if director != null else -1
 
 	# --- Comprobaciones ----------------------------------------------------------
-	_expect(_first_card_time >= 0.0 and _first_card_time <= 20.0,
-		"primera carta antes de 0:20 (t=%.1fs)" % _first_card_time)
+	# Puerta temporal: la primera carta no se abre antes del segundo 12 aunque la
+	# XP este completa; se muestra idealmente entre 12 y 18 (tolerancia hasta 20).
+	_expect(_first_card_time >= 11.5 and _first_card_time <= 20.0,
+		"primera carta entre 0:12 y 0:20 (t=%.1fs)" % _first_card_time)
 	_expect(_elapsed <= 345.0, "la partida termino dentro del limite (%.0fs)" % _elapsed)
 	# Orden de fases estrictamente creciente hasta el desenlace.
 	var ordered := true
@@ -220,9 +255,15 @@ func _finish() -> void:
 	_expect(_phases_seen.has(RunPhaseConfig.Phase.BOSS), "hubo fase de boss")
 	_expect(final_phase == RunPhaseConfig.Phase.VICTORY or final_phase == RunPhaseConfig.Phase.DEFEAT,
 		"desenlace claro (fase final %d)" % final_phase)
-	if _power == "high":
+	# flow: prueba tecnica; el desenlace tipico es DERROTA por tiempo (valida el
+	# limite absoluto y el camino de derrota) — no se afirma nada del balance.
+	if _power == "flow":
+		_expect(final_phase == RunPhaseConfig.Phase.DEFEAT,
+			"flow: sin refuerzos el jefe sobrevive -> DERROTA por limite (valida 5:30)")
+	# build: una build competente PUEDE ganar y recibe la Mutacion del mini-boss.
+	if _power == "build":
 		_expect(final_phase == RunPhaseConfig.Phase.VICTORY,
-			"con daño alto el jefe cae: VICTORIA")
+			"build normal: el jefe elite cae -> VICTORIA")
 		_expect(_mutations_seen >= 1 or _mode == "coop",
 			"Mutacion ofrecida al caer el mini-boss (%d)" % _mutations_seen)
 	_expect(_max_projectiles <= RunPhaseConfig.MAX_ENEMY_PROJECTILES,

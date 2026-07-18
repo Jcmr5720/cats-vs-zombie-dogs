@@ -26,10 +26,12 @@ const FINAL_FURY_START: float = 300.0
 const ABSOLUTE_LIMIT: float = 330.0
 
 # --- Arranque inmediato (seccion 2 del diseño) -----------------------------------
-const OPENING_PACK_MIN: int = 8
-const OPENING_PACK_MAX: int = 12
-const OPENING_RUNNERS_TIME: float = 8.0
-const OPENING_RUNNERS_COUNT: int = 3
+# Fase re-balance: manada inicial mas grande y corredores antes — el primer
+# minuto era demasiado tranquilo.
+const OPENING_PACK_MIN: int = 12
+const OPENING_PACK_MAX: int = 16
+const OPENING_RUNNERS_TIME: float = 6.0
+const OPENING_RUNNERS_COUNT: int = 5
 
 # --- Presion global de proyectiles/zonas (los comprueban los comportamientos) ----
 const MAX_ENEMY_PROJECTILES: int = 10
@@ -99,14 +101,14 @@ static func phase_profile(phase: int) -> Dictionary:
 	match phase:
 		Phase.INTRO:
 			return {
-				"weights": {&"zombie_dog": 0.85, &"runner_zombie_dog": 0.15},
-				"interval": 1.0, "budget": 16.0, "max_alive": 16,
+				"weights": {&"zombie_dog": 0.80, &"runner_zombie_dog": 0.20},
+				"interval": 0.72, "budget": 24.0, "max_alive": 24,
 				"tier_caps": {&"special": 0, &"heavy": 0}, "type_caps": {},
 			}
 		Phase.COMMON_ENEMIES:
 			return {
-				"weights": {&"zombie_dog": 0.70, &"pack_zombie_dog": 0.20, &"pup_zombie_dog": 0.10},
-				"interval": 0.85, "budget": 22.0, "max_alive": 26,
+				"weights": {&"zombie_dog": 0.62, &"runner_zombie_dog": 0.10, &"pack_zombie_dog": 0.18, &"pup_zombie_dog": 0.10},
+				"interval": 0.62, "budget": 34.0, "max_alive": 36,
 				"tier_caps": {&"special": 0, &"heavy": 0}, "type_caps": {},
 			}
 		Phase.SPECIAL_ENEMIES:
@@ -116,9 +118,9 @@ static func phase_profile(phase: int) -> Dictionary:
 					&"flanker_zombie_dog": 0.20, &"howler_zombie_dog": 0.08,
 					&"spitter_zombie_dog": 0.10, &"infection_carrier_dog": 0.07,
 				},
-				"interval": 0.80, "budget": 32.0, "max_alive": 34,
-				"tier_caps": {&"special": 8, &"heavy": 0},
-				"type_caps": {&"howler_zombie_dog": 1, &"spitter_zombie_dog": 2, &"infection_carrier_dog": 2},
+				"interval": 0.60, "budget": 46.0, "max_alive": 46,
+				"tier_caps": {&"special": 10, &"heavy": 0},
+				"type_caps": {&"howler_zombie_dog": 1, &"spitter_zombie_dog": 3, &"infection_carrier_dog": 2},
 			}
 		Phase.HEAVY_ENEMIES:
 			return {
@@ -129,12 +131,12 @@ static func phase_profile(phase: int) -> Dictionary:
 					&"tank_zombie_dog": 0.09, &"charger_zombie_dog": 0.07,
 					&"splitter_zombie_dog": 0.08, &"hunter_zombie_dog": 0.06,
 				},
-				"interval": 0.80, "budget": 44.0, "max_alive": 40,
-				"tier_caps": {&"special": 8, &"heavy": 4},
+				"interval": 0.60, "budget": 58.0, "max_alive": 50,
+				"tier_caps": {&"special": 10, &"heavy": 4},
 				"type_caps": {
-					&"howler_zombie_dog": 1, &"spitter_zombie_dog": 2, &"infection_carrier_dog": 2,
-					&"tank_zombie_dog": 2, &"charger_zombie_dog": 2, &"splitter_zombie_dog": 2,
-					&"hunter_zombie_dog": 1,
+					&"howler_zombie_dog": 1, &"spitter_zombie_dog": 3, &"infection_carrier_dog": 2,
+					&"tank_zombie_dog": 2, &"charger_zombie_dog": 2, &"splitter_zombie_dog": 3,
+					&"hunter_zombie_dog": 2,
 				},
 			}
 		Phase.MINIBOSS:
@@ -148,7 +150,7 @@ static func phase_profile(phase: int) -> Dictionary:
 					&"tank_zombie_dog": 0.09, &"charger_zombie_dog": 0.06,
 					&"splitter_zombie_dog": 0.06, &"hunter_zombie_dog": 0.05,
 				},
-				"interval": 1.25, "budget": 30.0, "max_alive": 28,
+				"interval": 1.15, "budget": 34.0, "max_alive": 30,
 				"tier_caps": {&"special": 6, &"heavy": 3},
 				"type_caps": {
 					&"howler_zombie_dog": 1, &"spitter_zombie_dog": 2, &"infection_carrier_dog": 2,
@@ -160,13 +162,13 @@ static func phase_profile(phase: int) -> Dictionary:
 			# Horda fuerte reducida: pocos comunes para XP y habilidades.
 			return {
 				"weights": {&"zombie_dog": 0.70, &"pup_zombie_dog": 0.30},
-				"interval": 1.9, "budget": 12.0, "max_alive": 12,
+				"interval": 1.7, "budget": 14.0, "max_alive": 14,
 				"tier_caps": {&"special": 0, &"heavy": 0}, "type_caps": {},
 			}
 		Phase.ELITE_BOSS:
 			return {
-				"weights": {&"zombie_dog": 0.65, &"pup_zombie_dog": 0.35},
-				"interval": 1.7, "budget": 14.0, "max_alive": 14,
+				"weights": {&"zombie_dog": 0.60, &"runner_zombie_dog": 0.10, &"pup_zombie_dog": 0.30},
+				"interval": 1.55, "budget": 16.0, "max_alive": 16,
 				"tier_caps": {&"special": 0, &"heavy": 0}, "type_caps": {},
 			}
 	# Furia final / victoria / derrota: sin spawns comunes.

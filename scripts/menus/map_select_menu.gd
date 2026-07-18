@@ -341,7 +341,7 @@ func _build_card(map_data: Resource) -> Control:
 	# Linea compacta: dificultad en puntos + duracion.
 	var meta := Label.new()
 	meta.text = "%s   ·   %s" % [_difficulty_dots(map_data.difficulty_modifier), _format_minutes(map_data.duration_seconds)]
-	meta.add_theme_font_size_override("font_size", 16)
+	meta.add_theme_font_size_override("font_size", UIFonts.scaled(16))
 	meta.add_theme_color_override("font_color", MenuTheme.TEXT)
 	v.add_child(meta)
 
@@ -349,7 +349,8 @@ func _build_card(map_data: Resource) -> Control:
 	var objective := Label.new()
 	objective.text = "Objetivo: %s" % _objective_text(map_data)
 	objective.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	objective.add_theme_font_size_override("font_size", 15)
+	objective.add_theme_font_override("font", UIFonts.nunito(400))
+	objective.add_theme_font_size_override("font_size", UIFonts.scaled(15))
 	objective.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
 	v.add_child(objective)
 
@@ -427,7 +428,7 @@ func _build_plague_selector(map_data: Resource) -> Control:
 	if _save != null and _save.has_method("get_value"):
 		max_unlocked = clampi(int(_save.get_value("plague_unlocked_%s" % map_data.id, 1)), 1, 5)
 	title.text = "Nivel de Plaga  (+50% sardinas por nivel)"
-	title.add_theme_font_size_override("font_size", 13)
+	title.add_theme_font_size_override("font_size", UIFonts.scaled(13))
 	title.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
 	box.add_child(title)
 

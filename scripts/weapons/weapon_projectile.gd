@@ -73,10 +73,42 @@ func _enforce_projectile_cap() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	global_position += _direction * _speed * delta
+	_sweep_move(_direction * _speed * delta)
 	if is_instance_valid(_halo):
 		var pulse: float = 1.0 + sin(Time.get_ticks_msec() * 0.018) * 0.10
 		_halo.scale = _halo_base_scale * pulse
+
+
+## Movimiento con BARRIDO: a velocidad alta la bala recorre varias veces el
+## cuerpo de un enemigo en un solo tick de fisica y el overlap del Area2D no
+## llega a registrarse (tunneling: el disparo "atraviesa" sin dañar). Se traza
+## un rayo del origen al destino del tick y cada impacto se procesa igual que
+## body_entered; con pierce se continua el resto del trayecto.
+func _sweep_move(travel: Vector2) -> void:
+	var space := get_world_2d().direct_space_state if get_world_2d() != null else null
+	if space == null or travel == Vector2.ZERO:
+		global_position += travel
+		return
+	var destination: Vector2 = global_position + travel
+	for _i in 4:  # tope de impactos procesados por tick (pierce encadenado)
+		var params := PhysicsRayQueryParameters2D.create(global_position, destination, collision_mask)
+		params.collide_with_areas = false
+		var exclude: Array[RID] = []
+		for b in _hit_bodies:
+			if is_instance_valid(b) and b is CollisionObject2D:
+				exclude.append((b as CollisionObject2D).get_rid())
+		params.exclude = exclude
+		var hit: Dictionary = space.intersect_ray(params)
+		if hit.is_empty():
+			global_position = destination
+			return
+		global_position = hit.get("position", destination)
+		var collider = hit.get("collider")
+		if collider is Node2D:
+			_on_body_entered(collider)
+		if is_queued_for_deletion() or not is_inside_tree():
+			return  # la bala murio en el impacto (sin pierce restante)
+	global_position = destination
 
 
 func _on_body_entered(body: Node2D) -> void:

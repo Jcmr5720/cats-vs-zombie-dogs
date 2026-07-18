@@ -79,9 +79,21 @@ func _run() -> void:
 	add_child(manager)
 	await get_tree().process_frame
 
-	# --- Primera seleccion garantizada: ofensiva / defensiva / movilidad ----------
+	# --- Puerta temporal de la primera tarjeta (segundo 12) -----------------------
+	# En la partida real la enciende el PhaseDirector; aqui se activa a mano.
+	# Antes del segundo 12 la subida NO abre cartas (la XP no se pierde: queda
+	# pendiente). Se simula el reloj con _run_time para no esperar 12 s reales.
+	manager.call("set_first_card_gate", 12.0)
+	manager.set("_run_time", 5.0)
 	player.level_up_requested.emit(2)
-	_expect(hud.shown.size() == 1, "la subida de nivel abre seleccion")
+	_expect(hud.shown.is_empty(), "antes de 0:12 la primera carta NO se abre (puerta)")
+	_expect(not get_tree().paused, "la puerta no pausa la partida (XP encolada)")
+	# Cruzada la puerta, la primera seleccion (que quedo pendiente) se muestra.
+	manager.set("_run_time", 13.0)
+	manager.call("_show_next_selection")
+
+	# --- Primera seleccion garantizada: ofensiva / defensiva / movilidad ----------
+	_expect(hud.shown.size() == 1, "cruzada la puerta, la subida pendiente abre seleccion")
 	_expect(get_tree().paused, "la seleccion pausa la partida (sin salto posible)")
 	if hud.shown.size() >= 1:
 		var ids: Array = []
