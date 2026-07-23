@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="PowerUpData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/loot/power_up_data.gd" id="1_pud"]
+
+[resource]
+script = ExtResource("1_pud")
+id = &"quick_revive"
+display_name = "Rescate rapido"
+description = "Levantas antes a los compañeros caídos."
+category = &"companion"
+rarity = &"rare"
+drop_weight = 0.42
+requires_companion = true
+affects = "Companeros"
+visual_color = Color(0.55, 1, 0.72, 1)
+icon_type = &"plus"

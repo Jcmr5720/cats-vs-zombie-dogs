@@ -130,7 +130,57 @@ func _ready() -> void:
 	_marker_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(_marker_layer)
 	_build_frame()
+	_build_legend()
 	_apply_layout()
+
+
+## Leyenda de iconos de botin (FASE 13): visible SOLO con el radar ampliado
+## (Tab), como referencia accesible sin ocupar pantalla en combate. Reutiliza los
+## MinimapMarker reales, asi la forma de la leyenda es EXACTAMENTE la del radar.
+var _legend: PanelContainer
+
+
+func _build_legend() -> void:
+	_legend = PanelContainer.new()
+	_legend.name = "Legend"
+	_legend.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_legend.visible = false
+	var box := StyleBoxFlat.new()
+	box.bg_color = MinimapConfig.BG_COLOR
+	box.set_corner_radius_all(8)
+	box.set_content_margin_all(7)
+	box.content_margin_left = 10.0
+	box.content_margin_right = 10.0
+	_legend.add_theme_stylebox_override("panel", box)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 2)
+	_legend.add_child(col)
+	for entry in MinimapConfig.LEGEND_ENTRIES:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		var holder := Control.new()
+		holder.custom_minimum_size = Vector2(14, 14)
+		holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var marker := MinimapMarker.new()
+		marker.position = Vector2(7, 7)
+		marker.setup(entry[0], entry[1])
+		holder.add_child(marker)
+		row.add_child(holder)
+		var label := Label.new()
+		label.text = str(entry[2])
+		label.add_theme_font_size_override("font_size", 11)
+		label.add_theme_color_override("font_color", Color(0.85, 0.88, 0.94))
+		row.add_child(label)
+		col.add_child(row)
+	# Fuera del area recortada del radar (clip_contents la escondia dentro):
+	# cuelga del PADRE del minimapa y se recoloca bajo el panel en _process.
+	if get_parent() != null:
+		get_parent().add_child.call_deferred(_legend)
+
+
+func _exit_tree() -> void:
+	if _legend != null and is_instance_valid(_legend):
+		_legend.queue_free()
 
 
 func _build_background() -> void:
@@ -218,12 +268,15 @@ func _apply_layout() -> void:
 func _process(delta: float) -> void:
 	if not _should_show():
 		visible = false
+		_update_legend()
 		return
 	_refresh_focus()
 	if _focus == null:
 		visible = false
+		_update_legend()
 		return
 	visible = true
+	_update_legend()
 	_update_markers()
 	# Scroll suave del terreno: solo se mueve la capa (el redibujado va aparte).
 	if _terrain != null:
@@ -240,14 +293,24 @@ func _process(delta: float) -> void:
 		_update_dots()
 
 
+## La leyenda solo acompaña al radar AMPLIADO y visible; se pega bajo el panel
+## alineada a su borde derecho (crece hacia la izquierda, como el propio radar).
+func _update_legend() -> void:
+	if _legend == null or not is_instance_valid(_legend):
+		return
+	var show: bool = visible and _expanded
+	if _legend.visible != show:
+		_legend.visible = show
+	if show:
+		_legend.position = Vector2(position.x + size.x - _legend.size.x, position.y + size.y + 6.0)
+
+
 ## Oculto en pausa (menus, cartas, fin de partida, desconexion de mando), al
 ## terminar la partida y durante la seleccion de cartas coop sin pausa.
 func _should_show() -> bool:
 	if get_tree().paused:
 		return false
 	if registry == null:
-		return false
-	if hud != null and hud.has_method("is_selecting_upgrade") and hud.is_selecting_upgrade():
 		return false
 	if not is_instance_valid(_map_manager):
 		_map_manager = get_tree().get_first_node_in_group("map_manager")
@@ -331,7 +394,68 @@ func _update_markers() -> void:
 			if marker != null:
 				marker.modulate.a = pulse  # el jefe late para no pasar desapercibido
 
+	_place_loot_markers(fp, map_scale)
 	_hide_unused_markers()
+
+
+## Botin en el radar (FASE 13): cajas, armas del suelo, nucleos, mutaciones y
+## (solo si estan cerca) power-ups comunes. Cada tipo con forma propia. Con tope
+## de marcadores para que una lluvia de drops no infle el pool.
+func _place_loot_markers(fp: Vector2, map_scale: float) -> void:
+	var placed: int = 0
+
+	# Cajas: el rol vive en el interactable; los demas roles devuelven "".
+	for crate in registry.get_list(&"map_interactables"):
+		if placed >= MinimapConfig.MAX_LOOT_MARKERS:
+			return
+		if not _valid_node2d(crate) or not crate.has_method("minimap_loot_kind"):
+			continue
+		var kind: StringName = crate.minimap_loot_kind()
+		if kind == &"":
+			continue
+		if _place_entity(crate, fp, map_scale, kind, _loot_color(kind), false) != null:
+			placed += 1
+
+	# Armas abandonadas en el suelo.
+	for wp in registry.get_list(&"weapon_pickups"):
+		if placed >= MinimapConfig.MAX_LOOT_MARKERS:
+			return
+		if not _valid_node2d(wp) or (wp.has_method("is_claimed") and wp.is_claimed()):
+			continue
+		if _place_entity(wp, fp, map_scale, &"loot_weapon", MinimapConfig.LOOT_WEAPON_COLOR, false) != null:
+			placed += 1
+
+	# Power-ups: nucleos y mutaciones siempre; los comunes solo cerca del
+	# jugador (el radar no debe chivar todo el botin del mapa).
+	for pickup in registry.get_list(&"pickups"):
+		if placed >= MinimapConfig.MAX_LOOT_MARKERS:
+			return
+		if not _valid_node2d(pickup) or not pickup.has_method("minimap_loot_kind"):
+			continue
+		if pickup.has_method("is_claimed") and pickup.is_claimed():
+			continue
+		var kind: StringName = pickup.minimap_loot_kind()
+		if kind == &"loot_powerup" and fp.distance_to((pickup as Node2D).global_position) > MinimapConfig.LOOT_COMMON_NEAR_RADIUS:
+			continue
+		if _place_entity(pickup, fp, map_scale, kind, _loot_color(kind), false) != null:
+			placed += 1
+
+
+func _loot_color(kind: StringName) -> Color:
+	match kind:
+		&"crate_weapon":
+			return MinimapConfig.CRATE_WEAPON_COLOR
+		&"crate_supply":
+			return MinimapConfig.CRATE_SUPPLY_COLOR
+		&"crate_special":
+			return MinimapConfig.CRATE_SPECIAL_COLOR
+		&"loot_weapon":
+			return MinimapConfig.LOOT_WEAPON_COLOR
+		&"loot_mutation":
+			return MinimapConfig.LOOT_MUTATION_COLOR
+		&"loot_core":
+			return MinimapConfig.LOOT_CORE_COLOR
+	return MinimapConfig.LOOT_POWERUP_COLOR
 
 
 func _place_player(p: Node2D, fp: Vector2, map_scale: float, pulse: float) -> void:

@@ -68,6 +68,40 @@ const ObstacleData = preload("res://scripts/maps/obstacle_data.gd")
 ## este mapa. Solo modifica tipos que la fase ya permite (no salta limites).
 @export var phase_weight_overrides: Dictionary = {}
 
+@export_group("Identidad de combate (FASE 11)")
+## Mutaciones elite propias del bioma. Se SUMAN a las genericas (veloz/blindado/
+## gigante) en el sorteo de elites del EnemySpawner. Vacio = solo genericas.
+## Implementadas en enemy.gd::_apply_elite (lider_manada, carronero, esporoso,
+## parasito, volatil, chatarra, sabueso, nocturno, sobrecargado).
+@export var biome_mutations: Array[StringName] = []
+## Pool de eventos centrales del mapa (se dispara UNO por partida, elegido por la
+## semilla, en la ventana 110-155 s). Ids implementados en WaveEventManager:
+## street_block, stray_horde, lake_fog, carrier_bloom, freight_train,
+## steam_burst, blackout.
+@export var dynamic_event_pool: Array[StringName] = []
+## Apertura caracteristica (0-30 s): manada inicial y variedad del segundo ~8.
+## La semilla elige entre la variante base y la _alt (si esta definida).
+@export var opening_pack_id: StringName = &"zombie_dog"
+@export var opening_pack_alt_id: StringName = &""
+@export var opening_variety_id: StringName = &"runner_zombie_dog"
+@export var opening_variety_alt_id: StringName = &""
+## Modificadores de jefe elegibles por semilla (uno por partida). Ids
+## implementados en boss.gd::apply_run_modifier: veloz_alfa, invocador,
+## marcador, pantanoso, acorazado.
+@export var boss_modifier_pool: Array[StringName] = []
+## Interactable caracteristico del mapa (&"" = ninguno) y sus tiempos de
+## aparicion en segundos. Kinds implementados en MapInteractables:
+## howl_post (Barrio), nest (Corazon), production_line (Fabrica).
+@export var interactable_kind: StringName = &""
+@export var interactable_times: PackedFloat32Array = PackedFloat32Array()
+## Debut escalonado de roles: {enemy_id: fase minima}. Antes de esa fase el
+## enemigo NO aparece, aunque su peso base lo permita. Sirve para que cada mapa
+## presente sus piezas en un orden legible en vez de mezclarlo todo desde el
+## segundo 0 (Barrio: primero la manada, luego el flanqueador, luego el
+## aullador). Los ids ausentes conservan su comportamiento de siempre.
+## Valores de fase en RunPhaseConfig.Phase (INTRO=0, COMMON=1, SPECIAL=2...).
+@export var enemy_debut_phase: Dictionary = {}
+
 @export_group("Eventos del mapa")
 ## Tiempo de aparicion del jefe principal (segundos). 0 = sin jefe programado.
 @export var boss_spawn_time: float = 600.0

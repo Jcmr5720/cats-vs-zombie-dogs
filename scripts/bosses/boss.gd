@@ -11,6 +11,8 @@ const BossData = preload("res://scripts/bosses/boss_data.gd")
 const ENEMY_SCENE := preload("res://scenes/enemies/Enemy.tscn")
 const XP_ORB_SCENE := preload("res://scenes/loot/XPOrb.tscn")
 const HAZARD_ZONE_SCRIPT := preload("res://scripts/enemies/hazard_zone.gd")
+const MAP_INTERACTABLE := preload("res://scripts/maps/map_interactable.gd")
+const HUNT_CORRIDOR := preload("res://scripts/bosses/hunt_corridor.gd")
 
 signal health_changed(current: int, maximum: int, display_name: String)
 signal died(data: BossData)
@@ -85,6 +87,15 @@ var _guardians: Array[Node2D] = []
 var _guardian_vuln_timer: float = 0.0
 ## Total curado por sanadores (limitado: nunca grandes porcentajes repetidos).
 var _minion_heal_total: int = 0
+## FASE 11: modificador de guion de esta partida (RunScript.boss_modifier).
+var _run_modifier: StringName = &""
+## Reglas ambientales activas (BossData.environment_rules).
+## territory_marks: marcas plantadas por el jefe (tope 2 vivas).
+var _planted_marks: Array[Node2D] = []
+## scrap_plates: placas de blindaje que caen con las fases.
+var _boss_plates: int = 0
+## consume_zones: cadencia de la curacion por consumo de zonas.
+var _consume_tick: float = 0.0
 ## Ángulo visual: solo rota el nodo Visual (con volteo vertical al mirar a la
 ## izquierda) para que el jefe nunca quede boca abajo y la sombra no gire.
 var _face_angle: float = 0.0
@@ -141,9 +152,166 @@ func configure(boss_data: BossData, difficulty_score: float) -> void:
 	_original_max = max_health
 	phase = 1
 	_attack_timer = data.attack_cooldown
+	# FASE 11: reglas ambientales del mapa (BossData.environment_rules).
+	if data.environment_rules.has(&"scrap_plates"):
+		_boss_plates = 2
+	if data.environment_rules.has(&"territory_marks"):
+		# Marca territorio al ENTRAR (la ve nacer el jugador: objetivo claro).
+		call_deferred("_plant_territory_mark")
 	if is_node_ready():
 		_apply_visuals()
 		_emit_health()
+
+
+## FASE 11: modificador del guion de la semilla (lo aplica BossSpawner tras
+## configure). Ids no reconocidos no hacen nada.
+func apply_run_modifier(id: StringName) -> void:
+	if _is_dead or id == &"":
+		return
+	_run_modifier = id
+	match id:
+		&"veloz_alfa":
+			# Mas presion de movimiento (la cadencia de ataque conserva su suelo).
+			_move_speed_mult *= 1.12
+		&"invocador":
+			# +1 (no mas): cada invocado da XP y abarataria el examen final.
+			summon_count += 1
+		&"marcador":
+			# Marca un territorio EXTRA de inmediato (Barrio).
+			call_deferred("_plant_territory_mark")
+		&"pantanoso":
+			# Sus embestidas dejan zona peligrosa SIEMPRE (no solo en elite).
+			if data != null:
+				data = data.duplicate()
+				data.elite_leaves_hazard = true
+		&"acorazado":
+			# Empieza acorazado: 15% menos de daño hasta el primer cambio de fase.
+			_boss_plates = maxi(_boss_plates, 1)
+
+
+## Escalado del Rottweiler Alfa por umbral de vida (FASE 2). Cada fase añade una
+## HERRAMIENTA, no una estadistica: orden de carga, ruptura de barricada, nueva
+## zona de caceria. `phase` ya viene incrementada por _on_phase_changed.
+func _alpha_phase_escalation() -> void:
+	match phase:
+		2:
+			# 75 %: ordena una carga coordinada a la manada de una interseccion.
+			_alpha_order_charge()
+		3:
+			# 50 %: rompe barricadas cercanas (cambia la geometria tactica del
+			# combate: las rutas que el jugador estaba usando dejan de servir) e
+			# invoca una combinacion corta de corredores y flanqueadores.
+			_alpha_break_barricades()
+			_alpha_call_mixed_group()
+		4:
+			# 25 %: nueva zona de caceria — otra marca, mas coordinacion.
+			_plant_territory_mark()
+			_alpha_order_charge()
+
+
+## El Alfa ordena carga coordinada a los perros de manada cercanos. Respeta el
+## tope global de cargas simultaneas y su telegrafo: no es daño sin aviso.
+func _alpha_order_charge() -> void:
+	var given: int = 0
+	for dog in get_tree().get_nodes_in_group("pack_dogs"):
+		if not is_instance_valid(dog) or not (dog is Node2D):
+			continue
+		if global_position.distance_to((dog as Node2D).global_position) > 700.0:
+			continue
+		if dog.has_method("receive_order"):
+			dog.receive_order(&"charge", global_position, 4.0)
+			given += 1
+			if given >= 6:
+				break
+	if given > 0:
+		RunTelemetry.count(&"alpha_charge_orders")
+		Feedback.hit_effect(global_position, Color(1.0, 0.6, 0.2, 0.85), 0.8, 3.4)
+
+
+## 50 %: el Alfa ATRAVIESA las barricadas cercanas. Reusa los datos de obstaculo
+## destructible ya existentes: rompe lo que sea destruible en su radio.
+func _alpha_break_barricades() -> void:
+	var broken: int = 0
+	for obstacle in get_tree().get_nodes_in_group("obstacles"):
+		if not is_instance_valid(obstacle) or not (obstacle is Node2D):
+			continue
+		if global_position.distance_to((obstacle as Node2D).global_position) > 420.0:
+			continue
+		# `destructible` vive en el recurso ObstacleData, no en el nodo: pedirlo
+		# directamente al nodo devolvia null (y bool(null) revienta en runtime).
+		var obstacle_data: ObstacleData = obstacle.get("data") as ObstacleData
+		if obstacle_data == null or not obstacle_data.destructible:
+			continue
+		# Misma via de destruccion que la embestida N3 del corredor: pasa por
+		# _break() y conserva flash, barril explosivo, orbe de XP y salida del
+		# grupo. queue_free() directo se saltaria todo eso.
+		if obstacle.has_method("absorb_projectile"):
+			obstacle.absorb_projectile(9999)
+		else:
+			obstacle.queue_free()
+		broken += 1
+		if broken >= 6:
+			break
+	if broken > 0:
+		RunTelemetry.count(&"alpha_barricades_broken", broken)
+		Feedback.shake(0.35)
+
+
+## 50 %: combinacion LIMITADA de corredores y flanqueadores, entrando por calles.
+func _alpha_call_mixed_group() -> void:
+	var spawner: Node = get_tree().get_first_node_in_group("enemy_spawner")
+	if not is_instance_valid(spawner):
+		return
+	if spawner.has_method("spawn_pack_urban"):
+		# Combinacion CORTA (2+1). El valor de esta llamada es que los dos roles
+		# entren por calles distintas, no el numero de perros: subir la cantidad
+		# aqui es exactamente la dificultad barata que el diseño rechaza, y en
+		# los soaks de balance empujaba la partida fuera de la ventana de
+		# victoria de una build normal.
+		spawner.spawn_pack_urban(&"runner_zombie_dog", 2, 2)
+		spawner.spawn_pack_urban(&"flanker_zombie_dog", 1, 1)
+		RunTelemetry.count(&"alpha_mixed_calls")
+
+
+## Semilla y bioma del mapa activo (para consultar la geometria de emplazamiento).
+func _map_seed() -> int:
+	var manager: Node = get_tree().get_first_node_in_group("map_manager")
+	if is_instance_valid(manager) and manager.has_method("get_world_seed"):
+		return manager.get_world_seed()
+	return 0
+
+
+func _map_biome() -> StringName:
+	var manager: Node = get_tree().get_first_node_in_group("map_manager")
+	if is_instance_valid(manager) and manager.has_method("get_active_map"):
+		var map = manager.get_active_map()
+		if map != null:
+			return map.biome
+	return &"neighborhood"
+
+
+## Planta una marca de aullido cerca del jefe (tope 2 vivas por jefe).
+func _plant_territory_mark() -> void:
+	if _is_dead or not is_inside_tree():
+		return
+	for index in range(_planted_marks.size() - 1, -1, -1):
+		if not is_instance_valid(_planted_marks[index]):
+			_planted_marks.remove_at(index)
+	if _planted_marks.size() >= 2:
+		return
+	# El Alfa reclama TERRENO, no un punto al azar: la marca va a una posicion
+	# tactica del plano (interseccion de calles) y nunca dentro de un edificio.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("boss_mark:%d:%d" % [_map_seed(), _planted_marks.size()])
+	var placement := MapGeometry.find_tactical_position(
+		_map_seed(), _map_biome(), global_position, 160.0, 420.0, rng, self)
+	if not placement["found"]:
+		return
+	var mark := MAP_INTERACTABLE.spawn(&"howl_post", get_parent(), placement["pos"], rng)
+	var pos: Vector2 = placement["pos"]
+	if mark != null:
+		_planted_marks.append(mark)
+		Feedback.hit_effect(pos, Color(1.0, 0.72, 0.2, 0.8), 0.6, 2.4)
 
 
 func _apply_visuals() -> void:
@@ -187,6 +355,15 @@ func _physics_process(delta: float) -> void:
 		_contact_timer -= delta
 	if _guardian_vuln_timer > 0.0:
 		_guardian_vuln_timer -= delta
+
+	# FASE 11 (consume_zones, Mastin del Pantano): parado sobre una zona
+	# infecciosa se cura CONSUMIENDOLA. El jugador puede negarle la curacion
+	# controlando DONDE mata a los portadores.
+	if data != null and data.environment_rules.has(&"consume_zones"):
+		_consume_tick -= delta
+		if _consume_tick <= 0.0:
+			_consume_tick = 0.5
+			_try_consume_zone()
 
 	# Activacion de la FORMA elite pendiente: cuando el jefe esta en un estado
 	# SEGURO (persiguiendo, sin telegrafo ni ataque en curso).
@@ -377,6 +554,16 @@ func _on_phase_changed() -> void:
 	# Esbirros del jefe: aparecen en MOMENTOS DEFINIDOS (los umbrales de vida de
 	# phase_thresholds, p.ej. 75/50/25%), nunca de forma continua.
 	_spawn_threshold_minions()
+	# FASE 11: reglas ambientales por cambio de fase.
+	if data != null and data.environment_rules.has(&"territory_marks"):
+		_plant_territory_mark()
+		# FASE 2 (Barrio): el Alfa ESCALA EN COORDINACION, no en estadisticas.
+		# Cada umbral de vida usa una herramienta urbana distinta.
+		_alpha_phase_escalation()
+	if _boss_plates > 0:
+		# Cae una placa: chispa metalica clara (ventana de daño real).
+		_boss_plates -= 1
+		Feedback.hit_effect(global_position, Color(0.75, 0.78, 0.85, 0.9), 0.6, 2.8)
 	# Feedback de cambio de fase: destello y shake.
 	Feedback.shake(0.3)
 	Feedback.hit_effect(global_position, data.accent_color, 0.8, 3.5)
@@ -454,6 +641,22 @@ func take_damage(amount: int, _knockback_dir: Vector2 = Vector2.ZERO) -> void:
 		amount = maxi(1, int(round(amount * 0.6)))
 	elif _guardian_vuln_timer > 0.0:
 		amount = int(round(amount * 1.3))
+	# FASE 11: placas de blindaje (scrap_plates/acorazado): daño reducido hasta
+	# que las fases las rompan.
+	if _boss_plates > 0:
+		amount = maxi(1, int(round(amount * 0.85)))
+
+	# Telemetria de balance (solo con BOSS_DEBUG=1 en el entorno): histograma del
+	# daño recibido, para atribuir fuentes de DPS en los soaks headless.
+	if OS.has_environment("BOSS_DEBUG"):
+		var histo: Dictionary = get_meta(&"dmg_histo", {})
+		histo[amount] = int(histo.get(amount, 0)) + 1
+		set_meta(&"dmg_histo", histo)
+		var total: int = int(get_meta(&"dmg_total", 0)) + amount
+		set_meta(&"dmg_total", total)
+		if int(get_meta(&"dmg_log_tick", 0)) != int(_alive_time / 10.0):
+			set_meta(&"dmg_log_tick", int(_alive_time / 10.0))
+			print("BOSSDBG t=%.0f hp=%d/%d total_dmg=%d histo=%s" % [_alive_time, current_health, max_health, total, str(histo)])
 	current_health = max(0, current_health - amount)
 	Feedback.damage_number(global_position + Vector2(0, -50), amount, Color(1.0, 0.8, 0.5))
 	_flash_hit()
@@ -515,6 +718,10 @@ func _spawn_minions() -> void:
 			continue
 		var angle: float = TAU * float(i) / float(max(1, count)) + randf() * 0.4
 		minion.global_position = global_position + Vector2.RIGHT.rotated(angle) * 70.0
+		# FASE 11 (balance): los invocados del jefe dan XP simbolica. La invocacion
+		# continua financiaba cartas al jugador DURANTE el examen final (bucle de
+		# XP que abarataba al jefe).
+		minion.set("xp_value", 1)
 		get_parent().add_child(minion)
 		_summoned.append(minion)
 
@@ -646,6 +853,47 @@ func _activate_elite_form(abrupt: bool = false) -> void:
 		if is_instance_valid(eye):
 			eye.color = Color(1.0, 0.95, 0.9)
 	_visual_action(&"phase_change")
+	# FASE 2 (Barrio): la forma elite del Alfa abre un CORREDOR DE CACERIA sobre
+	# una calle real. Solo los jefes con reglas de territorio: el Mastin y el de
+	# Chatarra tienen las suyas.
+	if data != null and data.environment_rules.has(&"territory_marks"):
+		_open_hunt_corridor()
+
+
+## Corredor de caceria elite: se ancla a la calle real mas cercana al jefe y se
+## extiende a lo largo de ella. Estrecho (cabe en la calzada) y finito: siempre
+## se puede salir por los lados y siempre expira.
+func _open_hunt_corridor() -> void:
+	var world_seed: int = _map_seed()
+	var biome: StringName = _map_biome()
+	var roads := MapGeometry.roads_near(world_seed, biome, global_position, 700.0)
+	if roads.is_empty():
+		return
+	# La calle mas cercana al jefe: la caceria ocurre donde ya se esta peleando.
+	var best: Dictionary = {}
+	var best_distance: float = INF
+	for road in roads:
+		var along: float = global_position.x if road["axis"] == &"vertical" else global_position.y
+		var distance: float = absf(float(road["coord"]) - along)
+		if distance < best_distance:
+			best_distance = distance
+			best = road
+	if best.is_empty():
+		return
+	var vertical: bool = best["axis"] == &"vertical"
+	var coord: float = float(best["coord"])
+	# Centrado en la proyeccion del jefe sobre la calle, 1800 px de largo: un
+	# tramo de avenida, no el mapa.
+	var center: Vector2 = Vector2(coord, global_position.y) if vertical \
+		else Vector2(global_position.x, coord)
+	var axis: Vector2 = Vector2.DOWN if vertical else Vector2.RIGHT
+	# La direccion de caza apunta hacia el jugador: el corredor le empuja.
+	if is_instance_valid(_player) and (_player.global_position - center).dot(axis) < 0.0:
+		axis = -axis
+	var post: Node2D = _planted_marks[0] if not _planted_marks.is_empty() \
+		and is_instance_valid(_planted_marks[0]) else null
+	HUNT_CORRIDOR.spawn(get_parent(), center - axis * 900.0, center + axis * 900.0,
+		float(best["half_width"]), post)
 
 
 ## Derrotada la forma normal (barra a 0): aparece la SEGUNDA barra ~28% de la
@@ -715,15 +963,32 @@ func enrage() -> void:
 
 
 ## Zona peligrosa al final de la embestida elite (identidad del Parque).
+## try_spawn aplica presupuesto por tipo y fusion (FASE 11).
 func _leave_hazard_zone() -> void:
-	if get_tree().get_node_count_in_group(HAZARD_ZONE_SCRIPT.GROUP) >= RunPhaseConfig.MAX_HAZARD_ZONES:
+	HAZARD_ZONE_SCRIPT.try_spawn(get_parent(), global_position,
+		{"kind": &"infection", "radius": 85.0, "duration": 3.5})
+
+
+## Curacion por consumo de zona infecciosa (regla consume_zones). Limitada por
+## el mismo tope de curacion de esbirros: sin bucles infinitos.
+func _try_consume_zone() -> void:
+	if current_health >= max_health:
 		return
-	var zone := Node2D.new()
-	zone.set_script(HAZARD_ZONE_SCRIPT)
-	zone.position = global_position
-	zone.set("radius", 85.0)
-	zone.set("duration", 3.5)
-	get_parent().add_child.call_deferred(zone)
+	for z in get_tree().get_nodes_in_group(HAZARD_ZONE_SCRIPT.GROUP):
+		if not is_instance_valid(z) or not (z is Node2D):
+			continue
+		if z.get("kind") != &"infection":
+			continue
+		var zone_radius: float = float(z.get("radius"))
+		if global_position.distance_to((z as Node2D).global_position) > zone_radius + 30.0:
+			continue
+		if z.has_method("consume"):
+			z.consume(0.6)
+		receive_minion_heal(int(round(max_health * 0.01)))
+		RunTelemetry.count(&"boss_heal_from_zones", int(round(max_health * 0.01)))
+		RunTelemetry.count(&"boss_zones_consumed")
+		Feedback.hit_effect(global_position, Color(0.55, 0.9, 0.3, 0.6), 0.35, 1.6)
+		return
 
 
 # --- Muerte / recompensa -----------------------------------------------------
@@ -782,6 +1047,14 @@ func _drop_reward() -> void:
 		orb.global_position = global_position
 		orb.set("pop_velocity", Vector2.RIGHT.rotated(randf() * TAU) * randf_range(80.0, 200.0))
 		get_parent().add_child.call_deferred(orb)
+
+	# FASE 12: el jefe suelta una MUTACION y un NUCLEO DE EVOLUCION. Entre el
+	# mini-jefe y el jefe salen como mucho 2 nucleos, que es justo el tope de
+	# evoluciones por partida (WeaponManager.MAX_EVOLUTIONS_PER_RUN).
+	var director: Node = get_tree().get_first_node_in_group("loot_director")
+	if is_instance_valid(director):
+		director.call("drop_mutation", get_parent(), global_position)
+		director.call("drop_evolution_core", get_parent(), global_position)
 
 
 func _emit_health() -> void:

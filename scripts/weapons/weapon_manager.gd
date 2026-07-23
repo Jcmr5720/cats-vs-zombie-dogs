@@ -21,6 +21,11 @@ const WEAPON_REGISTRY: Array[String] = [
 ]
 const STARTING_WEAPON: String = "res://data/weapons/cat_pistol.tres"
 
+## Tope de evoluciones de arma por partida (no trivializar jefes). Migrado desde
+## el antiguo UpgradeManager: desde FASE 12 la evolucion la dispara el nucleo que
+## sueltan los jefes, asi que el contador vive donde vive el inventario.
+const MAX_EVOLUTIONS_PER_RUN: int = 2
+
 signal weapons_changed(snapshots: Array)
 signal synergies_changed(states: Array)
 
@@ -29,6 +34,8 @@ signal synergies_changed(states: Array)
 var _player: Node2D
 var _hud: Node
 var _weapons: Array[Node2D] = []
+## Evoluciones ya realizadas en esta run (tope MAX_EVOLUTIONS_PER_RUN).
+var _evolutions_done: int = 0
 
 # Modificadores globales acumulados por upgrades de stats clasicos.
 var _global_damage: float = 1.0
@@ -92,9 +99,11 @@ func add_weapon(data: WeaponData) -> bool:
 	weapon.call("setup", data, self, _player)
 	_weapons.append(weapon)
 	_emit_weapons_changed()
-	# Game feel: aviso corto de arma nueva (Fase 04.5).
-	if _hud != null and _hud.has_method("show_event_message"):
-		_hud.show_event_message("Arma: %s" % data.display_name)
+	# FASE 13: confirmacion clara de arma nueva (con su espacio) + sonido propio.
+	_loot_toast(LootCatalog.category_toast(&"weapon"),
+		"%s añadida al espacio %d" % [data.display_name, _weapons.size()],
+		LootCatalog.weapon_traits(data), LootCatalog.category_color(&"weapon"))
+	_play_sfx(LootCatalog.category_sfx(&"weapon"))
 	return true
 
 
@@ -102,26 +111,23 @@ func level_up_weapon(weapon_id: StringName) -> bool:
 	var weapon := get_weapon(weapon_id)
 	if weapon == null or weapon.is_max_level():
 		return false
+	# Capturar ANTES de subir: describe lo que se acaba de ganar.
+	var gained: String = weapon.next_level_description()
 	weapon.level_up()
 	_emit_weapons_changed()
-	# Game feel: aviso corto de mejora de arma (Fase 04.5).
-	if _hud != null and _hud.has_method("show_event_message"):
-		_hud.show_event_message("%s Nv. %d" % [weapon.data.display_name, weapon.level])
+	# FASE 13: la subida de nivel de UN arma se anuncia con lo que cambia.
+	_loot_toast("ARMA MEJORADA", "%s · Nv. %d" % [weapon.data.display_name, weapon.level],
+		gained, LootCatalog.category_color(&"weapon"))
+	_play_sfx(&"powerup_collect")
 	return true
 
 
-## Evoluciona un arma a su WeaponData de evolucion (data.evolution), conservando
-## el "slot": se libera el arma vieja y la nueva entra aunque el maximo este lleno.
-## La validacion de requisitos (nivel maximo + carta de stat) la hace el
-## UpgradeManager; aqui solo se ejecuta el reemplazo con juice.
-func evolve_weapon(weapon_id: StringName) -> bool:
-	var weapon := get_weapon(weapon_id)
-	if weapon == null or weapon.data == null or weapon.data.evolution == null:
+## Sustituye el arma `weapon` por `data` CONSERVANDO SU SLOT: libera la vieja y
+## mete la nueva en el mismo indice, asi que funciona aunque el maximo este lleno.
+## Base comun de evolve_weapon() y replace_weapon(); no emite juice ni valida nada.
+func _swap_slot(weapon: Node2D, data: WeaponData) -> bool:
+	if weapon == null or data == null:
 		return false
-	var evolved: WeaponData = weapon.data.evolution as WeaponData
-	if evolved == null or has_weapon(evolved.id):
-		return false
-
 	var index: int = _weapons.find(weapon)
 	if index >= 0:
 		_weapons.remove_at(index)
@@ -131,9 +137,104 @@ func evolve_weapon(weapon_id: StringName) -> bool:
 	if new_weapon == null:
 		return false
 	add_child(new_weapon)
-	new_weapon.call("setup", evolved, self, _player)
+	new_weapon.call("setup", data, self, _player)
 	_weapons.insert(clampi(index, 0, _weapons.size()), new_weapon)
 	_emit_weapons_changed()
+	return true
+
+
+## Quita un arma del inventario y devuelve su WeaponData (null si no la tenia).
+## Lo usa el intercambio en el suelo (FASE 12) para volver a soltar la descartada.
+func remove_weapon(weapon_id: StringName) -> WeaponData:
+	var weapon := get_weapon(weapon_id)
+	if weapon == null:
+		return null
+	var data: WeaponData = weapon.data
+	var index: int = _weapons.find(weapon)
+	if index >= 0:
+		_weapons.remove_at(index)
+	weapon.queue_free()
+	_emit_weapons_changed()
+	return data
+
+
+## Cambia `old_id` por `data` conservando el slot y devuelve el WeaponData
+## descartado, para que quien llama pueda dejarlo en el suelo. Devuelve null si el
+## intercambio no era valido (arma inexistente o ya tienes la nueva).
+func replace_weapon(old_id: StringName, data: WeaponData) -> WeaponData:
+	var weapon := get_weapon(old_id)
+	if weapon == null or data == null or has_weapon(data.id):
+		return null
+	var discarded: WeaponData = weapon.data
+	if not _swap_slot(weapon, data):
+		return null
+
+	# Feedback deliberadamente MAS SUAVE que el de la evolucion: un intercambio es
+	# una decision tactica frecuente, no el momento de la partida.
+	Feedback.shake(0.25)
+	if is_instance_valid(_player):
+		Feedback.hit_effect(_player.global_position, data.visual_color, 0.35, 1.6)
+	_loot_toast("ARMA CAMBIADA", "%s → %s" % [discarded.display_name, data.display_name],
+		"%s quedó en el suelo" % discarded.display_name, LootCatalog.category_color(&"weapon"))
+	_play_sfx(LootCatalog.category_sfx(&"weapon"))
+	return discarded
+
+
+## Arma del inventario que se sacrificaria en un intercambio: la de MENOR nivel y,
+## a igualdad, la del slot mas antiguo. Determinista y casi siempre lo que el
+## jugador quiere soltar. Devuelve null si no hay armas.
+func get_swap_candidate() -> Node2D:
+	var best: Node2D = null
+	for weapon in _weapons:
+		if not is_instance_valid(weapon):
+			continue
+		if best == null or int(weapon.level) < int(best.level):
+			best = weapon
+	return best
+
+
+## Evoluciona el arma elegible mas avanzada (FASE 12: lo dispara el nucleo de
+## evolucion que sueltan los jefes, ya no una carta). Elegible = nivel maximo,
+## con evolucion definida, que aun no esta en juego y cuyo requisito de power-up
+## el jugador ya recogio. Respeta el tope de evoluciones por partida.
+func evolve_best_weapon() -> bool:
+	if _evolutions_done >= MAX_EVOLUTIONS_PER_RUN:
+		return false
+	var owned: Array = []
+	if is_instance_valid(_player):
+		var raw = _player.get("owned_powerups")
+		if raw is Array:
+			owned = raw
+
+	var best: Node2D = null
+	for weapon in get_evolution_ready_weapons():
+		var requirement: StringName = weapon.data.evolution_requirement
+		if requirement != &"" and not owned.has(requirement):
+			continue
+		if best == null or int(weapon.level) > int(best.level):
+			best = weapon
+	if best == null:
+		return false
+	return evolve_weapon(best.data.id)
+
+
+## Evoluciona un arma a su WeaponData de evolucion (data.evolution), conservando
+## el "slot": se libera el arma vieja y la nueva entra aunque el maximo este lleno.
+## La validacion de requisitos (nivel maximo + power-up) la hace evolve_best_weapon();
+## aqui solo se ejecuta el reemplazo con juice.
+func evolve_weapon(weapon_id: StringName) -> bool:
+	var weapon := get_weapon(weapon_id)
+	if weapon == null or weapon.data == null or weapon.data.evolution == null:
+		return false
+	var evolved: WeaponData = weapon.data.evolution as WeaponData
+	if evolved == null or has_weapon(evolved.id):
+		return false
+
+	# El nombre del arma base se captura antes del swap (que libera el nodo).
+	var base_name: String = weapon.data.display_name
+	if not _swap_slot(weapon, evolved):
+		return false
+	_evolutions_done += 1
 
 	# Juice: la evolucion es EL momento de la partida (hitstop + shake + destello).
 	Feedback.hitstop(0.14, 0.08)
@@ -141,11 +242,11 @@ func evolve_weapon(weapon_id: StringName) -> bool:
 	if is_instance_valid(_player):
 		Feedback.hit_effect(_player.global_position, Color(1.0, 0.85, 0.3, 0.95), 0.5, 2.4)
 		Feedback.hit_effect(_player.global_position, evolved.visual_color, 0.35, 1.8)
-	if _hud != null and _hud.has_method("show_event_message"):
-		_hud.show_event_message("¡EVOLUCION: %s!" % evolved.display_name)
-	var audio: Node = get_node_or_null("/root/AudioManager")
-	if audio != null and audio.has_method("play_sfx"):
-		audio.play_sfx(&"level_up")
+	# FASE 13: la evolucion se explica completa: de que arma viene y que gana.
+	_loot_toast(LootCatalog.category_toast(&"core"),
+		"%s → %s" % [base_name, evolved.display_name],
+		evolved.description, LootCatalog.category_color(&"core"))
+	_play_sfx(LootCatalog.category_sfx(&"core"))
 	return true
 
 
@@ -384,3 +485,20 @@ func synergy_area_mult(data: WeaponData) -> float:
 
 func _emit_weapons_changed() -> void:
 	weapons_changed.emit(get_weapon_snapshots())
+
+
+## Toast de botin del HUD (FASE 13). Se busca el HUD por grupo (no _hud: el
+## manager del P2 no esta conectado a el) y se pasa el player_id para que en
+## coop el aviso salga en la mitad correcta.
+func _loot_toast(header: String, title: String, body: String, accent: Color) -> void:
+	var hud: Node = get_tree().get_first_node_in_group("hud")
+	if hud == null or not hud.has_method("show_loot_toast"):
+		return
+	var pid: int = int(_player.get("player_id")) if is_instance_valid(_player) else 1
+	hud.show_loot_toast(header, title, body, accent, pid)
+
+
+func _play_sfx(sound_name: StringName) -> void:
+	var audio: Node = get_node_or_null("/root/AudioManager")
+	if audio != null and audio.has_method("play_sfx"):
+		audio.play_sfx(sound_name)

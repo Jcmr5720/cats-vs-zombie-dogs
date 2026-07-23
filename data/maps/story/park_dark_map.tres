@@ -47,6 +47,15 @@ phase_weight_overrides = {
 &"infection_carrier_dog": 2.0,
 &"howler_zombie_dog": 1.3
 }
+biome_mutations = Array[StringName]([&"esporoso", &"parasito", &"sabueso"])
+dynamic_event_pool = Array[StringName]([&"lake_fog", &"carrier_bloom", &"blackout"])
+opening_pack_id = &"zombie_dog"
+opening_pack_alt_id = &"pup_zombie_dog"
+opening_variety_id = &"pup_zombie_dog"
+opening_variety_alt_id = &"runner_zombie_dog"
+boss_modifier_pool = Array[StringName]([&"pantanoso", &"invocador"])
+interactable_kind = &"nest"
+interactable_times = PackedFloat32Array(45, 90, 135)
 boss_spawn_time = 0.0
 miniboss_times = PackedFloat32Array()
 duration_seconds = 300.0

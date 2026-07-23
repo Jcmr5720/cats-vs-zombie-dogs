@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="PowerUpData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/loot/power_up_data.gd" id="1_pud"]
+
+[resource]
+script = ExtResource("1_pud")
+id = &"player_speed"
+display_name = "Patas veloces"
+description = "Corres más rápido."
+category = &"stat"
+rarity = &"common"
+drop_weight = 1.0
+affects = "Jugador"
+visual_color = Color(0.55, 0.9, 1, 1)
+icon_type = &"paw"

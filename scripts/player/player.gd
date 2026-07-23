@@ -63,6 +63,19 @@ var experience: int = 0
 var experience_to_level: int
 ## Cuántas mejoras ha elegido el jugador (lo usa la dificultad dinámica).
 var upgrades_chosen: int = 0
+## Ids de los power-ups recogidos en esta run (FASE 12). Lo rellena apply_upgrade
+## y lo consulta el WeaponManager para validar los requisitos de evolucion.
+var owned_powerups: Array[StringName] = []
+## Veces que se recogio cada power-up en la run (FASE 13). Solo presentacion: lo
+## lee el panel de build del HUD ("Garras afiladas ×3").
+var powerup_counts: Dictionary = {}
+
+## Bonus que reparte cada subida de nivel, en ciclo (FASE 12). Ids PROPIOS, no los
+## de los power-ups: sus magnitudes son mucho menores y mezclarlos haria imposible
+## razonar sobre el balance de una fuente o de la otra.
+const LEVEL_BONUS_CYCLE: Array[StringName] = [
+	&"lvl_damage", &"lvl_speed", &"lvl_health", &"lvl_cooldown", &"lvl_range", &"lvl_pickup",
+]
 
 var _damage_timer: float = 0.0
 ## Reduccion de dano recibido por sinergia (Medico + Rascador). Sutil, tope 0.5.
@@ -95,6 +108,9 @@ var _dust_timer: float = 0.0
 ## Controlador visual de sprites (ETAPA ARTISTICA 2/3). Puede no existir.
 @onready var _sprite_visual: Node = get_node_or_null("SpriteVisual")
 @onready var _weapons: Node = $WeaponManager
+## Punteria del jugador (Rework de apuntado). Puede no existir en rigs de test:
+## sin el, el jugador se comporta como antes (auto-apuntado clasico).
+@onready var _aim: Node2D = get_node_or_null("PlayerAimController")
 @onready var _pickup_area: Area2D = $PickupArea
 @onready var _facing_indicator: Node2D = $FacingIndicator
 @onready var _visual: Node2D = $Visual
@@ -195,12 +211,14 @@ func _physics_process(delta: float) -> void:
 		if _knockback.length_squared() < 1.0:
 			_knockback = Vector2.ZERO
 
-	# Dirección visual mínima: el indicador apunta hacia el último movimiento.
+	# Dirección visual mínima: el indicador apunta hacia donde APUNTA el jugador
+	# (mira manual) o, con auto-mira, hacia el último movimiento como siempre.
 	if direction != Vector2.ZERO:
 		_last_facing = direction
 	_is_moving = direction != Vector2.ZERO
 	if is_instance_valid(_facing_indicator):
-		_facing_indicator.rotation = lerp_angle(_facing_indicator.rotation, _last_facing.angle(), 0.25)
+		var facing: Vector2 = _last_facing if is_auto_aim() else get_aim_direction()
+		_facing_indicator.rotation = lerp_angle(_facing_indicator.rotation, facing.angle(), 0.25)
 
 	# Polvo bajo las patas mientras corre.
 	_dust_timer -= delta
@@ -256,6 +274,19 @@ func _animate_visual(delta: float) -> void:
 func take_damage(amount: int) -> void:
 	if _is_dead or _is_downed or _damage_timer > 0.0:
 		return
+
+	# Telemetria (apagada salvo RUN_TELEMETRY=1): cuanto daño se recibe MIENTRAS
+	# la manada tiene rutas cerradas o el corredor de caceria esta activo. Es la
+	# metrica que distingue "presion legible" de "daño inevitable".
+	if RunTelemetry.enabled:
+		RunTelemetry.count(&"player_damage_total", amount)
+		var tree := get_tree()
+		if tree.get_node_count_in_group(&"hunt_corridors") > 0:
+			RunTelemetry.count(&"damage_during_hunt_corridor", amount)
+		for flanker in tree.get_nodes_in_group(&"flankers"):
+			if is_instance_valid(flanker) and bool(flanker.get("_flank_closing")):
+				RunTelemetry.count(&"damage_during_route_closure", amount)
+				break
 
 	_damage_timer = damage_cooldown
 	# Sinergia defensiva + reduccion permanente + escudo del medico: multiplicativas.
@@ -339,11 +370,13 @@ func add_experience(amount: int, from_share: bool = false) -> void:
 				partner.add_experience(maxi(1, int(ceil(amount * share))), true)
 
 
-## Conectado a PickupArea.area_entered: recoge orbes de experiencia.
+## Conectado a PickupArea.area_entered: recoge orbes de experiencia y power-ups
+## del suelo (FASE 12). Los pickups de ARMA no entran aqui: viven en el grupo
+## "weapon_pickups" porque exigen una decision del jugador, no contacto.
 func _on_pickup_area_area_entered(area: Area2D) -> void:
 	if _is_dead or _is_downed:
 		return
-	if area.is_in_group("xp_orbs") and area.has_method("collect"):
+	if (area.is_in_group("xp_orbs") or area.is_in_group("pickups")) and area.has_method("collect"):
 		area.collect(self)
 
 
@@ -408,6 +441,35 @@ func apply_upgrade(upgrade_id: StringName, include_shared: bool = true) -> void:
 		&"mut_wind_paws":
 			speed = min(speed * 1.15, MAX_SPEED)
 			_increase_pickup_range(1.5)
+		# --- Bonus automatico de subir de nivel (FASE 12) -----------------------
+		# ~40% de la magnitud de un power-up del suelo. Con ~11 niveles por partida
+		# suman +8% dano, +5% velocidad, +12 vida y -8% cooldown: se nota, pero no
+		# domina. Los topes del WeaponManager siguen protegiendo el techo.
+		&"lvl_damage":
+			if is_instance_valid(_weapons) and _weapons.has_method("multiply_damage"):
+				_weapons.multiply_damage(1.04)
+		&"lvl_speed":
+			speed = min(speed * 1.025, MAX_SPEED)
+		&"lvl_health":
+			increase_max_health(6)
+		&"lvl_cooldown":
+			if is_instance_valid(_weapons) and _weapons.has_method("multiply_cooldown"):
+				_weapons.multiply_cooldown(0.96)
+		&"lvl_range":
+			if is_instance_valid(_weapons) and _weapons.has_method("multiply_range"):
+				_weapons.multiply_range(1.04)
+		&"lvl_pickup":
+			_increase_pickup_range(1.10)
+
+	# Registro de lo RECOGIDO del suelo en la run. Lo consulta el WeaponManager
+	# para validar `evolution_requirement` (FASE 12: sustituye a _chosen_stat_ids
+	# del antiguo UpgradeManager). Cada jugador tiene el suyo, asi que coop
+	# funciona solo. Los bonus automaticos de nivel NO cuentan: no son botin, y
+	# admitirlos regalaria los requisitos de evolucion con solo subir de nivel.
+	if not str(upgrade_id).begins_with("lvl_"):
+		if not owned_powerups.has(upgrade_id):
+			owned_powerups.append(upgrade_id)
+		powerup_counts[upgrade_id] = int(powerup_counts.get(upgrade_id, 0)) + 1
 
 	upgrades_chosen += 1
 
@@ -513,11 +575,78 @@ func _level_up() -> void:
 	Feedback.hit_effect(global_position, Color(0.45, 0.86, 1.0, 0.9), 0.5, 2.6)
 	Feedback.hit_effect(global_position, Color(0.8, 0.96, 1.0, 0.8), 0.25, 1.4)
 	Feedback.shake(0.15)
+	_apply_level_reward()
 	level_up_requested.emit(level)
+
+
+## Recompensa automatica de subir de nivel (FASE 12: ya no hay cartas, asi que el
+## nivel no abre ningun menu ni pausa el juego). Deliberadamente MODESTA —un ~40%
+## de lo que daba una carta— porque el poder real viene del loot del suelo; la XP
+## solo mantiene una curva de fondo y una razon para seguir recogiendo orbes.
+##
+## El ciclo es FIJO y no aleatorio: asi la curva es predecible para el balance y
+## el jugador nota que cada nivel aporta algo distinto.
+func _apply_level_reward() -> void:
+	heal(int(ceil(float(max_health) * 0.08)))
+	apply_upgrade(LEVEL_BONUS_CYCLE[(level - 2) % LEVEL_BONUS_CYCLE.size()])
+	var hud: Node = get_tree().get_first_node_in_group("hud")
+	if hud != null and hud.has_method("show_event_message"):
+		hud.show_event_message("¡Nivel %d!" % level)
 
 
 func get_last_facing_direction() -> Vector2:
 	return _last_facing.normalized()
+
+
+## --- Punteria (Rework de apuntado) ---------------------------------------------
+## Fachada fina sobre el PlayerAimController: las armas y el HUD preguntan aqui y
+## no conocen el nodo de mira (sin dependencias circulares). Sin controlador (rigs
+## de test antiguos) todo responde "automatico", que es el comportamiento clasico.
+
+## &"manual" | &"assist" | &"auto".
+func get_aim_mode() -> StringName:
+	if is_instance_valid(_aim):
+		return _aim.get_aim_mode()
+	return &"auto"
+
+
+func is_manual_aim() -> bool:
+	return get_aim_mode() == &"manual"
+
+
+func is_assisted_aim() -> bool:
+	return get_aim_mode() == &"assist"
+
+
+func is_auto_aim() -> bool:
+	return get_aim_mode() == &"auto"
+
+
+## Direccion FINAL del disparo (ya con la correccion asistida, si la hay).
+func get_aim_direction() -> Vector2:
+	if is_instance_valid(_aim):
+		return _aim.get_aim_direction()
+	return _last_facing.normalized()
+
+
+func get_aim_world_position() -> Vector2:
+	if is_instance_valid(_aim):
+		return _aim.get_aim_world_position()
+	return global_position + _last_facing.normalized() * 220.0
+
+
+## Objetivo elegido por la asistencia ({enemy, pos, velocity}) o vacio. Lo usan las
+## armas de proyectil para aplicar SU propio lead segun la velocidad de su bala.
+func get_assist_target() -> Dictionary:
+	if is_instance_valid(_aim):
+		return _aim.get_assist_target()
+	return {}
+
+
+## Fuerza el modo por codigo (tests/soaks de balance).
+func set_aim_mode(mode: StringName) -> void:
+	if is_instance_valid(_aim) and _aim.has_method("set_mode"):
+		_aim.set_mode(mode)
 
 
 func is_dead() -> bool:

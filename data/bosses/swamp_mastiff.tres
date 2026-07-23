@@ -19,6 +19,7 @@ visual_color = Color(0.24, 0.38, 0.26, 1)
 accent_color = Color(0.6, 1, 0.35, 1)
 visual_scale = 1.1
 minion_classes = Array[StringName]([&"boss_healer"])
+environment_rules = Array[StringName]([&"consume_zones"])
 elite_name = "Mastin del Pantano Putrefacto"
 elite_leaves_hazard = true
 phase_thresholds = PackedFloat32Array(0.75, 0.5, 0.25)

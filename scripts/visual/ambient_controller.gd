@@ -40,6 +40,23 @@ func refresh_settings() -> void:
 		_apply_fog(_last_map)
 
 
+## FASE 11: apagon temporal (evento de mapa de los barrios oscuros). Oscurece el
+## CanvasModulate y lo RESTAURA al ambiente del mapa al terminar. La oscuridad
+## tiene tope: el jugador y los ojos de los enemigos siguen siendo legibles.
+func pulse_darkness(strength: float, duration: float) -> void:
+	if not is_instance_valid(_canvas_modulate):
+		_canvas_modulate = CanvasModulate.new()
+		add_child(_canvas_modulate)
+		_canvas_modulate.color = Color(1, 1, 1, 1)
+	var target: Color = _canvas_modulate.color.darkened(clampf(strength, 0.0, 0.6))
+	var restore: Color = _last_map.ambient_color if _last_map != null else Color(1, 1, 1, 1)
+	var tween := create_tween()
+	tween.tween_property(_canvas_modulate, "color", target, 0.6)
+	tween.tween_interval(maxf(0.5, duration - 1.6))
+	tween.tween_property(_canvas_modulate, "color", restore, 1.0) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+
 func _apply_modulate(map_data) -> void:
 	var ambient: Color = map_data.ambient_color
 	# Blanco puro = sin capa (no crear el nodo para no pagar nada).

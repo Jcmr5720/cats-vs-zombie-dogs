@@ -23,6 +23,11 @@ signal settings_changed()
 const REMAP_ACTIONS: Array[StringName] = [
 	&"move_left", &"move_right", &"move_up", &"move_down",
 	&"p2_move_left", &"p2_move_right", &"p2_move_up", &"p2_move_down",
+	# Punteria con TECLADO, independiente del movimiento y propia de cada jugador.
+	# El stick derecho no pasa por el InputMap: se lee por device id para que dos
+	# mandos apunten por separado (ver PlayerAimController).
+	&"p1_aim_left", &"p1_aim_right", &"p1_aim_up", &"p1_aim_down",
+	&"p2_aim_left", &"p2_aim_right", &"p2_aim_up", &"p2_aim_down",
 	&"companion_regroup", &"restart",
 ]
 
@@ -60,6 +65,18 @@ func defaults() -> Dictionary:
 		"audio_sfx": 0.75,
 		"audio_ui": 0.70,
 		"audio_mute": false,
+		# Punteria POR JUGADOR (Rework de apuntado). Nunca un ajuste global: cada
+		# jugador guarda su modo, su nivel de asistencia y su dispositivo.
+		#   modo    : "manual" (defecto) | "assist" | "auto"
+		#   assist  : "off" | "baja" (defecto) | "media" | "alta"  (solo en asistido)
+		#   device  : "auto" (defecto, se detecta por uso) | "mouse" | "gamepad" | "keyboard"
+		# El AUTODISPARO no es configurable: siempre activo.
+		"player_1_aim_mode": "manual",
+		"player_2_aim_mode": "manual",
+		"player_1_aim_assist": "baja",
+		"player_2_aim_assist": "baja",
+		"player_1_aim_device": "auto",
+		"player_2_aim_device": "auto",
 		# Remapeo de teclado: accion (String) -> physical_keycode (int).
 		"input_overrides": {},
 	}

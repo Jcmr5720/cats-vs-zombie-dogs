@@ -33,6 +33,16 @@ extends Resource
 ## &"boss_healer", &"boss_exploder". Vacio = invoca solo perros comunes.
 @export var minion_classes: Array[StringName] = []
 
+@export_group("Reglas ambientales (FASE 11)")
+## Reglas de interaccion del jefe con la mecanica de su mapa (boss.gd):
+##   &"territory_marks"  planta marcas de aullido al entrar y al cambiar de fase
+##                       (Barrio: el Alfa marca territorio de manada).
+##   &"consume_zones"    se cura consumiendo zonas infecciosas donde este parado
+##                       (Parque: el jugador puede NEGARLE la curacion).
+##   &"scrap_plates"     placas de blindaje que caen con cada cambio de fase
+##                       (Industrial: ventanas de daño por etapas).
+@export var environment_rules: Array[StringName] = []
+
 @export_group("Transformacion elite (Partidas rapidas)")
 ## Nombre mostrado al transformarse en elite (vacio = "<nombre> ELITE").
 @export var elite_name: String = ""

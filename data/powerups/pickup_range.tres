@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="PowerUpData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/loot/power_up_data.gd" id="1_pud"]
+
+[resource]
+script = ExtResource("1_pud")
+id = &"pickup_range"
+display_name = "Olfato de tesoros"
+description = "Atraes la experiencia desde más lejos."
+category = &"stat"
+rarity = &"rare"
+drop_weight = 0.42
+affects = "Jugador"
+visual_color = Color(0.6, 1, 0.85, 1)
+icon_type = &"xp"

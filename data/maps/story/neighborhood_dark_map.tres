@@ -50,6 +50,15 @@ phase_weight_overrides = {
 &"pack_zombie_dog": 1.5,
 &"flanker_zombie_dog": 1.4
 }
+biome_mutations = Array[StringName]([&"sabueso", &"nocturno", &"lider_manada"])
+dynamic_event_pool = Array[StringName]([&"blackout", &"stray_horde"])
+opening_pack_id = &"zombie_dog"
+opening_pack_alt_id = &"pack_zombie_dog"
+opening_variety_id = &"runner_zombie_dog"
+opening_variety_alt_id = &"flanker_zombie_dog"
+boss_modifier_pool = Array[StringName]([&"veloz_alfa", &"marcador", &"invocador"])
+interactable_kind = &"howl_post"
+interactable_times = PackedFloat32Array(55, 105)
 boss_spawn_time = 0.0
 miniboss_times = PackedFloat32Array()
 duration_seconds = 300.0

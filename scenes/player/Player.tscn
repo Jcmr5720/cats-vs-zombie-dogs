@@ -1,10 +1,11 @@
-[gd_scene load_steps=8 format=3 uid="uid://bvc01player01"]
+[gd_scene load_steps=9 format=3 uid="uid://bvc01player01"]
 
 [ext_resource type="Script" path="res://scripts/player/player.gd" id="1_player"]
 [ext_resource type="PackedScene" path="res://scenes/visual/characters/SpriteCharacterVisual.tscn" id="5_spritevis"]
 [ext_resource type="Script" path="res://scripts/weapons/weapon_manager.gd" id="2_weapons"]
 [ext_resource type="Script" path="res://scripts/companions/rescue_arrow.gd" id="3_arrow"]
 [ext_resource type="Script" path="res://scripts/systems/camera_effects.gd" id="4_camfx"]
+[ext_resource type="Script" path="res://scripts/player/player_aim_controller.gd" id="6_playeraim"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 16.0
@@ -200,6 +201,9 @@ color = Color(1, 1, 1, 0.5)
 polygon = PackedVector2Array(13, -3, 23, -2, 23, -0.8, 13, -1.6)
 
 [node name="SpriteVisual" parent="." instance=ExtResource("5_spritevis")]
+
+[node name="PlayerAimController" type="Node2D" parent="."]
+script = ExtResource("6_playeraim")
 
 [node name="FacingIndicator" type="Node2D" parent="."]
 

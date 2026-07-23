@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="PowerUpData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/loot/power_up_data.gd" id="1_pud"]
+
+[resource]
+script = ExtResource("1_pud")
+id = &"mut_savage_power"
+display_name = "Garra salvaje"
+description = "Todo el daño de tus armas aumenta muchísimo."
+category = &"mutation"
+rarity = &"legendary"
+drop_weight = 1.0
+max_stacks = 1
+affects = "Armas"
+visual_color = Color(1, 0.85, 0.3, 1)
+icon_type = &"star"

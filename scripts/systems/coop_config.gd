@@ -22,6 +22,13 @@ const XP_SHARE_FULL_DIST: float = 900.0
 ## A partir de esta distancia el companero no recibe nada (decae linealmente).
 const XP_SHARE_ZERO_DIST: float = 2600.0
 
+# --- Loot en el suelo (FASE 12) --------------------------------------------------
+## Multiplicador de cantidad de botin en coop. Con cartas cada jugador recibia SU
+## mazo (2x poder); con loot compartido los dos se reparten UN presupuesto. Se
+## sube 1.7 y no 2.0 por el mismo motivo que el reparto de XP suma 110% y no 150%:
+## dos jugadores ya rinden mas que uno, no hay que pagarles el doble.
+const LOOT_MULTIPLIER: float = 1.7
+
 # --- Incentivos de cercania (Fase 5) --------------------------------------------
 ## Radio para el bonus de "juntos": regeneracion lenta compartida.
 const PROXIMITY_RADIUS: float = 340.0
@@ -36,16 +43,9 @@ const RESCUER_XP_REWARD: int = 8
 ## Invulnerabilidad minima al levantarse (evita revivir dentro de dano inevitable).
 const REVIVE_INVULN_SECONDS: float = 1.5
 
-# --- Cartas coop (Fase 4) ---------------------------------------------------------
-## Seleccion automatica de la carta resaltada tras este tiempo (anti-bloqueo por
-## desconexion o inactividad). <= 0 la desactiva.
-const CARD_AUTO_PICK_SECONDS: float = 25.0
-## Segundos finales en los que se muestra la cuenta atras en el panel.
-const CARD_AUTO_PICK_WARN_SECONDS: float = 10.0
-## true = en vez de pausar, la partida corre ralentizada mientras se elige.
-## false (por defecto) = pausa clasica. Cambiable sin tocar mas codigo.
-const CARD_SLOWDOWN_ENABLED: bool = false
-const CARD_SLOWDOWN_SCALE: float = 0.25
+# (FASE 12: las constantes de cartas coop —auto-pick por inactividad y camara
+# lenta durante la seleccion— desaparecieron con el panel de cartas. El loot del
+# suelo no bloquea a nadie: no hay nada que auto-elegir.)
 
 # --- Pantalla dividida (Fases 1 y 8) -----------------------------------------------
 ## Zoom base de cada mitad (lo usan la SplitCamera y el spawner para calcular el

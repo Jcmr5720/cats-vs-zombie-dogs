@@ -1,11 +1,10 @@
 extends Node2D
-## Valida la progresion de XP/cartas adaptada a partidas de 5 minutos:
-## primera carta alcanzable antes de 0:20, ~6-8 elecciones estimadas, primera
-## mano garantizada (ofensiva/defensiva/movilidad), Mutacion garantizada que NO
-## consume nivel, encadenado de selecciones y ausencia de salto.
+## Valida la progresion de XP adaptada a partidas de 5 minutos y, desde FASE 12,
+## que subir de nivel NUNCA pausa: la curva de XP sigue viva (primer nivel barato,
+## ~6-8 subidas por partida) pero el poder llega por el loot del suelo.
 ##   godot --headless --path . res://tests/TestQuickRunXP.tscn
 
-const UpgradeManagerScript := preload("res://scripts/systems/upgrade_manager.gd")
+const LootDirectorScript := preload("res://scripts/systems/loot_director.gd")
 
 var _failures: Array[String] = []
 var _checks: int = 0
@@ -13,33 +12,31 @@ var _checks: int = 0
 
 class StubHud:
 	extends Node
-	signal upgrade_card_selected(card_index: int)
-	signal reroll_requested
-	signal banish_requested(card_index: int)
-	var shown: Array = []
-	var actions: Array = []
-	var hidden: int = 0
-	func show_upgrade_selection(cards: Array[Dictionary]) -> void:
-		shown.append(cards)
-	func hide_upgrade_selection() -> void:
-		hidden += 1
-	func set_upgrade_actions(r: int, b: int) -> void:
-		actions.append([r, b])
+	var messages: Array = []
+	func show_event_message(text: String, _d: float = 1.8) -> void:
+		messages.append(text)
 
 
 class StubPlayer:
 	extends Node
 	signal level_up_requested(level: int)
 	var applied: Array = []
+	var owned_powerups: Array[StringName] = []
+
+	func _init() -> void:
+		# El LootDirector localiza al jugador por grupo para filtrar por max_stacks.
+		add_to_group("player")
+
 	func apply_upgrade(id: StringName, _shared: bool = true) -> void:
 		applied.append(id)
+		if not owned_powerups.has(id):
+			owned_powerups.append(id)
+
 	func get_weapon_manager() -> Node:
 		return null
 
 
 func _ready() -> void:
-	# La seleccion de cartas pausa el arbol: este test debe seguir corriendo.
-	process_mode = Node.PROCESS_MODE_ALWAYS
 	call_deferred("_run")
 
 
@@ -64,93 +61,55 @@ func _run() -> void:
 	var choices_rich: int = _levels_for_xp(800)
 	_expect(choices_rich <= 10, "con 800 XP sigue acotado (%d)" % choices_rich)
 
-	# --- Manager + stubs ----------------------------------------------------------
+	# --- LootDirector + stubs -----------------------------------------------------
 	var hud := StubHud.new()
 	hud.name = "Hud"
+	hud.add_to_group("hud")
 	add_child(hud)
 	var player := StubPlayer.new()
 	player.name = "Player"
 	add_child(player)
-	var manager := Node.new()
-	manager.name = "Upgrades"
-	manager.set_script(UpgradeManagerScript)
-	manager.set("hud_path", NodePath("../Hud"))
-	manager.set("player_path", NodePath("../Player"))
-	add_child(manager)
+	var loot := Node.new()
+	loot.name = "Loot"
+	loot.set_script(LootDirectorScript)
+	add_child(loot)
+	await get_tree().process_frame
 	await get_tree().process_frame
 
-	# --- Puerta temporal de la primera tarjeta (segundo 12) -----------------------
-	# En la partida real la enciende el PhaseDirector; aqui se activa a mano.
-	# Antes del segundo 12 la subida NO abre cartas (la XP no se pierde: queda
-	# pendiente). Se simula el reloj con _run_time para no esperar 12 s reales.
-	manager.call("set_first_card_gate", 12.0)
-	manager.set("_run_time", 5.0)
+	# --- FASE 12: subir de nivel NO abre nada ni pausa ----------------------------
+	# La "puerta de la primera tarjeta" y toda la cadena de selecciones murieron con
+	# el UpgradeManager. Lo que hay que sostener ahora es lo contrario: que ningun
+	# camino del sistema de progresion vuelva a pausar la partida.
 	player.level_up_requested.emit(2)
-	_expect(hud.shown.is_empty(), "antes de 0:12 la primera carta NO se abre (puerta)")
-	_expect(not get_tree().paused, "la puerta no pausa la partida (XP encolada)")
-	# Cruzada la puerta, la primera seleccion (que quedo pendiente) se muestra.
-	manager.set("_run_time", 13.0)
-	manager.call("_show_next_selection")
+	await get_tree().process_frame
+	_expect(not get_tree().paused, "subir de nivel NO pausa la partida")
 
-	# --- Primera seleccion garantizada: ofensiva / defensiva / movilidad ----------
-	_expect(hud.shown.size() == 1, "cruzada la puerta, la subida pendiente abre seleccion")
-	_expect(get_tree().paused, "la seleccion pausa la partida (sin salto posible)")
-	if hud.shown.size() >= 1:
-		var ids: Array = []
-		for card in hud.shown[0]:
-			ids.append(card.get("id"))
-		_expect(ids == [&"weapon_damage", &"max_health", &"player_speed"],
-			"primera mano garantizada: ofensiva+defensiva+movilidad (%s)" % str(ids))
-	hud.upgrade_card_selected.emit(0)
-	_expect(player.applied.back() == &"weapon_damage", "la carta elegida se aplica")
-	_expect(not get_tree().paused, "resuelta la seleccion, la partida continua")
+	# --- La mutacion es un pickup del suelo, no un menu ----------------------------
+	var mutation: PowerUpData = loot.call("roll_mutation")
+	_expect(mutation != null, "el director sortea una mutacion")
+	_expect(mutation.is_mutation() and mutation.rarity == &"legendary",
+		"la mutacion es de categoria mutacion y rareza legendaria")
 
-	# --- Mutacion garantizada (recompensa del mini-boss) ---------------------------
-	manager.call("grant_mutation")
-	_expect(hud.shown.size() == 2, "la Mutacion abre seleccion propia")
-	if hud.shown.size() >= 2:
-		var all_mut := true
-		var all_legendary := true
-		for card in hud.shown[1]:
-			if card.get("card_type") != &"mutation":
-				all_mut = false
-			if card.get("rarity") != &"legendary":
-				all_legendary = false
-		_expect(hud.shown[1].size() == 3, "3 opciones de Mutacion")
-		_expect(all_mut and all_legendary, "todas las opciones son Mutaciones legendarias")
-	_expect(hud.actions.back() == [0, 0], "sin reroll/veto durante la Mutacion")
-	hud.upgrade_card_selected.emit(1)
+	var pickup = loot.call("drop_mutation", self, Vector2(500, 500))
+	await get_tree().process_frame
+	_expect(pickup != null and is_instance_valid(pickup), "la mutacion se suelta como pickup")
+	_expect(not get_tree().paused, "soltar una mutacion no pausa la partida")
+
+	pickup.call("collect", player)
 	var got_mut := false
 	for id in player.applied:
 		if String(id).begins_with("mut_"):
 			got_mut = true
-	_expect(got_mut, "la Mutacion elegida se aplica al jugador")
-	_expect(not get_tree().paused, "tras la Mutacion la partida continua")
+	_expect(got_mut, "recoger la mutacion la aplica al jugador")
+	_expect(not get_tree().paused, "recoger una mutacion no pausa la partida")
 
-	# --- La Mutacion NO consume nivel: encadena con la subida pendiente -----------
-	player.level_up_requested.emit(3)
-	manager.call("grant_mutation")
-	# En pantalla esta la seleccion del nivel; al resolverla debe encadenar la Mutacion.
-	hud.upgrade_card_selected.emit(0)
-	_expect(hud.shown.size() == 4, "las selecciones pendientes se encadenan")
-	if hud.shown.size() >= 4:
-		_expect(hud.shown[3][0].get("card_type") == &"mutation",
-			"la Mutacion pendiente aparece tras la carta de nivel")
-	hud.upgrade_card_selected.emit(0)
-	_expect(not get_tree().paused, "cadena resuelta: sin pausas colgadas")
-
-	# El nivel consumido fue UNO por carta normal (weapon_damage x2 + 2 mutaciones).
-	var normal_cards: int = 0
-	var mutation_cards: int = 0
-	for id in player.applied:
-		if String(id).begins_with("mut_"):
-			mutation_cards += 1
-		else:
-			normal_cards += 1
-	_expect(normal_cards == 2 and mutation_cards == 2,
-		"2 cartas de nivel y 2 Mutaciones aplicadas (%d/%d)" % [normal_cards, mutation_cards])
-
-	get_tree().paused = false
+	# --- max_stacks: la misma mutacion no vuelve a salir --------------------------
+	var repeated := false
+	for _i in 12:
+		var again: PowerUpData = loot.call("roll_mutation")
+		if again != null and player.owned_powerups.has(again.effect_id()):
+			repeated = true
+	_expect(not repeated, "una mutacion ya recogida no vuelve a sortearse (max_stacks)")
 	print("")
 	print("TestQuickRunXP: %d checks, %d fallos" % [_checks, _failures.size()])
 	for f in _failures:

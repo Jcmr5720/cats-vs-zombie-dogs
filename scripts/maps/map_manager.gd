@@ -49,6 +49,10 @@ static var _selected_map_index: int = -1
 var _map: MapData
 ## Semilla efectiva del mundo de esta run (de GameFlow o fallback determinista).
 var _world_seed: int = 0
+## FASE 11: guion procedural de la run (evento central, mutacion dominante,
+## modificador del jefe, variante de apertura). Derivado de la semilla: misma
+## semilla + mismo mapa = mismo guion.
+var _run_script: RunScript
 var _grid: Node
 var _decoration: Node
 var _hud: Node
@@ -114,6 +118,11 @@ func get_active_map() -> MapData:
 	return _map
 
 
+## Guion procedural de la run (FASE 11). Puede ser null antes de aplicar el mapa.
+func get_run_script() -> RunScript:
+	return _run_script
+
+
 ## Fin de partida forzado por un sistema externo (PhaseDirector: derrota por
 ## limite absoluto de tiempo). Reusa el flujo unificado de recompensas/panel.
 func force_run_end(victory: bool) -> void:
@@ -139,6 +148,18 @@ func _apply_active_map() -> void:
 	if _map == null:
 		return
 	_world_seed = _resolve_world_seed()
+	# FASE 11: la semilla tambien decide el GUION de la partida (evento central,
+	# mutacion dominante, modificador del jefe, variante de apertura).
+	_run_script = RunScript.generate(_map, _world_seed)
+	# Telemetria de partida (apagada salvo RUN_TELEMETRY=1): el guion elegido es
+	# la cabecera con la que se comparan dos partidas.
+	RunTelemetry.reset()
+	RunTelemetry.note(&"map", _map.id)
+	RunTelemetry.note(&"world_seed", _world_seed)
+	RunTelemetry.note(&"central_event", _run_script.central_event)
+	RunTelemetry.note(&"dominant_mutation", _run_script.dominant_mutation)
+	RunTelemetry.note(&"boss_modifier", _run_script.boss_modifier)
+	RunTelemetry.note(&"opening_variant", _run_script.opening_variant)
 	_apply_visuals()
 	_apply_obstacles()
 	_apply_spawner_modifiers()
@@ -190,6 +211,10 @@ func _apply_visuals() -> void:
 func _apply_spawner_modifiers() -> void:
 	if not is_instance_valid(_enemy_spawner) or not _enemy_spawner.has_method("set_map_modifiers"):
 		return
+	# FASE 11: mutaciones elite del bioma + mutacion dominante del guion.
+	if _enemy_spawner.has_method("set_mutation_pool"):
+		var dominant: StringName = _run_script.dominant_mutation if _run_script != null else &""
+		_enemy_spawner.set_mutation_pool(_map.biome_mutations, dominant)
 	if _is_story_run():
 		# Modo Historia: la dificultad global (Facil..Extremo) sustituye a la Plaga.
 		var tier: Dictionary = StoryCampaign.get_difficulty(_story_tier())
@@ -272,6 +297,9 @@ func _apply_event_schedule() -> void:
 	# Jefe especifico del mapa (si lo define).
 	if is_instance_valid(_boss_spawner) and _map.boss_data != null:
 		_boss_spawner.set("default_boss_data", _map.boss_data)
+	# FASE 11: modificador del jefe elegido por la semilla.
+	if is_instance_valid(_boss_spawner) and _run_script != null:
+		_boss_spawner.set("run_boss_modifier", _run_script.boss_modifier)
 
 
 # --- Objetivos y victoria ----------------------------------------------------
@@ -359,6 +387,11 @@ func _finish_run(victory: bool) -> void:
 	if _run_ended:
 		return
 	_run_ended = true
+	# Resumen de telemetria de la partida (solo con RUN_TELEMETRY=1).
+	RunTelemetry.note(&"victory", victory)
+	if RunTelemetry.enabled:
+		print(RunTelemetry.report())
+		print(RunTelemetry.report_line())
 	var audio: Node = get_node_or_null("/root/AudioManager")
 	if audio != null:
 		if audio.has_method("play_sfx"):

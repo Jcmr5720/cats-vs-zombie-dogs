@@ -19,6 +19,11 @@ const REFRESH_INTERVALS: Dictionary = {
 	&"boss": 0.5,
 	&"miniboss": 0.5,
 	&"obstacles": 3.0,
+	# FASE 13: botin en el radar (cajas, armas del suelo, power-ups, nucleos).
+	# Cadencia relajada: el loot no se mueve.
+	&"pickups": 0.9,
+	&"weapon_pickups": 0.9,
+	&"map_interactables": 1.4,
 }
 
 var _cache: Dictionary = {}

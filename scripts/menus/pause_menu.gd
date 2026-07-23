@@ -36,11 +36,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	var mm: Node = get_tree().get_first_node_in_group("map_manager")
 	if mm != null and mm.has_method("is_run_ended") and mm.is_run_ended():
 		return
-	# No interferir con la selección de cartas (el árbol ya está en pausa por eso).
-	var hud: Node = get_tree().get_first_node_in_group("hud")
-	if hud != null and hud.has_method("is_selecting_upgrade") and hud.is_selecting_upgrade():
-		return
-
+	# FASE 12: ya no existe la seleccion de cartas, asi que la pausa del menu es la
+	# UNICA pausa del juego y no tiene con que competir.
 	if _is_open:
 		if _options_box.visible or _confirm_box.visible:
 			_show_root()
@@ -196,6 +193,13 @@ func _build_options() -> VBoxContainer:
 	v.visible = false
 	v.custom_minimum_size = Vector2(460, 0)
 	v.add_child(MenuTheme.make_title("Opciones rápidas", MenuTheme.FS_H2, MenuTheme.PURPLE))
+	# Punteria: es LO que un jugador quiere poder cambiar a mitad de partida, asi que
+	# vive tambien aqui y no solo en Opciones → Controles. El J2 solo en coop.
+	# El cambio se aplica al instante (Settings emite settings_changed y cada
+	# PlayerAimController se reconfigura): no hace falta reiniciar la partida.
+	v.add_child(_aim_row("Puntería J1", "player_1_aim_mode"))
+	if GameFlow != null and GameFlow.has_method("is_coop") and GameFlow.is_coop():
+		v.add_child(_aim_row("Puntería J2", "player_2_aim_mode"))
 	v.add_child(MenuTheme.make_setting_toggle("Pantalla completa", "fullscreen"))
 	v.add_child(MenuTheme.make_setting_toggle("Screen shake", "shake_enabled"))
 	v.add_child(MenuTheme.make_setting_toggle("Números de daño", "damage_numbers"))
@@ -209,6 +213,37 @@ func _build_options() -> VBoxContainer:
 	back.pressed.connect(_show_root)
 	v.add_child(back)
 	return v
+
+
+## Fila de punteria: etiqueta + segmentado Manual/Asistido/Automático ligado a
+## Settings. Mismo patron que el _choice_row de Opciones, compacto para la pausa.
+func _aim_row(title: String, key: String) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", MenuTheme.GAP_M)
+	var label := MenuTheme.make_label(title, MenuTheme.FS_BODY, MenuTheme.TEXT)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(label)
+	var current: String = "manual"
+	if _settings != null and _settings.has_method("get_value"):
+		current = str(_settings.get_value(key, "manual"))
+	var options: Array = [
+		{"id": "manual", "label": "Manual"},
+		{"id": "assist", "label": "Asistido"},
+		{"id": "auto", "label": "Auto"},
+	]
+	# holder: las lambdas de GDScript capturan los locales por valor al crearse.
+	var holder: Array = []
+	var seg := MenuTheme.make_segmented(options, current, func(id: Variant) -> void:
+		if _settings != null and _settings.has_method("set_value"):
+			_settings.set_value(key, id)
+		if not holder.is_empty():
+			MenuTheme.refresh_segmented(holder[0], id), MenuTheme.PURPLE)
+	holder.append(seg)
+	seg.custom_minimum_size = Vector2(200, 0)
+	seg.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(seg)
+	return row
 
 
 func _build_confirm() -> VBoxContainer:

@@ -20,6 +20,7 @@ accent_color = Color(1, 0.78, 0.2, 1)
 visual_scale = 1.0
 phase_thresholds = PackedFloat32Array(0.75, 0.5, 0.25)
 minion_classes = Array[StringName]([&"boss_exploder"])
+environment_rules = Array[StringName]([&"territory_marks"])
 elite_name = "Rottweiler Alfa Primigenio"
 spawn_time = 600.0
 difficulty_multiplier = 0.08

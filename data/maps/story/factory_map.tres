@@ -48,6 +48,15 @@ phase_weight_overrides = {
 &"tank_zombie_dog": 1.7,
 &"charger_zombie_dog": 1.5
 }
+biome_mutations = Array[StringName]([&"sobrecargado", &"chatarra", &"volatil"])
+dynamic_event_pool = Array[StringName]([&"steam_burst", &"freight_train", &"blackout"])
+opening_pack_id = &"zombie_dog"
+opening_pack_alt_id = &"pack_zombie_dog"
+opening_variety_id = &"runner_zombie_dog"
+opening_variety_alt_id = &"pup_zombie_dog"
+boss_modifier_pool = Array[StringName]([&"acorazado", &"invocador", &"veloz_alfa"])
+interactable_kind = &"production_line"
+interactable_times = PackedFloat32Array(40, 80, 120)
 boss_spawn_time = 0.0
 miniboss_times = PackedFloat32Array()
 duration_seconds = 300.0

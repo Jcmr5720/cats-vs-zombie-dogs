@@ -56,6 +56,21 @@ func _draw() -> void:
 			_draw_diamond(base, 7.5)
 		&"boss":
 			_draw_boss(base)
+		# --- Botin (FASE 13): una FORMA distinta por tipo, no solo un color ---
+		&"crate_weapon":
+			_draw_crate(base)
+		&"crate_supply":
+			_draw_supply(base)
+		&"crate_special":
+			_draw_faceted_diamond(base)
+		&"loot_weapon":
+			_draw_hollow_square(base)
+		&"loot_powerup":
+			_draw_triangle(base)
+		&"loot_mutation":
+			_draw_star(base, 5.5)
+		&"loot_core":
+			_draw_core(base)
 		_:
 			_draw_dot(base, 3.0)
 
@@ -93,6 +108,68 @@ func _draw_boss(base: Color) -> void:
 	# Cruz interior oscura (calavera abstracta, legible a 9 px).
 	draw_line(Vector2(-3.5, -3.5), Vector2(3.5, 3.5), Color(0.1, 0, 0, 0.9), 2.0)
 	draw_line(Vector2(3.5, -3.5), Vector2(-3.5, 3.5), Color(0.1, 0, 0, 0.9), 2.0)
+
+
+## --- Formas de botin (FASE 13) -------------------------------------------------
+
+## Caja de armas: cuadrado relleno con cruz de tablones.
+func _draw_crate(base: Color) -> void:
+	var h: float = 4.5
+	draw_rect(Rect2(-h - 1.2, -h - 1.2, (h + 1.2) * 2.0, (h + 1.2) * 2.0), Color(0, 0, 0, 0.55))
+	draw_rect(Rect2(-h, -h, h * 2.0, h * 2.0), base)
+	draw_line(Vector2(-h, -h), Vector2(h, h), Color(0, 0, 0, 0.6), 1.2)
+	draw_line(Vector2(h, -h), Vector2(-h, h), Color(0, 0, 0, 0.6), 1.2)
+
+
+## Caja de suministros: circulo con cruz de botiquin.
+func _draw_supply(base: Color) -> void:
+	draw_circle(Vector2.ZERO, 5.6, Color(0, 0, 0, 0.55))
+	draw_circle(Vector2.ZERO, 4.5, base)
+	draw_line(Vector2(0, -2.6), Vector2(0, 2.6), Color(0, 0, 0, 0.7), 1.4)
+	draw_line(Vector2(-2.6, 0), Vector2(2.6, 0), Color(0, 0, 0, 0.7), 1.4)
+
+
+## Caja especial: rombo con facetas.
+func _draw_faceted_diamond(base: Color) -> void:
+	_draw_diamond(base, 6.0)
+	draw_line(Vector2(0, -6), Vector2(0, 6), Color(0, 0, 0, 0.6), 1.0)
+
+
+## Arma en el suelo: cuadrado HUECO (silueta de caja vacia, se distingue del
+## cuadrado relleno de la caja de armas).
+func _draw_hollow_square(base: Color) -> void:
+	var h: float = 4.5
+	draw_rect(Rect2(-h, -h, h * 2.0, h * 2.0), Color(0, 0, 0, 0.6), false, 3.2)
+	draw_rect(Rect2(-h, -h, h * 2.0, h * 2.0), base, false, 1.8)
+
+
+## Mejora comun: triangulo pequeno hacia arriba.
+func _draw_triangle(base: Color) -> void:
+	var pts := PackedVector2Array([Vector2(0, -4.5), Vector2(4.0, 3.2), Vector2(-4.0, 3.2)])
+	draw_colored_polygon(pts, base)
+	var outline := pts.duplicate()
+	outline.append(pts[0])
+	draw_polyline(outline, Color(0, 0, 0, 0.7), 1.2)
+
+
+## Mutacion: estrella de 5 puntas.
+func _draw_star(base: Color, radius: float) -> void:
+	var pts := PackedVector2Array()
+	for i in 10:
+		var a: float = -PI * 0.5 + PI * float(i) / 5.0
+		var r: float = radius if i % 2 == 0 else radius * 0.45
+		pts.append(Vector2(cos(a), sin(a)) * r)
+	draw_colored_polygon(pts, base)
+	var outline := pts.duplicate()
+	outline.append(pts[0])
+	draw_polyline(outline, Color(0, 0, 0, 0.7), 1.0)
+
+
+## Nucleo de evolucion: anillo con punto central (orbita).
+func _draw_core(base: Color) -> void:
+	draw_circle(Vector2.ZERO, 6.2, Color(0, 0, 0, 0.55))
+	draw_arc(Vector2.ZERO, 4.8, 0.0, TAU, 16, base, 1.8)
+	draw_circle(Vector2.ZERO, 2.0, base)
 
 
 ## Flecha de borde: la entidad esta fuera del radar; apunta hacia su direccion.

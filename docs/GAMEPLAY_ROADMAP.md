@@ -24,10 +24,9 @@ ganchos que hacen decir "una partida más". Ordenada por impacto/esfuerzo.
 - `scripts/ui/hud.gd`: fila de acciones bajo las cartas («Otra tirada (n)»,
   «Vetar carta (n)» —modo veto: el siguiente clic en una carta la veta—).
   El panel tolera manos de menos de 3 cartas.
-- Mejoras permanentes nuevas (sumidero de Sardinas, solo Modo Historia):
-  `data/permanent_upgrades/lucky_paw.tres` (+1 reroll/run, 3 niveles) y
-  `picky_eater.tres` (+1 veto/run, 2 niveles). Efectos `reroll_per_run` /
-  `banish_per_run` leídos vía `MetaProgression.get_effect_total`.
+- ~~Mejoras permanentes `lucky_paw` (reroll) y `picky_eater` (veto).~~
+  **RETIRADAS en FASE 12**: sin cartas no hay reroll ni veto; los dos `.tres` y sus
+  efectos `reroll_per_run` / `banish_per_run` se eliminaron del catálogo.
 - Armas nuevas (pool 6 → 8, solo datos): `data/weapons/hairball_launcher.tres`
   (explosivo, dmg 14 / cd 1.6 / radio 90) y `claw_wave.tres` (boomerang,
   dmg 6 / cd 0.9 / pierce 4).

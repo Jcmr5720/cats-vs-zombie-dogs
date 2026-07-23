@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="PowerUpData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/loot/power_up_data.gd" id="1_pud"]
+
+[resource]
+script = ExtResource("1_pud")
+id = &"companion_damage"
+display_name = "Garras coordinadas"
+description = "Tus compañeros golpean más fuerte."
+category = &"companion"
+rarity = &"common"
+drop_weight = 1.0
+requires_companion = true
+affects = "Companeros"
+visual_color = Color(0.55, 1, 0.72, 1)
+icon_type = &"companion"

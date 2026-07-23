@@ -77,11 +77,18 @@ class StubMapManager:
 		return null
 
 
-class StubUpgrades:
+## FASE 12: el director ya NO reparte recompensas de jefe (las suelta el propio
+## jefe via LootDirector). El stub solo existe para cablear `loot_director_path` y
+## poder comprobar que el director no lo usa para premiar.
+class StubLoot:
 	extends Node
-	var mutations: int = 0
-	func grant_mutation() -> void:
-		mutations += 1
+	var drops: int = 0
+	func drop_mutation(_parent: Node, _pos: Vector2) -> Node2D:
+		drops += 1
+		return null
+	func drop_evolution_core(_parent: Node, _pos: Vector2) -> Node2D:
+		drops += 1
+		return null
 
 
 func _ready() -> void:
@@ -106,9 +113,9 @@ func _build_rig(suffix: String) -> Dictionary:
 	var map_mgr := StubMapManager.new()
 	map_mgr.name = "MapMgr" + suffix
 	add_child(map_mgr)
-	var upgrades := StubUpgrades.new()
-	upgrades.name = "Upgrades" + suffix
-	add_child(upgrades)
+	var loot := StubLoot.new()
+	loot.name = "Loot" + suffix
+	add_child(loot)
 
 	var director := Node.new()
 	director.name = "Director" + suffix
@@ -117,7 +124,7 @@ func _build_rig(suffix: String) -> Dictionary:
 	director.set("enemy_spawner_path", NodePath("../Spawner" + suffix))
 	director.set("boss_spawner_path", NodePath("../BossSpawner" + suffix))
 	director.set("map_manager_path", NodePath("../MapMgr" + suffix))
-	director.set("upgrade_manager_path", NodePath("../Upgrades" + suffix))
+	director.set("loot_director_path", NodePath("../Loot" + suffix))
 	add_child(director)
 
 	rig["spawner"] = spawner
@@ -125,7 +132,7 @@ func _build_rig(suffix: String) -> Dictionary:
 	rig["boss_spawner"] = boss_spawner
 	rig["hud"] = hud
 	rig["map"] = map_mgr
-	rig["upgrades"] = upgrades
+	rig["loot"] = loot
 	rig["director"] = director
 	return rig
 
@@ -187,9 +194,13 @@ func _run() -> void:
 	_expect(boss.elite_calls == 1, "transformacion elite pedida al jefe (4:15)")
 	var hud: StubHud = a["hud"]
 
-	# Mini-boss derrotado -> Mutacion garantizada.
+	# FASE 12: la recompensa del mini-jefe ya NO la reparte el director, la suelta
+	# el propio mini-jefe al morir (mini_boss._drop_reward -> LootDirector). Que el
+	# director no toque el loot es justo lo que hay que sostener aqui: si alguien
+	# vuelve a cablearlo, salen dos premios por un solo mini-jefe.
 	bs.miniboss_defeated.emit(null)
-	_expect((a["upgrades"] as StubUpgrades).mutations == 1, "Mutacion garantizada al caer el mini-boss")
+	_expect((a["loot"] as StubLoot).drops == 0,
+		"el director NO reparte recompensas de jefe (lo hace el propio jefe)")
 
 	# Perfil del mini-boss reduce la horda (intervalo mayor que la fase pesada).
 	var heavy_i: float = float(RunPhaseConfig.phase_profile(RunPhaseConfig.Phase.HEAVY_ENEMIES)["interval"])

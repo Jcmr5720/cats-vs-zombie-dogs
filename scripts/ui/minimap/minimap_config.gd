@@ -68,6 +68,32 @@ const RESCUE_COLOR := Color(1.0, 0.85, 0.3)
 const BG_COLOR := Color(0.045, 0.055, 0.085, 0.78)
 const BORDER_COLOR := Color(0.32, 0.36, 0.45, 0.9)
 
+# --- Botin (FASE 13) -------------------------------------------------------------
+## Cada tipo de botin usa FORMA + color propios (regla anti-daltonismo).
+const CRATE_WEAPON_COLOR := Color(0.95, 0.75, 0.35)
+const CRATE_SUPPLY_COLOR := Color(0.55, 0.85, 0.95)
+const CRATE_SPECIAL_COLOR := Color(0.85, 0.55, 1.0)
+const LOOT_WEAPON_COLOR := Color(1.0, 0.82, 0.4)
+const LOOT_POWERUP_COLOR := Color(0.55, 0.9, 1.0)
+const LOOT_MUTATION_COLOR := Color(0.95, 0.55, 1.0)
+const LOOT_CORE_COLOR := Color(0.85, 0.55, 1.0)
+## Los power-ups COMUNES solo aparecen si estan a esta distancia del jugador
+## (px de mundo): el radar no debe chivar todo el botin del mapa. Mutaciones,
+## nucleos, armas y cajas se muestran siempre que entren en el radar.
+const LOOT_COMMON_NEAR_RADIUS: float = 750.0
+## Tope de marcadores de botin por refresco (proteccion de nodos).
+const MAX_LOOT_MARKERS: int = 14
+## Leyenda (visible con el radar ampliado): [kind, color, etiqueta].
+const LEGEND_ENTRIES: Array = [
+	[&"crate_weapon", CRATE_WEAPON_COLOR, "Caja de armas"],
+	[&"crate_supply", CRATE_SUPPLY_COLOR, "Caja de suministros"],
+	[&"crate_special", CRATE_SPECIAL_COLOR, "Caja especial"],
+	[&"loot_weapon", LOOT_WEAPON_COLOR, "Arma en el suelo"],
+	[&"loot_powerup", LOOT_POWERUP_COLOR, "Mejora cercana"],
+	[&"loot_mutation", LOOT_MUTATION_COLOR, "Mutación"],
+	[&"loot_core", LOOT_CORE_COLOR, "Núcleo de evolución"],
+]
+
 ## Tamanos de punto (px del minimapa).
 const ENEMY_DOT: float = 3.0
 const ENEMY_ELITE_DOT: float = 5.0

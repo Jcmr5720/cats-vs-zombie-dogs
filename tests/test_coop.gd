@@ -12,6 +12,7 @@ extends Node2D
 ## 5) Revive por proximidad: P2 derribado + P1 cerca -> P2 vuelve a estar activo.
 
 const MAIN_LEVEL := "res://scenes/levels/MainLevel.tscn"
+const PowerUpPickupScript := preload("res://scripts/loot/power_up_pickup.gd")
 
 var _failures: Array[String] = []
 var _checks: int = 0
@@ -19,13 +20,13 @@ var _frames: int = 0
 var _level: Node
 var _p1: Node
 var _p2: Node
-var _panel: Node
 var _phase: String = "boot"
-var _resolve_tries: int = 0
 var _p2_xp_before: int = 0
 var _p1_xp_before_rescue: int = 0
 var _p1_level_before_rescue: int = 0
 var _defer_frames: int = 0
+## True mientras una fase-corrutina esta a medias (ver _process).
+var _busy: bool = false
 var _done: bool = false
 
 
@@ -41,17 +42,17 @@ func _ready() -> void:
 	var packed: PackedScene = load(MAIN_LEVEL)
 	_level = packed.instantiate()
 	add_child(_level)
-	# Este test valida el flujo coop de cartas (no la puerta de la primera tarjeta):
-	# se desactiva la puerta que enciende el PhaseDirector para no esperar 12 s.
-	var um: Node = _level.get_node_or_null("UpgradeManager")
-	if um != null and um.has_method("set_first_card_gate"):
-		um.call("set_first_card_gate", 0.0)
 
 
 func _process(_delta: float) -> void:
 	if _done:
 		return
 	_frames += 1
+	# Algunas fases son corrutinas (esperan un frame de proceso para que el pickup
+	# entre al arbol). Sin esta guarda, _process reentraria en la misma fase antes
+	# de que termine y soltaria pickups duplicados.
+	if _busy:
+		return
 	match _phase:
 		"boot":
 			if _frames >= 10:
@@ -64,8 +65,6 @@ func _process(_delta: float) -> void:
 			_check_xp_share()
 		"simultaneous":
 			_check_simultaneous()
-		"resolve_all":
-			_resolve_all_pending()
 		"revive_setup":
 			_setup_revive()
 		"revive_wait":
@@ -78,8 +77,6 @@ func _process(_delta: float) -> void:
 			_check_defer()
 		"defer_revive":
 			_wait_defer_revive()
-		"defer_resolve":
-			_resolve_defer_pending()
 
 
 func _check_structure() -> void:
@@ -129,36 +126,42 @@ func _collect_subviewports(node: Node, result: Array) -> void:
 		_collect_subviewports(child, result)
 
 
+## FASE 12: ya no hay panel de cartas ni pausa. Subir de nivel aplica su bonus
+## automatico al jugador que subio, y a nadie mas.
 func _check_p2_selection() -> void:
-	_panel = get_tree().get_first_node_in_group("coop_upgrade_panel")
-	_expect(_panel != null, "existe el panel coop de cartas")
-	if _panel == null:
-		_finish()
-		return
-	_expect(get_tree().paused, "la partida se pausa durante la seleccion")
-	_expect(bool(_panel.call("is_open", 2)), "el lado del J2 esta abierto")
-	_expect(not bool(_panel.call("is_open", 1)), "el lado del J1 NO esta abierto (no subio)")
+	_expect(not get_tree().paused, "subir de nivel NO pausa la partida")
 	_expect(int(_p1.get("level")) == 1, "el nivel del J1 no cambio (niveles independientes)")
 	_expect(int(_p2.get("level")) >= 2, "el J2 subio de nivel con su propia XP")
-	# Elige la primera carta del J2.
-	_panel.emit_signal("card_chosen", 2, 0)
 	_phase = "p2_choice"
 
 
 func _check_p2_applied() -> void:
-	_expect(int(_p2.get("upgrades_chosen")) >= 1, "la carta aplico al J2")
-	_expect(int(_p1.get("upgrades_chosen")) == 0, "la carta NO aplico al J1")
-	if not bool(_panel.call("is_open", 2)):
-		_expect(not get_tree().paused, "sin selecciones pendientes la partida se reanuda")
-		_p2_xp_before = int(_p2.get("experience"))
-		_p1.call("add_experience", 4)
-		_phase = "xp_share"
-	elif _frames > 240:
-		_fail("el lado del J2 sigue abierto tras elegir")
-		_finish()
-	else:
-		# Subio otra vez con la XP sobrante: resuelve la siguiente carta.
-		_panel.emit_signal("card_chosen", 2, 0)
+	_busy = true
+	# El bonus de nivel es del jugador que sube, igual que antes lo era su carta.
+	_expect(int(_p2.get("upgrades_chosen")) >= 1, "el bonus de nivel aplico al J2")
+	_expect(int(_p1.get("upgrades_chosen")) == 0, "el bonus de nivel NO aplico al J1")
+
+	# Un power-up del suelo lo cobra UN solo jugador: el primero que lo reclama.
+	# Es la guarda que impide que los dos cobren el mismo objeto el mismo frame.
+	# Lejos de ambos jugadores: si naciera a los pies del J2, el PickupArea de
+	# contacto podria cobrarlo en un tick de fisica ANTES del collect manual del
+	# test (carrera intermitente). El collect manual no depende de la distancia.
+	var data: PowerUpData = load("res://data/powerups/weapon_damage.tres") as PowerUpData
+	var pickup = PowerUpPickupScript.spawn(data, _level,
+		(_p2 as Node2D).global_position + Vector2(600, 600))
+	await get_tree().process_frame
+	var p2_before: int = int(_p2.get("upgrades_chosen"))
+	var p1_before: int = int(_p1.get("upgrades_chosen"))
+	_expect(bool(pickup.call("collect", _p2)), "el J2 recoge el power-up del suelo")
+	_expect(not bool(pickup.call("collect", _p1)),
+		"el J1 NO puede volver a cobrar el mismo power-up")
+	_expect(int(_p2.get("upgrades_chosen")) == p2_before + 1, "el power-up aplico al J2")
+	_expect(int(_p1.get("upgrades_chosen")) == p1_before, "el power-up NO aplico al J1")
+
+	_p2_xp_before = int(_p2.get("experience"))
+	_p1.call("add_experience", 4)
+	_phase = "xp_share"
+	_busy = false
 
 
 func _check_xp_share() -> void:
@@ -166,35 +169,19 @@ func _check_xp_share() -> void:
 	var gained: int = int(_p2.get("experience")) - _p2_xp_before
 	var leveled: bool = int(_p2.get("level")) > 2
 	_expect(gained == 2 or leveled, "el J2 recibio el 35%% de la XP del J1 (delta: %d)" % gained)
-	# Fase 4: ambos con cartas pendientes a la vez.
+	# Fase 4: ambos suben a la vez. Con loot en el suelo eso ya no abre nada.
 	_p1.call("add_experience", 40, true)
 	_p2.call("add_experience", 40, true)
 	_phase = "simultaneous"
 
 
+## FASE 12: dos subidas simultaneas no pausan ni encolan nada; cada jugador cobra
+## su bonus en el acto. Esta era la fase mas fragil del sistema de cartas coop.
 func _check_simultaneous() -> void:
-	_expect(get_tree().paused, "seleccion simultanea: partida pausada")
-	_expect(bool(_panel.call("is_open", 1)), "lado del J1 abierto")
-	_expect(bool(_panel.call("is_open", 2)), "lado del J2 abierto")
-	_phase = "resolve_all"
-
-
-func _resolve_all_pending() -> void:
-	_resolve_tries += 1
-	if _resolve_tries > 40:
-		_fail("no se pudieron resolver todas las cartas pendientes")
-		_finish()
-		return
-	var any_open: bool = false
-	if bool(_panel.call("is_open", 1)):
-		any_open = true
-		_panel.emit_signal("card_chosen", 1, 0)
-	if bool(_panel.call("is_open", 2)):
-		any_open = true
-		_panel.emit_signal("card_chosen", 2, 0)
-	if not any_open and not get_tree().paused:
-		_expect(int(_p1.get("upgrades_chosen")) >= 1, "el J1 aplico su propia carta")
-		_phase = "revive_setup"
+	_expect(not get_tree().paused, "dos subidas simultaneas NO pausan la partida")
+	_expect(int(_p1.get("upgrades_chosen")) >= 1, "el J1 aplico su propio bonus de nivel")
+	_expect(int(_p2.get("upgrades_chosen")) >= 1, "el J2 aplico su propio bonus de nivel")
+	_phase = "revive_setup"
 
 
 func _setup_revive() -> void:
@@ -252,19 +239,12 @@ func _wait_defer_invuln() -> void:
 		_phase = "defer_setup"
 
 
-## Fase 4/9: un jugador derribado con subidas PENDIENTES no abre cartas; se
-## difieren (sin perderse) y se ofrecen al revivir.
+## FASE 12: un jugador DERRIBADO no cobra botin. Antes esto se probaba con el
+## diferido de cartas pendientes; ahora la regla equivalente es que ni la XP ni un
+## power-up del suelo entran mientras estas en el suelo, y que nada pausa.
 func _setup_defer() -> void:
-	# XP directa para acumular 2+ niveles pendientes en el P2 (abre su panel).
-	_p2.call("add_experience", 400, true)
-	_expect(bool(_panel.call("is_open", 2)), "el J2 tiene su panel abierto (varios niveles)")
-	# Se derriba CON el panel abierto y resuelve una carta: la siguiente pendiente
-	# debe DIFERIRSE (no reabrir el panel de un derribado) y despausar la partida.
-	# La ventana de invulnerabilidad por golpe puede quedar congelada por la pausa
-	# del panel: se limpia para que el derribo del test sea determinista.
 	_p2.set("_damage_timer", 0.0)
 	_p2.call("take_damage", 9999)
-	_panel.emit_signal("card_chosen", 2, 0)
 	_defer_frames = 0
 	_phase = "defer_check"
 
@@ -273,43 +253,47 @@ func _check_defer() -> void:
 	_defer_frames += 1
 	if _defer_frames < 3:
 		return
-	_expect(bool(_p2.call("is_downed")), "el J2 esta derribado con niveles pendientes")
-	_expect(not bool(_panel.call("is_open", 2)), "el panel del J2 se cierra al estar derribado")
-	_expect(not get_tree().paused, "la partida NO queda congelada por pendientes diferidos")
+	_busy = true
+	_expect(bool(_p2.call("is_downed")), "el J2 esta derribado")
+	_expect(not get_tree().paused, "un derribo NO congela la partida")
+
+	# Ni XP ni power-ups entran a un derribado.
+	var xp_before: int = int(_p2.get("experience"))
+	var upgrades_before: int = int(_p2.get("upgrades_chosen"))
+	_p2.call("add_experience", 400, true)
+	_expect(int(_p2.get("experience")) == xp_before, "un derribado no acumula XP")
+
+	var data: PowerUpData = load("res://data/powerups/player_speed.tres") as PowerUpData
+	var pickup = PowerUpPickupScript.spawn(data, _level, (_p2 as Node2D).global_position)
+	await get_tree().process_frame
+	# El area de recoleccion del jugador ignora a los derribados; el pickup sigue
+	# ahi para quien pueda cogerlo.
+	_expect(int(_p2.get("upgrades_chosen")) == upgrades_before,
+		"un derribado no cobra el power-up que tiene encima")
+	if is_instance_valid(pickup):
+		pickup.queue_free()
 	_phase = "defer_revive"
+	_busy = false
 
 
 func _wait_defer_revive() -> void:
 	_defer_frames += 1
 	(_p1 as Node2D).global_position = (_p2 as Node2D).global_position + Vector2(40, 0)
 	if bool(_p2.call("is_active")):
+		_busy = true
 		_expect(true, "el J2 revivio de nuevo")
-		_defer_frames = 0
-		_phase = "defer_resolve"
+		# Ya activo, vuelve a cobrar normalmente.
+		var upgrades_before: int = int(_p2.get("upgrades_chosen"))
+		var data: PowerUpData = load("res://data/powerups/player_speed.tres") as PowerUpData
+		var pickup = PowerUpPickupScript.spawn(data, _level, (_p2 as Node2D).global_position)
+		await get_tree().process_frame
+		pickup.call("collect", _p2)
+		_expect(int(_p2.get("upgrades_chosen")) == upgrades_before + 1,
+			"tras revivir vuelve a cobrar botin")
+		_finish()
 		return
 	if _defer_frames > 700:
 		_fail("el J2 no revivio en la fase de diferido")
-		_finish()
-
-
-func _resolve_defer_pending() -> void:
-	_defer_frames += 1
-	if _defer_frames == 3:
-		_expect(bool(_panel.call("is_open", 2)), "al revivir se reabren las cartas pendientes del J2")
-	if _defer_frames < 3:
-		return
-	# Sin "Pasar" (Fase correccion): se resuelve eligiendo carta en ambos lados.
-	if bool(_panel.call("is_open", 2)):
-		_panel.emit_signal("card_chosen", 2, 0)
-		return
-	if bool(_panel.call("is_open", 1)):
-		_panel.emit_signal("card_chosen", 1, 0)
-		return
-	if not get_tree().paused:
-		_expect(true, "todas las cartas diferidas se resolvieron sin perder niveles")
-		_finish()
-	elif _defer_frames > 120:
-		_fail("la partida sigue pausada tras resolver las cartas diferidas")
 		_finish()
 
 

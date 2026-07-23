@@ -42,6 +42,10 @@ func _process(_delta: float) -> void:
 				_p1 = p
 			else:
 				_p2 = p
+			# El soak no da input: se fuerza el auto-apuntado para que el combate
+			# medido sea el de siempre (la mira manual apuntaria a un punto fijo).
+			if p.has_method("set_aim_mode"):
+				p.set_aim_mode(&"auto")
 
 	# Deriva de movimiento: los jugadores se separan y se juntan en ciclos para
 	# ejercitar spawns lejanos, iman de orbes y flechas de companero.
@@ -59,12 +63,17 @@ func _process(_delta: float) -> void:
 		if _p2.has_method("is_downed") and _p2.is_downed():
 			_p1.global_position = _p2.global_position + Vector2(40, 0)
 
-	# Auto-resuelve cartas pendientes eligiendo carta (ya no existe "Pasar").
-	var panel: Node = get_tree().get_first_node_in_group("coop_upgrade_panel")
-	if panel != null and _frames % 3 == 0:
-		for pid in [1, 2]:
-			if bool(panel.call("is_open", pid)):
-				panel.emit_signal("card_chosen", pid, (_frames / 3) % 3)
+	# FASE 12: ya no hay cartas. Se recoge el botín del suelo para que el soak coop
+	# siga ejercitando la progresión real (power-ups + armas).
+	if _frames % 3 == 0:
+		for pickup in get_tree().get_nodes_in_group("pickups"):
+			if not is_instance_valid(pickup) or not pickup.has_method("collect"):
+				continue
+			if not pickup.has_method("is_claimed") or pickup.is_claimed():
+				continue
+			var p: Node = get_tree().get_first_node_in_group("player")
+			if p != null:
+				pickup.call("collect", p)
 
 	# Muestreo de metricas (tras el warmup inicial de carga de escena).
 	if _frames > 120:

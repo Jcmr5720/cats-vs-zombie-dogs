@@ -189,6 +189,59 @@ func _run() -> void:
 		_check(proj_dir.y > 0.02, "el proyectil real sale liderado hacia el movimiento del runner")
 	_check(is_instance_valid(runner), "stub valido (sanidad)")
 
+	# Se retira el jugador automatico antes de las pruebas de punteria manual, para
+	# que su pistola no siga disparando y ensuciando el grupo "projectiles".
+	player.queue_free()
+	_clear()
+	for p in get_tree().get_nodes_in_group("projectiles"):
+		p.queue_free()
+	await get_tree().physics_frame
+
+	# --- 9) Cono de asistencia: solo entran los enemigos dentro del angulo ----------
+	var front := _make(Vector2(200, 0))                # 0 grados: dentro
+	var edge := _make(Vector2(200, 60))                # ~17 grados: dentro
+	var side := _make(Vector2(200, 200))               # 45 grados: fuera
+	var behind := _make(Vector2(-200, 0))              # 180 grados: fuera
+	cands = Targeting.gather_candidates(get_tree().get_nodes_in_group("enemies"), origin, origin, 600.0)
+	var cone: Array[Dictionary] = Targeting.filter_cone(cands, origin, Vector2.RIGHT, 22.0)
+	var cone_enemies: Array = []
+	for c in cone:
+		cone_enemies.append(c["enemy"])
+	_check(cone_enemies.has(front) and cone_enemies.has(edge), "el cono conserva lo que esta al frente")
+	_check(not cone_enemies.has(side) and not cone_enemies.has(behind), "el cono descarta los laterales y la espalda")
+	_check(cone.size() == 2, "el cono deja exactamente 2 candidatos (%d)" % cone.size())
+	_check(cone.size() < 2 or float(cone[0]["dist_sq"]) <= float(cone[1]["dist_sq"]),
+		"el cono conserva el orden por distancia")
+	# El angulo es un PARAMETRO: uno mas ancho admite al lateral de 45 grados.
+	_check(Targeting.filter_cone(cands, origin, Vector2.RIGHT, 50.0).size() == 3,
+		"el medio angulo del cono es configurable (50 grados admite el lateral)")
+	# Un cono de 0 grados (asistencia "off") no deja pasar nada lateral.
+	_check(Targeting.filter_cone(cands, origin, Vector2.RIGHT, 0.0).size() <= 1,
+		"con asistencia off el cono no admite correccion lateral")
+	# Con mira nula no hay nada que recortar.
+	_check(Targeting.filter_cone(cands, origin, Vector2.ZERO, 22.0).size() == cands.size(),
+		"sin direccion de mira el cono no filtra")
+	_clear()
+	await get_tree().physics_frame
+
+	# --- 10) Haz del laser: el primero que cruza la linea, nunca el de la espalda ---
+	var far_in_line := _make(Vector2(400, 10))
+	var near_in_line := _make(Vector2(180, -12))
+	var off_line := _make(Vector2(200, 300))
+	var back_in_line := _make(Vector2(-150, 0))
+	cands = Targeting.gather_candidates(get_tree().get_nodes_in_group("enemies"), origin, origin, 700.0)
+	var beam_hit: Node2D = Targeting.pick_first_in_beam(cands, origin, Vector2.RIGHT, 38.0)
+	_check(beam_hit == near_in_line, "el haz alcanza al primero de la linea, no al de mas atras")
+	_check(is_instance_valid(far_in_line) and is_instance_valid(off_line), "stubs validos (sanidad)")
+	# Apuntando a la espalda alcanza al de atras, no a los de delante.
+	beam_hit = Targeting.pick_first_in_beam(cands, origin, Vector2.LEFT, 38.0)
+	_check(beam_hit == back_in_line, "apuntando atras el haz alcanza al de atras")
+	# Nadie en la linea (hacia abajo): sin impacto.
+	beam_hit = Targeting.pick_first_in_beam(cands, origin, Vector2.DOWN, 38.0)
+	_check(beam_hit == null, "sin nadie en la linea el haz no alcanza a ninguno")
+	_clear()
+	await get_tree().physics_frame
+
 	# --- Resultado -------------------------------------------------------------------
 	print("test_targeting: %d checks, %d fallos" % [_checks, _failures.size()])
 	if _failures.is_empty():

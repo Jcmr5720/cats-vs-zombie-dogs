@@ -1,10 +1,13 @@
 extends Node2D
-## Pruebas del rework de adictividad (agencia en el level-up + evoluciones).
-## Se ejecuta como ESCENA para contar con autoloads reales:
+## Pruebas de armas y evoluciones. Se ejecuta como ESCENA para contar con
+## autoloads reales:
 ##   godot --headless --path . res://tests/TestUpgrades.tscn
-## Valida: reroll/banish (sin salto), filtrado de vetados, las 8 armas del registry,
-## carta de evolucion (requisitos + tope), evolve_weapon conserva el slot,
-## laser en cadena y zona con atraccion.
+## Valida: las 8 armas del registry, la evolucion de punta a punta (requisito de
+## power-up + conservacion del slot), el laser en cadena y la zona con atraccion.
+##
+## FASE 12: los bloques de cartas (reroll, banish, no-skip) desaparecieron con el
+## UpgradeManager. Su sustituto —el loot del suelo— se prueba en test_ground_loot
+## y test_loot_drops.
 
 var _failures: Array[String] = []
 var _checks: int = 0
@@ -21,6 +24,7 @@ class StubPlayer:
 	var speed: float = 250.0
 	var xp_gained: int = 0
 	var applied_upgrades: Array = []
+	var owned_powerups: Array[StringName] = []
 	var _wm: Node2D
 
 	func _init() -> void:
@@ -38,6 +42,8 @@ class StubPlayer:
 
 	func apply_upgrade(upgrade_id: StringName, _include_shared: bool = true) -> void:
 		applied_upgrades.append(upgrade_id)
+		if not owned_powerups.has(upgrade_id):
+			owned_powerups.append(upgrade_id)
 
 	func get_last_facing_direction() -> Vector2:
 		return Vector2.RIGHT
@@ -46,28 +52,13 @@ class StubPlayer:
 		return _wm
 
 
-## HUD minimo: captura las llamadas del UpgradeManager sin UI real.
+## HUD minimo: el WeaponManager le avisa de armas nuevas y mejoras.
 class StubHud:
 	extends Node
-	signal upgrade_card_selected(card_index: int)
-	signal reroll_requested
-	signal banish_requested(card_index: int)
-	var shown_cards: Array = []
-	var show_count: int = 0
-	var actions_state: Array = []
+	var messages: Array = []
 
-	func show_upgrade_selection(cards: Array[Dictionary]) -> void:
-		shown_cards = cards.duplicate()
-		show_count += 1
-
-	func hide_upgrade_selection() -> void:
-		pass
-
-	func set_upgrade_actions(rerolls: int, banishes: int) -> void:
-		actions_state = [rerolls, banishes]
-
-	func show_event_message(_text: String) -> void:
-		pass
+	func show_event_message(text: String) -> void:
+		messages.append(text)
 
 
 func _ready() -> void:
@@ -102,15 +93,6 @@ func _run() -> void:
 
 	var hud := StubHud.new()
 	add_child(hud)
-
-	var um := Node.new()
-	um.set_script(load("res://scripts/systems/upgrade_manager.gd"))
-	add_child(um)
-	um.set("_player", player)
-	um.set("_hud", hud)
-	hud.upgrade_card_selected.connect(um._on_upgrade_card_selected)
-	hud.reroll_requested.connect(um.request_reroll)
-	hud.banish_requested.connect(um.request_banish)
 	await get_tree().physics_frame
 
 	# --- 1) Las 8 armas del registry cargan --------------------------------------
@@ -120,88 +102,26 @@ func _run() -> void:
 		var data = load(path)
 		_check(data != null, "carga %s" % path)
 
-	# --- 2) Seleccion, reroll, banish y NO-skip ----------------------------------
-	um._on_player_level_up_requested(2)
-	_check(bool(um.get("_selection_active")), "seleccion activa al subir de nivel")
-	_check(hud.shown_cards.size() == 3, "se muestran 3 cartas")
-	_check(hud.actions_state.size() == 2 and hud.actions_state[0] == 1 and hud.actions_state[1] == 1,
-		"contadores base: 1 reroll / 1 banish")
-
-	var before_reroll: Array = hud.shown_cards.duplicate()
-	um.request_reroll()
-	_check(int(um.get("_rerolls_left")) == 0, "reroll consumido")
-	_check(hud.show_count >= 2, "reroll re-muestra cartas")
-	um.request_reroll()
-	_check(hud.show_count == 2, "sin rerolls restantes no re-sortea")
-
-	# Banish: veta la primera carta y no debe volver a aparecer.
-	var ban_card: Dictionary = hud.shown_cards[0]
-	var ban_id: StringName = um._card_ban_id(ban_card)
-	um.request_banish(0)
-	_check(int(um.get("_banishes_left")) == 0, "banish consumido")
-	var banished: Array = um.get("_banished_ids")
-	_check(banished.has(ban_id), "id vetado registrado (%s)" % ban_id)
-	var reappears: bool = false
-	for _i in 12:
-		for card in um._draw_cards(3):
-			if um._card_ban_id(card) == ban_id:
-				reappears = true
-	_check(not reappears, "el id vetado no reaparece en 12 sorteos")
-
-	# Sin salto (Fase correccion): no existe request_skip ni recompensa por omitir.
-	# La seleccion sigue activa hasta elegir una carta valida.
-	player.current_health = 50
-	var xp_before_choice: int = player.xp_gained
-	_check(not um.has_method("request_skip"), "request_skip ya no existe")
-	_check(not hud.has_signal("skip_requested") or true, "stub sin señal de skip")
-	_check(bool(um.get("_selection_active")), "la seleccion sigue activa (no hay forma de saltarla)")
-	hud.upgrade_card_selected.emit(0)
-	_check(not bool(um.get("_selection_active")), "elegir una carta cierra la seleccion")
-	_check(not get_tree().paused, "elegir despausa el juego")
-	_check(player.xp_gained == xp_before_choice, "elegir no regala XP extra")
-	_check(player.current_health == 50 or player.applied_upgrades.has(&"max_health"),
-		"sin cura de compensacion (solo cambia la vida si la carta era de vida)")
-	_check(player.applied_upgrades.size() >= 1, "la mejora elegida se aplico")
-
-	# --- 3) Evolucion: requisitos, carta legendaria y swap ------------------------
-	# Sube la pistola inicial a nivel maximo.
+	# --- 2) Evolucion via nucleo de jefe (FASE 12) -------------------------------
+	# Ya no hay cartas: la evolucion la dispara WeaponManager.evolve_best_weapon(),
+	# que valida nivel maximo + power-up requerido + tope por partida. El detalle
+	# fino de esa logica vive en test_ground_loot; aqui solo se comprueba que el
+	# arma inicial evoluciona de punta a punta.
 	var pistol: Node2D = wm.get_weapon(&"cat_pistol")
 	_check(pistol != null, "el arma inicial existe")
 	while not pistol.is_max_level():
 		wm.level_up_weapon(&"cat_pistol")
 	_check(pistol.is_max_level(), "pistola a nivel maximo")
 
-	# Sin el stat requisito NO debe aparecer la carta de evolucion.
-	var found_evo: bool = false
-	for card in um._build_candidates():
-		if card.get("card_type", &"") == &"weapon_evolution":
-			found_evo = true
-	_check(not found_evo, "sin requisito no hay carta de evolucion")
+	player.owned_powerups.clear()
+	_check(not wm.evolve_best_weapon(), "sin el power-up requerido no evoluciona")
 
-	# Con el requisito (extra_projectile) debe aparecer, con rareza legendaria.
-	um._apply_card({"card_type": &"stat", "id": &"extra_projectile"})
-	var evo_card: Dictionary = {}
-	for card in um._build_candidates():
-		if card.get("card_type", &"") == &"weapon_evolution":
-			evo_card = card
-	_check(not evo_card.is_empty(), "carta de evolucion disponible con requisito")
-	_check(evo_card.get("rarity", &"") == &"legendary", "carta de evolucion legendaria")
-
-	# Con peso 60 debe salir practicamente siempre en la mano de 3.
-	var evo_in_hand: int = 0
-	for _i in 10:
-		for card in um._draw_cards(3):
-			if card.get("card_type", &"") == &"weapon_evolution":
-				evo_in_hand += 1
-	_check(evo_in_hand >= 9, "la carta de evolucion sale garantizada (%d/10)" % evo_in_hand)
-
-	# Aplicar la evolucion: reemplaza el arma conservando el conteo.
+	player.owned_powerups.append(&"extra_projectile")
 	var count_before: int = wm.get_weapon_count()
-	um._apply_card(evo_card)
+	_check(wm.evolve_best_weapon(), "con el power-up requerido evoluciona")
 	_check(wm.get_weapon_count() == count_before, "la evolucion conserva el numero de armas")
 	_check(wm.has_weapon(&"gatling_meow"), "el arma evolucionada esta en juego")
 	_check(not wm.has_weapon(&"cat_pistol"), "el arma base fue reemplazada")
-	_check(int(um.get("_evolutions_done")) == 1, "contador de evoluciones avanzo")
 
 	# El arma base evolucionada no se re-ofrece como "nueva".
 	var reoffered: bool = false
@@ -210,21 +130,11 @@ func _run() -> void:
 			reoffered = true
 	_check(not reoffered, "la base evolucionada no se re-ofrece como arma nueva")
 
-	# Tope de evoluciones por run.
-	um.set("_evolutions_done", um.MAX_EVOLUTIONS_PER_RUN)
+	# --- 3) Laser en cadena (Rayo Prisma) ----------------------------------------
 	wm.add_weapon(load("res://data/weapons/laser_pointer.tres"))
 	var laser: Node2D = wm.get_weapon(&"laser_pointer")
 	while not laser.is_max_level():
 		wm.level_up_weapon(&"laser_pointer")
-	um._apply_card({"card_type": &"stat", "id": &"weapon_damage"})
-	var evo_after_cap: bool = false
-	for card in um._build_candidates():
-		if card.get("card_type", &"") == &"weapon_evolution":
-			evo_after_cap = true
-	_check(not evo_after_cap, "tope de %d evoluciones respetado" % um.MAX_EVOLUTIONS_PER_RUN)
-	um.set("_evolutions_done", 1)
-
-	# --- 4) Laser en cadena (Rayo Prisma) ----------------------------------------
 	# Evoluciona el laser directamente via WeaponManager y coloca 3 enemigos.
 	var enemies: Array[Node2D] = []
 	for i in 3:

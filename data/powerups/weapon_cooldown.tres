@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="PowerUpData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/loot/power_up_data.gd" id="1_pud"]
+
+[resource]
+script = ExtResource("1_pud")
+id = &"weapon_cooldown"
+display_name = "Reflejos rapidos"
+description = "Tus armas disparan más rápido."
+category = &"stat"
+rarity = &"rare"
+drop_weight = 0.42
+affects = "Armas"
+visual_color = Color(0.7, 0.75, 1, 1)
+icon_type = &"clock"

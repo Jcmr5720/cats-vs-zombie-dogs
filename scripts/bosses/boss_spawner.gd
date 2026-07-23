@@ -21,6 +21,10 @@ signal miniboss_defeated(data: BossData)
 @export var default_boss_data: BossData
 @export var default_miniboss_data: BossData
 
+## FASE 11: modificador del jefe elegido por la semilla (RunScript.boss_modifier).
+## Lo fija MapManager al aplicar el mapa; se aplica tras configure().
+var run_boss_modifier: StringName = &""
+
 var _player: Node2D
 var _hud: Node
 var _enemy_spawner: Node
@@ -51,6 +55,20 @@ func spawn_miniboss(data: BossData = null) -> Node2D:
 	miniboss.call("configure", resolved, _difficulty())
 	if miniboss.has_signal("died"):
 		miniboss.connect("died", Callable(self, "_on_miniboss_died"))
+	# FASE 2 (Barrio): el mini-jefe no es "el mismo con mas vida". En mapas de
+	# territorio llega ESCOLTADO, y la escolta entra por dos bocas de calle
+	# distintas: el jugador tiene que resolver un embudo, no un saco de vida.
+	# Cantidad corta a proposito (la presion la da el reparto, no el numero).
+	# La escolta la decide el MAPA (es identidad de mapa, no del mini-jefe: el
+	# mismo bulldog llega solo en el Parque y escoltado en el Barrio).
+	var manager: Node = get_tree().get_first_node_in_group("map_manager")
+	var active_map = manager.get_active_map() if is_instance_valid(manager) \
+		and manager.has_method("get_active_map") else null
+	if active_map != null and active_map.get("interactable_kind") == &"howl_post":
+		var spawner: Node = get_tree().get_first_node_in_group("enemy_spawner")
+		if is_instance_valid(spawner) and spawner.has_method("spawn_pack_urban"):
+			spawner.spawn_pack_urban(&"pack_zombie_dog", 3, 2)
+			RunTelemetry.count(&"miniboss_urban_escorts")
 	_announce("Mini-jefe: %s" % resolved.display_name)
 	Feedback.shake(0.3)
 	Feedback.hit_effect(miniboss.global_position, resolved.accent_color, 0.8, 4.0)
@@ -71,6 +89,9 @@ func spawn_boss(data: BossData = null) -> Node2D:
 	boss.global_position = _spawn_position(620.0)
 	get_parent().add_child(boss)
 	boss.call("configure", resolved, _difficulty())
+	# FASE 11: modificador de guion de la semilla (veloz_alfa/invocador/...).
+	if run_boss_modifier != &"" and boss.has_method("apply_run_modifier"):
+		boss.call("apply_run_modifier", run_boss_modifier)
 	if boss.has_signal("health_changed"):
 		boss.connect("health_changed", Callable(self, "_on_boss_health_changed"))
 	if boss.has_signal("died"):
@@ -152,6 +173,20 @@ func _spawn_position(distance: float) -> Vector2:
 	if not is_instance_valid(_player):
 		_player = get_node_or_null(player_path)
 	var origin: Vector2 = _player.global_position if is_instance_valid(_player) else Vector2.ZERO
+	# FASE 2: el jefe/mini-jefe ENTRA POR LA CALLE. Antes salia en un angulo al
+	# azar, lo que podia meterlo dentro de una manzana y hacia que su llegada no
+	# se leyera como parte del mapa. Si no hay geometria util, se conserva el
+	# reparto radial de siempre.
+	var manager: Node = get_tree().get_first_node_in_group("map_manager")
+	if is_instance_valid(manager) and manager.has_method("get_world_seed"):
+		var map = manager.get_active_map() if manager.has_method("get_active_map") else null
+		if map != null:
+			var world_seed: int = manager.get_world_seed()
+			var accesses := MapGeometry.approach_points(world_seed, map.biome, origin, distance, 4)
+			for point in accesses:
+				if MapGeometry.is_open_ground(world_seed, map.biome, point) \
+						and MapGeometry.is_clear(self, point, 60.0):
+					return point
 	return origin + Vector2.RIGHT.rotated(randf() * TAU) * distance
 
 

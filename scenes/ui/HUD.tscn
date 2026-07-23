@@ -240,193 +240,6 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.9, 0.1, 0.12, 0)
 
-[node name="UpgradePanel" type="Control" parent="."]
-visible = false
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-
-[node name="Background" type="ColorRect" parent="UpgradePanel"]
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-color = Color(0.04, 0.05, 0.07, 0.86)
-
-[node name="Center" type="CenterContainer" parent="UpgradePanel"]
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-
-[node name="Content" type="VBoxContainer" parent="UpgradePanel/Center"]
-layout_mode = 2
-theme_override_constants/separation = 18
-
-[node name="Title" type="Label" parent="UpgradePanel/Center/Content"]
-layout_mode = 2
-theme_type_variation = &"PanelTitle"
-text = "Elige una mejora"
-horizontal_alignment = 1
-
-[node name="Cards" type="HBoxContainer" parent="UpgradePanel/Center/Content"]
-layout_mode = 2
-theme_override_constants/separation = 16
-alignment = 1
-
-[node name="Card1" type="Button" parent="UpgradePanel/Center/Content/Cards"]
-custom_minimum_size = Vector2(224, 214)
-layout_mode = 2
-text = ""
-
-[node name="Margin" type="MarginContainer" parent="UpgradePanel/Center/Content/Cards/Card1"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 14.0
-offset_top = 14.0
-offset_right = -14.0
-offset_bottom = -14.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-
-[node name="Content" type="VBoxContainer" parent="UpgradePanel/Center/Content/Cards/Card1/Margin"]
-layout_mode = 2
-theme_override_constants/separation = 6
-
-[node name="Icon" type="Label" parent="UpgradePanel/Center/Content/Cards/Card1/Margin/Content"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 46
-text = "✦"
-horizontal_alignment = 1
-
-[node name="Title" type="Label" parent="UpgradePanel/Center/Content/Cards/Card1/Margin/Content"]
-layout_mode = 2
-theme_type_variation = &"CardTitle"
-text = "Carta 1"
-horizontal_alignment = 1
-
-[node name="Description" type="Label" parent="UpgradePanel/Center/Content/Cards/Card1/Margin/Content"]
-layout_mode = 2
-theme_type_variation = &"CardDescription"
-theme_override_colors/font_color = Color(0.82, 0.86, 0.92, 1)
-text = "Efecto"
-autowrap_mode = 3
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="Meta" type="Label" parent="UpgradePanel/Center/Content/Cards/Card1/Margin/Content"]
-layout_mode = 2
-theme_type_variation = &"CardMeta"
-text = "STAT · COMUN"
-horizontal_alignment = 1
-
-[node name="Card2" type="Button" parent="UpgradePanel/Center/Content/Cards"]
-custom_minimum_size = Vector2(224, 214)
-layout_mode = 2
-text = ""
-
-[node name="Margin" type="MarginContainer" parent="UpgradePanel/Center/Content/Cards/Card2"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 14.0
-offset_top = 14.0
-offset_right = -14.0
-offset_bottom = -14.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-
-[node name="Content" type="VBoxContainer" parent="UpgradePanel/Center/Content/Cards/Card2/Margin"]
-layout_mode = 2
-theme_override_constants/separation = 6
-
-[node name="Icon" type="Label" parent="UpgradePanel/Center/Content/Cards/Card2/Margin/Content"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 46
-text = "✦"
-horizontal_alignment = 1
-
-[node name="Title" type="Label" parent="UpgradePanel/Center/Content/Cards/Card2/Margin/Content"]
-layout_mode = 2
-theme_type_variation = &"CardTitle"
-text = "Carta 2"
-horizontal_alignment = 1
-
-[node name="Description" type="Label" parent="UpgradePanel/Center/Content/Cards/Card2/Margin/Content"]
-layout_mode = 2
-theme_type_variation = &"CardDescription"
-theme_override_colors/font_color = Color(0.82, 0.86, 0.92, 1)
-text = "Efecto"
-autowrap_mode = 3
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="Meta" type="Label" parent="UpgradePanel/Center/Content/Cards/Card2/Margin/Content"]
-layout_mode = 2
-theme_type_variation = &"CardMeta"
-text = "STAT · COMUN"
-horizontal_alignment = 1
-
-[node name="Card3" type="Button" parent="UpgradePanel/Center/Content/Cards"]
-custom_minimum_size = Vector2(224, 214)
-layout_mode = 2
-text = ""
-
-[node name="Margin" type="MarginContainer" parent="UpgradePanel/Center/Content/Cards/Card3"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 14.0
-offset_top = 14.0
-offset_right = -14.0
-offset_bottom = -14.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-
-[node name="Content" type="VBoxContainer" parent="UpgradePanel/Center/Content/Cards/Card3/Margin"]
-layout_mode = 2
-theme_override_constants/separation = 6
-
-[node name="Icon" type="Label" parent="UpgradePanel/Center/Content/Cards/Card3/Margin/Content"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 46
-text = "✦"
-horizontal_alignment = 1
-
-[node name="Title" type="Label" parent="UpgradePanel/Center/Content/Cards/Card3/Margin/Content"]
-layout_mode = 2
-theme_type_variation = &"CardTitle"
-text = "Carta 3"
-horizontal_alignment = 1
-
-[node name="Description" type="Label" parent="UpgradePanel/Center/Content/Cards/Card3/Margin/Content"]
-layout_mode = 2
-theme_type_variation = &"CardDescription"
-theme_override_colors/font_color = Color(0.82, 0.86, 0.92, 1)
-text = "Efecto"
-autowrap_mode = 3
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="Meta" type="Label" parent="UpgradePanel/Center/Content/Cards/Card3/Margin/Content"]
-layout_mode = 2
-theme_type_variation = &"CardMeta"
-text = "STAT · COMUN"
-horizontal_alignment = 1
-
 [node name="VictoryPanel" type="Control" parent="."]
 visible = false
 anchors_preset = 15
@@ -494,7 +307,7 @@ text = "Detalles"
 layout_mode = 2
 theme_type_variation = &"HudSecondary"
 theme_override_colors/font_color = Color(0.8, 0.86, 0.9, 1)
-text = "R Reintentar   ·   M Mejoras   ·   ESC Menu"
+text = "R Reintentar   Â·   M Mejoras   Â·   ESC Menu"
 horizontal_alignment = 1
 
 [node name="GameOverPanel" type="Control" parent="."]
@@ -564,5 +377,5 @@ text = "Detalles"
 layout_mode = 2
 theme_type_variation = &"HudSecondary"
 theme_override_colors/font_color = Color(0.8, 0.86, 0.9, 1)
-text = "R Reintentar   ·   M Mejoras   ·   ESC Menu"
+text = "R Reintentar   Â·   M Mejoras   Â·   ESC Menu"
 horizontal_alignment = 1

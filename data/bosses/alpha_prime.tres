@@ -20,6 +20,7 @@ accent_color = Color(0.5, 1, 0.45, 1)
 visual_scale = 1.25
 phase_thresholds = PackedFloat32Array(0.75, 0.5, 0.25)
 minion_classes = Array[StringName]([&"boss_healer", &"boss_exploder"])
+environment_rules = Array[StringName]([&"territory_marks", &"scrap_plates"])
 elite_name = "Alfa Primigenio Total"
 spawn_time = 780.0
 difficulty_multiplier = 0.08

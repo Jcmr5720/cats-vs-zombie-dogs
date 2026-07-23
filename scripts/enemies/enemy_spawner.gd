@@ -112,8 +112,14 @@ var _obstacle_cache_timer: float = 0.0
 # --- Partidas rapidas por fases (lo dirige PhaseDirector) -----------------------
 ## Perfil de la fase activa (RunPhaseConfig.phase_profile + overrides del mapa).
 ## Vacio = modo clasico (curva continua por score). Claves: weights, interval,
-## budget, max_alive, tier_caps, type_caps.
+## budget, max_alive, tier_caps, type_caps, behavior_level.
 var _phase_profile: Dictionary = {}
+## FASE 11: mutaciones elite del bioma (se SUMAN a las genericas) y la mutacion
+## dominante del guion de la semilla (pesa doble). Las fija MapManager.
+var _mutation_pool: Array[StringName] = []
+var _dominant_mutation: StringName = &""
+## Nivel de comportamiento de la fase activa (1..3); lo reciben los enemigos.
+var _behavior_level: int = 1
 ## Suma de threat_cost de los enemigos VIVOS generados por este spawner.
 var _threat_active: float = 0.0
 ## Conteos de vivos por id y por categoria (para limites por tipo/categoria).
@@ -185,8 +191,16 @@ func _compute_raw_power() -> float:
 ## Numero real de enemigos vivos (incluye jefes/mini-jefes, que tambien presionan).
 ## Se lee del grupo para no desincronizarse con spawns externos ni con muertes que
 ## no pasan por la señal del spawner.
+##
+## FASE 11: los interactables de mapa (marcas de aullido, nidos, lineas) viven en
+## el grupo "enemies" para que las armas puedan dañarlos, pero son ESTRUCTURAS
+## estaticas, no presion. Si contaran aqui, cada marca viva robaria un slot de
+## perro real y el Barrio (hasta 5 marcas con las del Alfa) spawnearia menos
+## enemigos justo cuando mas presion deberia haber.
 func _alive_enemies() -> int:
-	return get_tree().get_node_count_in_group("enemies")
+	var tree := get_tree()
+	return maxi(0, tree.get_node_count_in_group("enemies")
+		- tree.get_node_count_in_group(&"map_interactables"))
 
 
 ## Kills en los ultimos 60 s (aprox. kills/min).
@@ -240,6 +254,9 @@ func _maybe_emergency_cleanup() -> void:
 		if not is_instance_valid(e):
 			continue
 		if e.is_in_group("boss") or e.is_in_group("miniboss"):
+			continue
+		# Los interactables de mapa (marcas, nidos) no son perros: nunca se limpian.
+		if e.is_in_group("map_interactables"):
 			continue
 		# Coop: la distancia que cuenta es al jugador MAS CERCANO. Nunca se borra
 		# un enemigo que este presionando al P2 aunque quede lejos del P1.
@@ -325,6 +342,26 @@ func set_phase_profile(profile: Dictionary) -> void:
 	_phase_profile = profile if profile != null else {}
 	if not _phase_profile.is_empty():
 		_spawn_timer.wait_time = maxf(0.2, float(_phase_profile.get("interval", GameBalance.BASE_SPAWN_INTERVAL)))
+		_behavior_level = clampi(int(_phase_profile.get("behavior_level", 1)), 1, 3)
+
+
+## FASE 11: mutaciones elite del mapa activo (las fija MapManager al cargar).
+func set_mutation_pool(pool: Array, dominant: StringName = &"") -> void:
+	_mutation_pool.clear()
+	for m in pool:
+		_mutation_pool.append(StringName(m))
+	_dominant_mutation = dominant
+
+
+## Sorteo de mutacion elite: genericas + las del bioma; la dominante del guion
+## pesa el doble (dos papeletas extra).
+func _pick_elite_kind() -> StringName:
+	var pool: Array[StringName] = [&"veloz", &"blindado", &"gigante"]
+	pool.append_array(_mutation_pool)
+	if _dominant_mutation != &"":
+		pool.append(_dominant_mutation)
+		pool.append(_dominant_mutation)
+	return pool.pick_random()
 
 
 func get_phase_profile() -> Dictionary:
@@ -359,6 +396,90 @@ func spawn_pack(enemy_id: StringName, count: int) -> int:
 			break
 		var offset: Vector2 = _camera_edge_offset(angle)
 		_spawn_enemy_of(data, anchor.global_position + offset)
+		spawned += 1
+	return spawned
+
+
+## Distancia minima a CUALQUIER jugador para un spawn urbano: nunca encima.
+const URBAN_SPAWN_MIN_DISTANCE: float = 520.0
+
+
+## Accesos urbanos validos alrededor del ancla: puntos sobre calles/intersecciones
+## reales, en suelo abierto, libres de obstaculos y lejos de todos los jugadores.
+## Es la base de "los corredores entran por la calle, no encima del jugador".
+func _urban_access_points(center: Vector2, wanted: int) -> Array[Vector2]:
+	var valid: Array[Vector2] = []
+	var manager: Node = get_tree().get_first_node_in_group("map_manager")
+	if not is_instance_valid(manager) or not manager.has_method("get_world_seed"):
+		return valid
+	var map = manager.get_active_map() if manager.has_method("get_active_map") else null
+	if map == null:
+		return valid
+	var world_seed: int = manager.get_world_seed()
+	# Radio de entrada: fuera de camara con margen, pero no al otro lado del mapa.
+	for radius in [760.0, 940.0, 620.0]:
+		for point in MapGeometry.approach_points(world_seed, map.biome, center, radius, 4):
+			if valid.size() >= wanted:
+				return valid
+			if not _far_from_all_players(point, URBAN_SPAWN_MIN_DISTANCE):
+				continue
+			if not MapGeometry.is_open_ground(world_seed, map.biome, point):
+				continue
+			if not MapGeometry.is_clear(self, point, 34.0):
+				continue
+			valid.append(point)
+	return valid
+
+
+## Manada que entra por ACCESOS URBANOS distintos (FASE 2, identidad del Barrio).
+## `access_count` = por cuantas bocas de calle distintas se reparte la entrada.
+## Si el mapa no tiene calles utiles, cae al `spawn_pack` clasico: nunca deja de
+## spawnear por no encontrar geometria.
+func spawn_pack_urban(enemy_id: StringName, count: int, access_count: int = 2) -> int:
+	var data: EnemyData = RunPhaseConfig.load_enemy_data(enemy_id)
+	if data == null or enemy_scene == null:
+		return 0
+	var anchor: Node2D = _spawn_anchor()
+	if not is_instance_valid(anchor):
+		return 0
+	var accesses := _urban_access_points(anchor.global_position, maxi(1, access_count))
+	if accesses.is_empty():
+		return spawn_pack(enemy_id, count)
+	var spawned: int = 0
+	for i in count:
+		if not _can_spawn_more():
+			break
+		if not _phase_profile.is_empty() and not _phase_slot_available(data):
+			break
+		# Reparto por bocas: los que entran juntos salen del mismo acceso, con
+		# dispersion corta para que se lea como "vienen por esa calle".
+		var access: Vector2 = accesses[i % accesses.size()]
+		var jitter: Vector2 = Vector2.RIGHT.rotated(randf() * TAU) * randf_range(0.0, 70.0)
+		_spawn_enemy_of(data, access + jitter)
+		spawned += 1
+	if spawned > 0:
+		RunTelemetry.count(&"urban_spawns", spawned)
+		RunTelemetry.count(&"urban_accesses_used", accesses.size())
+	return spawned
+
+
+## Llamada dirigida a UN acceso concreto (la usa el Aullador para abrir un
+## segundo frente por una calle distinta de la suya).
+func spawn_pack_from_street(enemy_id: StringName, count: int, near_point: Vector2,
+		_access_count: int = 1) -> int:
+	var data: EnemyData = RunPhaseConfig.load_enemy_data(enemy_id)
+	if data == null or enemy_scene == null:
+		return 0
+	if not _far_from_all_players(near_point, URBAN_SPAWN_MIN_DISTANCE):
+		return 0
+	var spawned: int = 0
+	for _i in count:
+		if not _can_spawn_more():
+			break
+		if not _phase_profile.is_empty() and not _phase_slot_available(data):
+			break
+		var jitter: Vector2 = Vector2.RIGHT.rotated(randf() * TAU) * randf_range(0.0, 60.0)
+		_spawn_enemy_of(data, near_point + jitter)
 		spawned += 1
 	return spawned
 
@@ -606,7 +727,11 @@ func _spawn_enemy_of(enemy_type: EnemyData, desired_pos: Vector2) -> void:
 	var is_common: bool = enemy_type == null or enemy_type.tier == &"common"
 	var elite_chance: float = GameBalance.elite_chance(_elapsed_time / 60.0, _difficulty_score)
 	if is_common and randf() < elite_chance and enemy.has_method("make_elite"):
-		enemy.call("make_elite", ([&"veloz", &"blindado", &"gigante"] as Array[StringName]).pick_random())
+		enemy.call("make_elite", _pick_elite_kind())
+
+	# FASE 11: nivel de comportamiento de la fase (la dificultad crece por
+	# conducta). Se fija antes de entrar al arbol.
+	enemy.set("behavior_level", _behavior_level)
 
 	# Rework Coop: el spawn se ancla a un jugador activo al azar (no siempre P1),
 	# y se reintenta si el punto quedaria a la vista de CUALQUIER mitad (en split

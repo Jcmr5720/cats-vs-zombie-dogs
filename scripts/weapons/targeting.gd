@@ -34,6 +34,9 @@ const LEAD_MAX_TIME: float = 0.9
 ## Amortiguacion de la componente LATERAL de la velocidad del blanco. El zigzag de
 ## los runners es sinusoidal con media ~0: liderarlo al 100% produce overshoot.
 const LEAD_DAMPING: float = 0.65
+## Medio angulo del cono de puntería MANUAL (Rework de apuntado). El jugador marca
+## la direccion; dentro de este cono siguen mandando el scoring y el lead de abajo.
+const AIM_CONE_HALF_ANGLE_DEG: float = 22.0
 
 
 ## UNA pasada O(n) sobre el grupo "enemies": arma la lista de candidatos en rango
@@ -69,6 +72,44 @@ static func gather_candidates(enemies: Array, origin: Vector2, ref_pos: Vector2,
 	if result.size() > MAX_CANDIDATES:
 		result.resize(MAX_CANDIDATES)
 	return result
+
+
+## Recorta los candidatos al CONO de puntería manual: se quedan los que caen a menos
+## de `half_angle_deg` de `aim_dir` vistos desde `origin`. Conserva el orden por
+## distancia de gather_candidates, asi que todo el scoring de abajo sirve igual.
+## Con `aim_dir` nula devuelve la lista intacta (no hay mira que respetar).
+static func filter_cone(candidates: Array[Dictionary], origin: Vector2, aim_dir: Vector2, half_angle_deg: float = AIM_CONE_HALF_ANGLE_DEG) -> Array[Dictionary]:
+	if aim_dir == Vector2.ZERO:
+		return candidates
+	var direction: Vector2 = aim_dir.normalized()
+	var min_dot: float = cos(deg_to_rad(clampf(half_angle_deg, 0.0, 180.0)))
+	var result: Array[Dictionary] = []
+	for candidate in candidates:
+		var offset: Vector2 = (candidate["pos"] as Vector2) - origin
+		if offset == Vector2.ZERO:
+			result.append(candidate)  # encima del que dispara: siempre valido
+			continue
+		if offset.normalized().dot(direction) >= min_dot:
+			result.append(candidate)
+	return result
+
+
+## Primer enemigo que CRUZA la linea de tiro: el mas cercano al origen entre los
+## que quedan a menos de `half_width` de la recta (origin, direction). Lo usan las
+## armas hitscan (laser) con punteria manual, donde no hay "objetivo elegido" sino
+## "lo que el haz atraviesa". `candidates` viene de gather_candidates (ya ordenado
+## por distancia), asi que basta la primera coincidencia.
+static func pick_first_in_beam(candidates: Array[Dictionary], origin: Vector2, direction: Vector2, half_width: float) -> Node2D:
+	if direction == Vector2.ZERO:
+		return null
+	var beam: Vector2 = direction.normalized()
+	for candidate in candidates:
+		var offset: Vector2 = (candidate["pos"] as Vector2) - origin
+		if offset.dot(beam) < 0.0:
+			continue  # detras del jugador
+		if absf(offset.cross(beam)) <= half_width:
+			return candidate["enemy"] as Node2D
+	return null
 
 
 ## Score base comun: cercania al que dispara, bonus de amenaza (cerca del

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="PowerUpData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/loot/power_up_data.gd" id="1_pud"]
+
+[resource]
+script = ExtResource("1_pud")
+id = &"max_health"
+display_name = "Aguante felino"
+description = "Aguantas más golpes y te curas al recogerla."
+category = &"stat"
+rarity = &"common"
+drop_weight = 1.0
+affects = "Jugador"
+visual_color = Color(1, 0.45, 0.5, 1)
+icon_type = &"health"

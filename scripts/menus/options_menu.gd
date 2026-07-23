@@ -34,13 +34,42 @@ const P2_BINDINGS: Array[Array] = [
 	[&"p2_move_up", "Arriba"], [&"p2_move_down", "Abajo"],
 	[&"p2_move_left", "Izquierda"], [&"p2_move_right", "Derecha"],
 ]
+## Punteria con TECLADO, independiente del movimiento (el stick derecho no se
+## remapea: se lee por device id para que dos mandos apunten por separado).
+const P1_AIM_BINDINGS: Array[Array] = [
+	[&"p1_aim_up", "Mirar arriba"], [&"p1_aim_down", "Mirar abajo"],
+	[&"p1_aim_left", "Mirar izquierda"], [&"p1_aim_right", "Mirar derecha"],
+]
+const P2_AIM_BINDINGS: Array[Array] = [
+	[&"p2_aim_up", "Mirar arriba"], [&"p2_aim_down", "Mirar abajo"],
+	[&"p2_aim_left", "Mirar izquierda"], [&"p2_aim_right", "Mirar derecha"],
+]
 const EXTRA_BINDINGS: Array[Array] = [
 	[&"companion_regroup", "Reagrupar compañeros"],
 	[&"restart", "Reintentar (fin de partida)"],
 ]
+## Punteria POR JUGADOR (Rework de apuntado). Manual es el defecto; el auto-apuntado
+## existe, pero como opcion individual. El disparo es SIEMPRE automatico.
+const AIM_MODE_OPTIONS: Array[Dictionary] = [
+	{"id": "manual", "label": "Manual"},
+	{"id": "assist", "label": "Asistido"},
+	{"id": "auto", "label": "Automático"},
+]
+## Intensidad de la asistencia (medio angulo del cono). Solo aplica en Asistido.
+const AIM_ASSIST_OPTIONS: Array[Dictionary] = [
+	{"id": "off", "label": "Off"}, {"id": "baja", "label": "Baja"},
+	{"id": "media", "label": "Media"}, {"id": "alta", "label": "Alta"},
+]
+## Dispositivo de punteria. "Auto" lo detecta por uso: nada esta atado a un jugador.
+const AIM_DEVICE_OPTIONS: Array[Dictionary] = [
+	{"id": "auto", "label": "Auto"}, {"id": "mouse", "label": "Ratón"},
+	{"id": "gamepad", "label": "Mando"}, {"id": "keyboard", "label": "Teclado"},
+]
+const AIM_HELP: String = "Manual: apuntas tú. Asistido: corrige un poco hacia enemigos cerca de la mira. Automático: el juego elige el objetivo. El disparo siempre es automático."
 ## Atajos fijos (no remapeables), mostrados como referencia compacta.
 const FIXED_ROWS: Array[Array] = [
-	["Pausa", "ESC"], ["Elegir carta", "Clic / Mando (P2)"], ["Rendimiento", "F8"],
+	["Pausa", "ESC"], ["Recoger / cambiar arma", "E (J1) · H (J2)"],
+	["Panel de build", "B"], ["Ampliar minimapa", "Tab"], ["Rendimiento", "F8"],
 ]
 
 var _settings: Node
@@ -176,14 +205,25 @@ func _rebuild_content() -> void:
 			_content_box.add_child(_choice_row("Intensidad de shake", "shake_level", SHAKE_OPTIONS, "medio"))
 			_content_box.add_child(MenuTheme.make_setting_toggle("Números de daño", "damage_numbers"))
 			_content_box.add_child(MenuTheme.make_setting_toggle("Omitir cinemáticas", "skip_cinematics"))
-			# Accesibilidad coop: elegir sola la carta resaltada tras 25 s de
-			# inactividad (p.ej. mando compartido/soltado). Desactivado por defecto.
-			_content_box.add_child(MenuTheme.make_setting_toggle("Carta automática por inactividad (coop)", "card_auto_pick"))
 			# Accesibilidad: tamaño de texto global. Escala HUD, menús, tarjetas y
 			# diálogos al instante (Theme global); el logo y los iconos no cambian.
 			_content_box.add_child(_choice_row("Tamaño de texto", "text_size", TEXT_SIZE_CHOICES, "normal"))
 			var size_hint := MenuTheme.make_text("El tamaño de texto se aplica a toda la interfaz al instante.", MenuTheme.FS_CAPTION, MenuTheme.TEXT_DIM)
 			_content_box.add_child(size_hint)
+			# FASE 13: reinicia los consejos de la primera partida (una vez por
+			# perfil): cajas, armas, mejoras, mutaciones, nucleos, cambio de arma.
+			_content_box.add_child(_spacer(MenuTheme.GAP_S))
+			var tips_reset := MenuTheme.make_button("Volver a mostrar consejos de tutorial", MenuTheme.CYAN, &"secondary")
+			tips_reset.custom_minimum_size = Vector2(340, 44)
+			tips_reset.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			tips_reset.pressed.connect(func() -> void:
+				if _save != null and _save.has_method("set_value"):
+					for tip_id in LootCatalog.TIPS:
+						_save.set_value("tip_seen_%s" % tip_id, false)
+				_play_ui_sound(&"ui_click")
+				tips_reset.text = "Consejos reiniciados"
+				tips_reset.disabled = true)
+			_content_box.add_child(tips_reset)
 		&"audio":
 			_content_box.add_child(MenuTheme.make_setting_slider("Master", "audio_master", MenuTheme.PURPLE))
 			_content_box.add_child(MenuTheme.make_setting_slider("Música", "audio_music", MenuTheme.PURPLE))
@@ -215,8 +255,11 @@ func _build_controls_tab() -> void:
 	var players_row := HBoxContainer.new()
 	players_row.add_theme_constant_override("separation", MenuTheme.GAP_XL)
 	_content_box.add_child(players_row)
-	players_row.add_child(_player_bindings_column("Jugador 1", MenuTheme.CYAN, P1_BINDINGS))
-	players_row.add_child(_player_bindings_column("Jugador 2 (coop)", MenuTheme.GOLD, P2_BINDINGS))
+	players_row.add_child(_player_bindings_column("Jugador 1", MenuTheme.CYAN, P1_BINDINGS, P1_AIM_BINDINGS, 1))
+	players_row.add_child(_player_bindings_column("Jugador 2 (coop)", MenuTheme.GOLD, P2_BINDINGS, P2_AIM_BINDINGS, 2))
+	var aim_help := MenuTheme.make_label(AIM_HELP, MenuTheme.FS_CAPTION, MenuTheme.TEXT_DIM)
+	aim_help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_content_box.add_child(aim_help)
 
 	_content_box.add_child(_spacer(MenuTheme.GAP_XS))
 	_content_box.add_child(MenuTheme.make_section_header("Acciones", MenuTheme.PURPLE))
@@ -249,8 +292,10 @@ func _build_controls_tab() -> void:
 	footer.add_child(reset)
 
 
-## Columna de un jugador: panel con encabezado de color + 4 filas de direccion.
-func _player_bindings_column(title: String, accent: Color, bindings: Array[Array]) -> Control:
+## Columna de un jugador: movimiento, punteria con teclado y su bloque de PUNTERIA
+## (modo + asistencia + dispositivo). Cada jugador guarda lo suyo; nada es global.
+func _player_bindings_column(title: String, accent: Color, bindings: Array[Array],
+		aim_bindings: Array[Array], player_id: int) -> Control:
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	MenuTheme.style_panel(panel, accent, MenuTheme.PANEL_BG_SOFT)
@@ -259,6 +304,21 @@ func _player_bindings_column(title: String, accent: Color, bindings: Array[Array
 	panel.add_child(col)
 	col.add_child(MenuTheme.make_section_header(title, accent))
 	for entry in bindings:
+		col.add_child(_binding_row(entry[0], entry[1]))
+
+	col.add_child(_spacer(MenuTheme.GAP_XS))
+	col.add_child(MenuTheme.make_section_header("Puntería", accent))
+	col.add_child(_choice_row("Modo", "player_%d_aim_mode" % player_id, AIM_MODE_OPTIONS, "manual"))
+	col.add_child(_choice_row("Asistencia", "player_%d_aim_assist" % player_id, AIM_ASSIST_OPTIONS, "baja"))
+	col.add_child(_choice_row("Dispositivo", "player_%d_aim_device" % player_id, AIM_DEVICE_OPTIONS, "auto"))
+	var device_hint := MenuTheme.make_label(
+		"Auto detecta ratón, mando o teclado según lo que uses.", MenuTheme.FS_CAPTION, MenuTheme.TEXT_DIM)
+	device_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(device_hint)
+
+	col.add_child(_spacer(MenuTheme.GAP_XS))
+	col.add_child(MenuTheme.make_section_header("Apuntar con teclado", accent))
+	for entry in aim_bindings:
 		col.add_child(_binding_row(entry[0], entry[1]))
 	return panel
 

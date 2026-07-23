@@ -1,6 +1,0 @@
-[gd_scene format=3 uid="uid://bvc99noskiptest"]
-
-[ext_resource type="Script" path="res://tests/test_cards_no_skip.gd" id="1_test"]
-
-[node name="TestCardsNoSkip" type="Node2D"]
-script = ExtResource("1_test")

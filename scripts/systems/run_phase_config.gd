@@ -37,6 +37,45 @@ const OPENING_RUNNERS_COUNT: int = 5
 const MAX_ENEMY_PROJECTILES: int = 10
 const MAX_HAZARD_ZONES: int = 4
 
+# --- FASE 11: identidad de mapas -------------------------------------------------
+## Segundo en que el PhaseDirector dispara el evento central del guion (ventana
+## 110-155 del diseño: entre la fase pesada y el mini-jefe).
+const CENTRAL_EVENT_TIME: float = 115.0
+## Presupuesto de zonas peligrosas VIVAS por tipo (HazardZone.try_spawn fusiona
+## o rechaza por encima). Sustituye al MAX_HAZARD_ZONES global para tipos nuevos.
+const ZONE_BUDGETS: Dictionary = {
+	&"infection": 5,
+	&"industrial": 4,
+}
+
+
+static func zone_budget(kind: StringName) -> int:
+	return int(ZONE_BUDGETS.get(kind, MAX_HAZARD_ZONES))
+
+
+# --- FASE 12: loot en el suelo ---------------------------------------------------
+## Segundos en que aparece cada caja de ARMAS. Escalonadas por toda la run para
+## que siempre haya un objetivo al que ir; la primera pronto (18 s), porque ahora
+## es la unica via de conseguir armas nuevas.
+const WEAPON_CRATE_TIMES: PackedFloat32Array = [18.0, 62.0, 110.0, 165.0, 225.0]
+## Cajas de SUMINISTROS (power-ups). Intercaladas con las de armas para que el
+## jugador no tenga dos objetivos a la vez.
+const SUPPLY_CRATE_TIMES: PackedFloat32Array = [40.0, 88.0, 140.0, 200.0]
+## Distancia a la que se plantan las cajas respecto al jugador. Mas CERCA que los
+## interactables de identidad (480-760): a una caja hay que poder llegar.
+const CRATE_MIN_DISTANCE: float = 380.0
+const CRATE_MAX_DISTANCE: float = 640.0
+
+
+## Nivel de comportamiento de los enemigos segun la fase (FASE 11): la dificultad
+## crece por CONDUCTA, no solo por stats. 1 = basico, 2 = tactico, 3 = coordinado.
+static func behavior_level_for_phase(phase: int) -> int:
+	if phase <= Phase.COMMON_ENEMIES:
+		return 1
+	if phase <= Phase.HEAVY_ENEMIES:
+		return 2
+	return 3
+
 # --- Coop: el presupuesto sube UNA sola vez (el resto del escalado coop ya vive
 # --- en GameBalance/EnemySpawner). ------------------------------------------------
 const BUDGET_COOP_MULT: float = 1.3

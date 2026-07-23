@@ -390,6 +390,13 @@ func _drop_reward() -> void:
 		orb.set("pop_velocity", Vector2.RIGHT.rotated(randf() * TAU) * randf_range(70.0, 160.0))
 		get_parent().add_child.call_deferred(orb)
 
+	# FASE 12: el premio del mini-jefe es un NUCLEO DE EVOLUCION. Si ningun arma
+	# es elegible todavia, el director lo cambia por una mutacion para que la
+	# recompensa nunca se desperdicie.
+	var director: Node = get_tree().get_first_node_in_group("loot_director")
+	if is_instance_valid(director):
+		director.call("drop_evolution_core", get_parent(), global_position)
+
 
 ## Jugador objetivo: en coop el ACTIVO mas cercano; en solo el unico jugador.
 func _resolve_target_player() -> Node2D:

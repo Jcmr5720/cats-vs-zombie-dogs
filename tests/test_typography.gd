@@ -158,8 +158,8 @@ func _run() -> void:
 		"HUD: título de victoria con variación ImpactTitle (Lilita)")
 	_expect((hud.get_node("GameOverPanel/Center/Content/Title") as Label).theme_type_variation == &"ImpactTitle",
 		"HUD: título de derrota con variación ImpactTitle (Lilita)")
-	_expect((hud.get_node("UpgradePanel/Center/Content/Cards/Card1/Margin/Content/Description") as Label).theme_type_variation == &"CardDescription",
-		"HUD: descripción de carta con variación CardDescription (Nunito)")
+	# FASE 12: el UpgradePanel (cartas) se eliminó; su variación CardDescription ya
+	# no tiene nodo que la use en el HUD.
 	hud.free()
 
 	print("")

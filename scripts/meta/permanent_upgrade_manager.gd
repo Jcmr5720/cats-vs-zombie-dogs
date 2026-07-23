@@ -24,8 +24,6 @@ const UPGRADE_PATHS: Array[String] = [
 	"res://data/permanent_upgrades/pelaje_erizado.tres",
 	"res://data/permanent_upgrades/corazon_de_leon.tres",
 	# Agencia en el level-up (Rework de adictividad): rerolls/vetos extra por run.
-	"res://data/permanent_upgrades/lucky_paw.tres",
-	"res://data/permanent_upgrades/picky_eater.tres",
 ]
 
 ## Bonus de Sardinas por asegurar cada mapa (victoria).
@@ -306,8 +304,4 @@ func format_effect(up: PermanentUpgradeData, level: int) -> String:
 			return "-%d%% daño recibido" % int(round(minf(value, 0.25) * 100.0))
 		&"companion_damage_pct":
 			return "+%d%% daño de compañeros" % int(round(value * 100.0))
-		&"reroll_per_run":
-			return "+%d re-tiradas por partida" % int(round(value))
-		&"banish_per_run":
-			return "+%d vetos por partida" % int(round(value))
 	return up.description

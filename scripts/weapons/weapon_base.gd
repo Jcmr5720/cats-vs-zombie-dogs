@@ -80,35 +80,51 @@ func _process(delta: float) -> void:
 # --- Disparo por tipo -------------------------------------------------------
 
 func _fire_projectiles() -> bool:
-	# Apuntado inteligente (Targeting): amenaza/marca en vez de "el mas cercano",
-	# fila alineada para el pierce, racimo para explosivos y tiro LIDERADO
-	# (intercept) para que los enemigos rapidos no esquiven las balas.
+	# Armas DIRECCIONALES (bala, explosivo, boomerang). Dos caminos bien separados:
+	#
+	#  - AUTOMATICO: el apuntado inteligente de siempre (Targeting): amenaza/marca en
+	#    vez de "el mas cercano", fila alineada para el pierce, racimo para explosivos
+	#    y tiro LIDERADO (intercept) para que los rapidos no esquiven las balas.
+	#  - MANUAL / ASISTIDO: manda el jugador. La direccion viene ya resuelta del
+	#    PlayerAimController (que en asistido incluye la correccion dentro del cono),
+	#    asi que el arma NO vuelve a consultar enemigos: dispara donde le dicen. Con
+	#    objetivo asistido se aplica el lead con la velocidad de bala de ESTA arma.
 	var origin: Vector2 = _player.global_position
-	var candidates: Array[Dictionary] = Targeting.gather_candidates(
-		get_tree().get_nodes_in_group("enemies"), origin, origin, _effective_range())
-	if candidates.is_empty():
-		return false
-
 	var base_dir: Vector2 = Vector2.ZERO
-	match data.weapon_type:
-		&"boomerang":
-			# Direccion de la fila mas valiosa (el pierce quiere enemigos alineados).
-			base_dir = Targeting.pick_pierce_direction(candidates, origin, origin)
-		&"explosive":
-			# Centroide del racimo mas valioso dentro del radio de explosion.
-			var cluster: Vector2 = Targeting.pick_area_position(candidates, _effective_area(), origin)
-			if cluster != Vector2.INF and cluster != origin:
-				base_dir = origin.direction_to(cluster)
-		_:
-			var target: Dictionary = Targeting.pick_projectile_target(candidates, origin)
-			if not target.is_empty():
-				base_dir = Targeting.intercept_direction(
-					origin, target["pos"], target["velocity"], data.projectile_speed)
-	if base_dir == Vector2.ZERO:
-		var fallback: Node2D = _find_nearest_enemy(_effective_range())
-		if fallback == null:
+
+	if _is_auto_aim():
+		var candidates: Array[Dictionary] = Targeting.gather_candidates(
+			get_tree().get_nodes_in_group("enemies"), origin, origin, _effective_range())
+		if candidates.is_empty():
 			return false
-		base_dir = origin.direction_to(fallback.global_position)
+		match data.weapon_type:
+			&"boomerang":
+				# Direccion de la fila mas valiosa (el pierce quiere enemigos alineados).
+				base_dir = Targeting.pick_pierce_direction(candidates, origin, origin)
+			&"explosive":
+				# Centroide del racimo mas valioso dentro del radio de explosion.
+				var cluster: Vector2 = Targeting.pick_area_position(candidates, _effective_area(), origin)
+				if cluster != Vector2.INF and cluster != origin:
+					base_dir = origin.direction_to(cluster)
+			_:
+				var target: Dictionary = Targeting.pick_projectile_target(candidates, origin)
+				if not target.is_empty():
+					base_dir = Targeting.intercept_direction(
+						origin, target["pos"], target["velocity"], data.projectile_speed)
+		if base_dir == Vector2.ZERO:
+			var fallback: Node2D = _find_nearest_enemy(_effective_range())
+			if fallback == null:
+				return false
+			base_dir = origin.direction_to(fallback.global_position)
+	else:
+		base_dir = _aim_direction()
+		# El boomerang no lidera (atraviesa una fila entera), el explosivo tampoco
+		# (revienta en area): el lead solo tiene sentido para la bala directa.
+		if data.weapon_type == &"projectile":
+			var assist: Dictionary = _assist_target()
+			if not assist.is_empty():
+				base_dir = Targeting.intercept_direction(
+					origin, assist["pos"], assist["velocity"], data.projectile_speed)
 
 	var count: int = _effective_projectiles()
 	var start_angle: float = -data.spread_degrees * float(count - 1) * 0.5
@@ -138,6 +154,10 @@ func _fire_projectiles() -> bool:
 	return true
 
 
+## Medio grosor del haz del laser en punteria manual: un enemigo a menos de esto de
+## la linea de tiro recibe el rayo. NO es asistencia (eso lo decide el cono del
+## PlayerAimController): es el ancho fisico del haz.
+const LASER_BEAM_HALF_WIDTH: float = 38.0
 ## Distancia maxima de cada salto del laser en cadena (evolucion Rayo Prisma).
 const LASER_CHAIN_JUMP_RANGE: float = 260.0
 ## El dano decae por salto para que la cadena no multiplique el DPS sin costo.
@@ -147,12 +167,33 @@ func _fire_laser() -> bool:
 	# El laser es el nuke single-target: prioriza elites/tanques/marcados en vez
 	# de gastar el disparo en el cachorro mas cercano.
 	var origin: Vector2 = _player.global_position
-	var candidates: Array[Dictionary] = Targeting.gather_candidates(
-		get_tree().get_nodes_in_group("enemies"), origin, origin, _effective_range())
-	var picked: Dictionary = Targeting.pick_laser_target(candidates, origin)
-	var target: Node2D = picked.get("enemy") if not picked.is_empty() else _find_nearest_enemy(_effective_range())
-	if target == null or not is_instance_valid(target):
-		return false
+	var target: Node2D = null
+
+	if _is_auto_aim():
+		var candidates: Array[Dictionary] = Targeting.gather_candidates(
+			get_tree().get_nodes_in_group("enemies"), origin, origin, _effective_range())
+		var picked: Dictionary = Targeting.pick_laser_target(candidates, origin)
+		target = picked.get("enemy") if not picked.is_empty() else _find_nearest_enemy(_effective_range())
+		if target == null or not is_instance_valid(target):
+			return false
+	else:
+		# El laser es HITSCAN: en manual no basta con una direccion, hay que saber a
+		# quien alcanza el haz. Se toma el primer enemigo dentro del CORREDOR del
+		# rayo (su grosor), no un cono de asistencia: el jugador apunta, el rayo pega
+		# a lo que cruza. Con asistencia activa se respeta su objetivo.
+		var assist: Dictionary = _assist_target()
+		if not assist.is_empty():
+			target = assist["enemy"]
+		else:
+			var beam: Array[Dictionary] = Targeting.gather_candidates(
+				get_tree().get_nodes_in_group("enemies"), origin, origin, _effective_range())
+			target = Targeting.pick_first_in_beam(beam, origin, _aim_direction(), LASER_BEAM_HALF_WIDTH)
+		if target == null or not is_instance_valid(target):
+			# Sin nadie en la linea: el haz se dibuja igual (sin daño), para que el
+			# jugador vea que el arma obedece y no que se ha quedado muda.
+			_show_laser_path(PackedVector2Array([origin, origin + _aim_direction() * _effective_range()]))
+			_play_weapon_audio(&"laser")
+			return true
 
 	# Cadena: con `pierce > 0` (Rayo Prisma) el rayo salta hasta `pierce` enemigos
 	# extra, cada salto al mas cercano del anterior, con dano decreciente.
@@ -197,14 +238,24 @@ func _find_nearest_enemy_excluding(origin: Vector2, max_range: float, excluded: 
 func _fire_area() -> bool:
 	# La zona cae en el CENTROIDE del racimo mas valioso (no encima de un enemigo
 	## suelto). Sin candidatos conserva el fallback clasico: delante del jugador.
+	# La zona (catnip) es un arma COLOCADA: no dispara en una direccion, elige un
+	# PUNTO. En automatico ese punto es el centroide del racimo mas valioso; en
+	# manual/asistido es donde apunta el jugador, recortado a su alcance.
 	var origin: Vector2 = _player.global_position
-	var candidates: Array[Dictionary] = Targeting.gather_candidates(
-		get_tree().get_nodes_in_group("enemies"), origin, origin, _effective_range() * 1.4)
-	var spawn_position: Vector2 = Targeting.pick_area_position(candidates, _effective_area(), origin)
-	if spawn_position == Vector2.INF:
-		spawn_position = origin
-		if _player.has_method("get_last_facing_direction"):
-			spawn_position = origin + _player.get_last_facing_direction() * 120.0
+	var max_area_range: float = _effective_range() * 1.4
+	var spawn_position: Vector2 = Vector2.INF
+
+	if _is_auto_aim():
+		var candidates: Array[Dictionary] = Targeting.gather_candidates(
+			get_tree().get_nodes_in_group("enemies"), origin, origin, max_area_range)
+		spawn_position = Targeting.pick_area_position(candidates, _effective_area(), origin)
+		if spawn_position == Vector2.INF:
+			spawn_position = origin
+			if _player.has_method("get_last_facing_direction"):
+				spawn_position = origin + _player.get_last_facing_direction() * 120.0
+	else:
+		var to_aim: Vector2 = _aim_world_position() - origin
+		spawn_position = origin + to_aim.limit_length(max_area_range)
 
 	var area := AREA_SCENE.instantiate() as Node2D
 	if area == null:
@@ -315,6 +366,39 @@ func _projectile_visual_scale() -> float:
 
 # --- Utilidades -------------------------------------------------------------
 
+# --- Punteria del jugador (fachada) -------------------------------------------
+# El arma NUNCA habla con el PlayerAimController: pregunta a su jugador. Asi no hay
+# dependencia circular y un rig de test sin controlador sigue funcionando (responde
+# "automatico", el comportamiento clasico). Companeros y torreta no pasan por aqui:
+# conservan su propio auto-apuntado.
+
+func _is_auto_aim() -> bool:
+	if not is_instance_valid(_player) or not _player.has_method("is_auto_aim"):
+		return true
+	return _player.is_auto_aim()
+
+
+func _aim_direction() -> Vector2:
+	if is_instance_valid(_player) and _player.has_method("get_aim_direction"):
+		var dir: Vector2 = _player.get_aim_direction()
+		if dir != Vector2.ZERO:
+			return dir.normalized()
+	return Vector2.RIGHT
+
+
+func _aim_world_position() -> Vector2:
+	if is_instance_valid(_player) and _player.has_method("get_aim_world_position"):
+		return _player.get_aim_world_position()
+	return _player.global_position + _aim_direction() * 220.0
+
+
+## Objetivo elegido por la ASISTENCIA (vacio en manual puro y en automatico).
+func _assist_target() -> Dictionary:
+	if is_instance_valid(_player) and _player.has_method("get_assist_target"):
+		return _player.get_assist_target()
+	return {}
+
+
 func _find_nearest_enemy(max_range: float) -> Node2D:
 	var nearest: Node2D = null
 	var nearest_distance: float = max_range
@@ -386,6 +470,9 @@ func get_snapshot() -> Dictionary:
 		"max_level": data.max_level if data != null else 5,
 		"weapon_type": data.weapon_type if data != null else &"",
 		"color": data.visual_color if data != null else Color.WHITE,
+		# FASE 13: el HUD marca las armas evolucionadas y explica cada una en llano.
+		"evolved": LootCatalog.is_evolved_weapon(data),
+		"description": data.description if data != null else "",
 	}
 
 

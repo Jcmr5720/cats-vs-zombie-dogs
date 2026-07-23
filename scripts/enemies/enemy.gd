@@ -46,6 +46,20 @@ var _elite_aura: Polygon2D
 # --- Partidas rapidas por fases: comportamiento por tipo (EnemyData.behavior) ---
 ## Rama de comportamiento activa (&"" = persecucion clasica).
 var _behavior: StringName = &""
+## Nivel de comportamiento (FASE 11): 1 = basico, 2 = tactico, 3 = coordinado.
+## Lo fija el spawner segun la fase del PhaseDirector; los enemigos ganan
+## conducta nueva con el tiempo, no solo estadisticas.
+var behavior_level: int = 1
+## Estado generico de la mutacion elite activa (sobrecargado, carga de manada...).
+var _mutation_timer: float = 0.0
+var _mutation_state: int = 0
+var _mutation_state_timer: float = 0.0
+## Multiplicador de velocidad de la mutacion (sobrecargado alterna con el).
+var _mutation_speed_mult: float = 1.0
+## Placas de la mutacion "chatarra": reducen daño y se rompen por etapas.
+var _scrap_plates: int = 0
+## Perro de manada nivel 3: temporizador de la carga coordinada.
+var _pack_charge_timer: float = 9.0
 ## Cooldown general del comportamiento (embestida, salto, aullido, escupitajo).
 var _behavior_timer: float = 0.0
 ## Sub-estado (embestidor/cazador/explosivo/sanador) y su temporizador.
@@ -56,6 +70,31 @@ var _behavior_dir: Vector2 = Vector2.ZERO
 var _behavior_hit_done: bool = false
 ## Flanqueador: lado elegido al nacer (no cambia de lado constantemente).
 var _flank_side: float = 1.0
+## Flanqueador N2/N3: punto de ruta lateral que intenta ocupar, y su vigencia.
+## Se recalcula con cadencia baja: cambiar de destino cada frame produce el
+## movimiento erratico que el diseño prohibe expresamente.
+var _flank_route: Vector2 = Vector2.ZERO
+var _flank_route_timer: float = 0.0
+var _flank_closing: bool = false
+## true cuando el flanqueador ya llego a la ruta que eligio (flanqueo completado).
+var _flank_arrived: bool = false
+## Territorio de manada: fuerza (0 = fuera), centro y radio de la marca que lo
+## cubre. Lo refresca la marca por tick; caduca solo si el perro sale de ella.
+var _territory_strength: float = 0.0
+var _territory_center: Vector2 = Vector2.ZERO
+var _territory_radius: float = 0.0
+var _territory_timer: float = 0.0
+## Manada N2: ruta de aproximacion asignada a ESTE perro (indice en _pack_routes).
+var _pack_route_index: int = -1
+## Manada N3: telegrafo de la carga en curso (>0 = avisando, aun sin cargar).
+var _charge_telegraph: float = 0.0
+var _charge_is_leader: bool = false
+## Aullador: cooldown de la LLAMADA de refuerzos (independiente del aullido).
+var _howler_call_timer: float = 0.0
+## Orden recibida de un Aullador (&"press"/&"flank"/&"regroup"/&"charge") y su TTL.
+var _order: StringName = &""
+var _order_timer: float = 0.0
+var _order_point: Vector2 = Vector2.ZERO
 ## Perro de manada: bonus activo (0..PACK_BONUS_CAP) y anillo visual.
 var _pack_bonus: float = 0.0
 var _pack_scan_timer: float = 0.0
@@ -77,6 +116,64 @@ var _healer_link: Line2D
 const PACK_BONUS_PER_DOG: float = 0.07
 const PACK_BONUS_CAP: float = 0.21
 const PACK_RADIUS: float = 200.0
+
+# --- Coordinacion de manada del Barrio (FASE 2) --------------------------------
+# Estado de GRUPO, no de instancia: vive en `static var` en vez de en un nodo
+# coordinador aparte (el proyecto no quiere otra capa de IA paralela). Todo lo
+# que hay aqui es un puñado de contadores y una lista de rutas cacheada.
+#
+# IMPORTANTE: las `static var` sobreviven a un cambio de escena. `reset_pack_coordination()`
+# lo llama el PhaseDirector al arrancar la partida; sin eso, reiniciar arrastraria
+# lideres muertos y cargas fantasma de la run anterior.
+
+## Cargas coordinadas simultaneas permitidas. Con mas, el jugador recibe
+## embestidas desde todas partes y deja de poder leerlas una por una.
+const MAX_SIMULTANEOUS_CHARGES: int = 2
+## Cada cuanto se recalculan las rutas urbanas de aproximacion (caro: consulta
+## geometria). Muy por encima del frame: la manada no necesita replanear a 60 Hz.
+const ROUTE_REFRESH_INTERVAL: float = 2.5
+## Anticipacion de la carga coordinada: el jugador DEBE poder reaccionar.
+const CHARGE_TELEGRAPH: float = 0.9
+
+## Rutas de aproximacion vigentes (puntos urbanos alrededor del objetivo).
+static var _pack_routes: Array[Vector2] = []
+static var _pack_routes_time: float = -999.0
+static var _pack_routes_center: Vector2 = Vector2.ZERO
+## Cargas coordinadas activas (lideres vivos preparando o ejecutando carga).
+static var _active_charge_leaders: Array = []
+## Flanqueadores que estan cerrando una ruta ahora mismo, por jugador objetivo.
+## Sirve para la regla "nunca sellar todas las salidas a la vez".
+static var _closing_flankers: Dictionary = {}
+
+
+## Reinicio del estado compartido. Lo llama el arranque de partida: las static
+## vars no se limpian solas al recargar la escena.
+static func reset_pack_coordination() -> void:
+	_pack_routes.clear()
+	_pack_routes_time = -999.0
+	_pack_routes_center = Vector2.ZERO
+	_active_charge_leaders.clear()
+	_closing_flankers.clear()
+
+
+## Cargas coordinadas vivas ahora mismo (purga lideres muertos de paso).
+static func active_charge_count() -> int:
+	for i in range(_active_charge_leaders.size() - 1, -1, -1):
+		var leader = _active_charge_leaders[i]
+		if not is_instance_valid(leader) or leader.get("_is_dead"):
+			_active_charge_leaders.remove_at(i)
+	return _active_charge_leaders.size()
+
+
+## Flanqueadores cerrando ruta contra `target` (purga los que ya no son validos).
+static func closing_flanker_count(target: Node) -> int:
+	var key: int = target.get_instance_id() if target != null else 0
+	var list: Array = _closing_flankers.get(key, [])
+	for i in range(list.size() - 1, -1, -1):
+		if not is_instance_valid(list[i]) or list[i].get("_is_dead"):
+			list.remove_at(i)
+	_closing_flankers[key] = list
+	return list.size()
 const CHARGER_TRIGGER_RANGE: float = 340.0
 const HUNTER_LEAP_RANGE: float = 300.0
 const HEALER_TOTAL_HEAL: int = 150
@@ -102,6 +199,9 @@ var _hard_stuck_time: float = 0.0
 var _ghost_timer: float = 0.0
 const HARD_STUCK_LIMIT: float = 2.4
 const GHOST_DURATION: float = 0.7
+## Umbral de atasco duro como VARIABLE: la mutacion "sabueso" lo baja (atraviesa
+## obstaculos antes: sigue el rastro del jugador).
+var _hard_stuck_limit: float = HARD_STUCK_LIMIT
 
 # Knockback: impulso que decae y se suma a la velocidad de persecución.
 var _knockback: Vector2 = Vector2.ZERO
@@ -206,6 +306,10 @@ func _physics_process(delta: float) -> void:
 		if _buff_timer <= 0.0:
 			_buff_mult = 1.0
 
+	# Efectos continuos de la mutacion elite (lider, carroñero, sobrecargado).
+	if _elite_kind != &"":
+		_mutation_tick(delta)
+
 	# Comportamientos por fase: efectos periodicos (aullido, escupitajo, manada)
 	# y estados con control TOTAL del movimiento (embestida, salto, mecha, canal).
 	if _behavior != &"":
@@ -233,7 +337,7 @@ func _physics_process(delta: float) -> void:
 		_slow_timer -= delta
 		if _slow_timer <= 0.0:
 			_slow_mult = 1.0
-	velocity = direction * speed * _speed_jitter * _slow_mult * _buff_mult * (1.0 + _pack_bonus) \
+	velocity = direction * speed * _speed_jitter * _slow_mult * _buff_mult * _mutation_speed_mult * (1.0 + _pack_bonus) \
 		+ _separation(delta) + _knockback + _avoid
 	move_and_slide()
 	if velocity.length_squared() > 1.0:
@@ -290,12 +394,31 @@ func take_damage(amount: int, knockback_dir: Vector2 = Vector2.ZERO) -> void:
 	if _behavior == &"charger" and _behavior_state == 3:
 		amount = int(round(amount * 1.5))
 
+	# Mutacion "chatarra": placas que reducen el daño y se rompen por etapas
+	# (cada 25% de vida perdida cae una placa, con chispa que se LEE).
+	if _elite_kind == &"chatarra" and _scrap_plates > 0:
+		amount = maxi(1, int(round(amount * 0.55)))
+	# Mutacion "sobrecargado": durante el aturdimiento es VULNERABLE.
+	if _elite_kind == &"sobrecargado" and _mutation_state == 1:
+		amount = int(round(amount * 1.5))
+
 	# Objetivo prioritario del Gato Policia: el enemigo marcado recibe daño
 	# extra de TODO el equipo (jugadores, compañeros y torretas).
 	if has_meta(&"companion_mark"):
 		amount = max(1, int(round(amount * (1.0 + CompanionBalance.POLICE_MARK_DAMAGE_BONUS))))
 
 	current_health -= amount
+
+	# Rotura de placas de chatarra por umbrales de vida (75/50/25%).
+	if _elite_kind == &"chatarra" and _scrap_plates > 0 and max_health > 0:
+		var ratio: float = float(current_health) / float(max_health)
+		# La placa N cae al bajar del 25%*N de vida (3 placas: 75/50/25%).
+		while _scrap_plates > 0 and ratio < 0.25 * float(_scrap_plates):
+			_scrap_plates -= 1
+			Feedback.hit_effect(global_position, Color(0.75, 0.78, 0.85, 0.9), 0.35, 1.6)
+			if _scrap_plates == 0:
+				# Sin blindaje: se acelera (nucleo expuesto, mas agresivo).
+				speed *= 1.1
 
 	# Game feel: número de daño flotante + destello de impacto.
 	Feedback.damage_number(global_position + Vector2(0, -18), amount)
@@ -419,7 +542,7 @@ func _update_stuck_state(delta: float, target_position: Vector2) -> void:
 		_stuck_time = 0.25
 	# Acuñado sin salida: activa el modo fantasma para atravesar el obstaculo y
 	# avanzar recto hacia el objetivo. Ultimo recurso, breve y poco frecuente.
-	if _hard_stuck_time > HARD_STUCK_LIMIT and _ghost_timer <= 0.0:
+	if _hard_stuck_time > _hard_stuck_limit and _ghost_timer <= 0.0:
 		_ghost_timer = GHOST_DURATION
 		set_collision_mask_value(5, false)
 		_has_subtarget = false
@@ -598,6 +721,11 @@ func _animate_visual() -> void:
 func _die() -> void:
 	_is_dead = true
 	velocity = Vector2.ZERO
+	# Matar al lider ANTES de que termine el telegrafo cancela la carga: es el
+	# contrajuego de la mecanica y debe funcionar tambien si muere por una zona,
+	# una explosion o un compañero, no solo por disparo directo.
+	_cancel_pack_charge()
+	_release_flank_claim(true)
 	# Sale del grupo y deja de colisionar para que las balas no lo persigan.
 	# Se difiere el cambio de física porque la muerte ocurre dentro del
 	# callback de colisión de la bala (no se puede tocar el estado en el flush).
@@ -607,12 +735,16 @@ func _die() -> void:
 
 	# Efectos de muerte por comportamiento (division, zona infecciosa, guardian).
 	_behavior_on_death()
+	# Efectos de muerte de la mutacion elite (esporas, parasitos, explosion).
+	if _elite_kind != &"":
+		_mutation_on_death()
 
 	died.emit(global_position, xp_value)
 	var audio: Node = get_node_or_null("/root/AudioManager")
 	if audio != null and audio.has_method("play_sfx"):
 		audio.play_sfx(&"enemy_die")
 	_drop_xp_orb()
+	_drop_powerup()
 
 	# Game feel: pedazos que salen volando + destello + racha de bajas (combo).
 	var death_color: Color = enemy_data.body_color if enemy_data != null else Color(0.5, 0.65, 0.45)
@@ -635,6 +767,16 @@ func _die() -> void:
 	tween.tween_property(self, "scale", Vector2(_base_scale.x * 1.3, _base_scale.y * 0.1), 0.12)
 	tween.tween_property(self, "modulate:a", 0.0, 0.12)
 	tween.chain().tween_callback(queue_free)
+
+
+## Power-up del suelo al morir (FASE 12). Los ELITES lo sueltan garantizado; los
+## comunes con probabilidad baja. La tirada y la tabla las decide el LootDirector:
+## aqui solo se avisa de la muerte.
+func _drop_powerup() -> void:
+	var director: Node = get_tree().get_first_node_in_group("loot_director")
+	if not is_instance_valid(director):
+		return
+	director.call("try_drop_from_enemy", get_parent(), global_position, _elite_kind != &"")
 
 
 func _drop_xp_orb() -> void:
@@ -724,6 +866,7 @@ func _apply_config() -> void:
 			add_to_group("pack_dogs")
 			_ensure_pack_ring()
 		&"flanker":
+			add_to_group("flankers")
 			_flank_side = 1.0 if randf() < 0.5 else -1.0
 		&"howler":
 			_behavior_timer = 2.0  # primer aullido temprano: su rol se lee pronto
@@ -767,6 +910,56 @@ func _apply_elite() -> void:
 			scale *= 1.35
 			_base_scale = scale
 			aura_color = Color(1.0, 0.4, 0.3, 0.20)
+		# --- Mutaciones por bioma (FASE 11) ------------------------------------
+		&"lider_manada":
+			# Barrio: reorganiza la manada (potencia periodica a los cercanos).
+			max_health = int(round(max_health * 1.8))
+			_mutation_timer = 2.0
+			aura_color = Color(1.0, 0.72, 0.2, 0.22)
+		&"carronero":
+			# Barrio: se alimenta del campo de batalla (se cura junto a los
+			# restos/orbes de las bajas recientes).
+			max_health = int(round(max_health * 2.0))
+			_mutation_timer = 1.0
+			aura_color = Color(0.75, 0.5, 0.25, 0.22)
+		&"esporoso":
+			# Parque: al morir contamina el suelo (zona infecciosa pequeña).
+			max_health = int(round(max_health * 1.6))
+			aura_color = Color(0.55, 0.9, 0.3, 0.22)
+		&"parasito":
+			# Parque: al morir libera criaturas menores.
+			max_health = int(round(max_health * 1.7))
+			aura_color = Color(0.4, 0.8, 0.55, 0.22)
+		&"volatil":
+			# Industrial: explota al morir dañando a AMBOS bandos (bien colocado,
+			# el jugador lo vuelve en contra de la horda).
+			max_health = int(round(max_health * 1.5))
+			contact_damage = int(round(contact_damage * 1.2))
+			aura_color = Color(1.0, 0.55, 0.15, 0.26)
+		&"chatarra":
+			# Industrial: 3 placas que reducen daño y caen por etapas (75/50/25%).
+			max_health = int(round(max_health * 1.9))
+			_scrap_plates = 3
+			knockback_strength *= 0.5
+			aura_color = Color(0.72, 0.75, 0.82, 0.22)
+		&"sabueso":
+			# Oscuridad: sigue el rastro (atraviesa antes los obstaculos).
+			speed *= 1.12
+			max_health = int(round(max_health * 1.6))
+			_hard_stuck_limit = 0.9
+			aura_color = Color(0.5, 0.35, 0.75, 0.22)
+		&"nocturno":
+			# Oscuridad: mas rapido y de silueta oscura (los ojos delatan).
+			speed *= 1.22
+			max_health = int(round(max_health * 1.6))
+			modulate = Color(0.62, 0.62, 0.75, 1.0)
+			aura_color = Color(0.25, 0.25, 0.5, 0.24)
+		&"sobrecargado":
+			# Fabrica: alterna sobrecarga veloz y aturdimiento vulnerable.
+			max_health = int(round(max_health * 1.8))
+			_mutation_state = 0
+			_mutation_state_timer = 1.8
+			aura_color = Color(0.3, 0.85, 1.0, 0.24)
 	current_health = max_health
 	xp_value *= 4
 	# Aura pulsante bajo el cuerpo: el jugador identifica al elite al instante.
@@ -823,13 +1016,30 @@ func _tint(body_color: Color, accent_color: Color, eye_color: Color) -> void:
 
 ## Efectos periodicos del comportamiento (aullido, escupitajo, bonus de manada).
 func _behavior_tick(delta: float) -> void:
+	# Caducidad de los estados de coordinacion (territorio, ordenes, rutas). Son
+	# restas sobre floats: coste despreciable y evita punteros colgados.
+	if _territory_timer > 0.0:
+		_territory_timer -= delta
+		if _territory_timer <= 0.0:
+			_territory_strength = 0.0
+	if _order_timer > 0.0:
+		_order_timer -= delta
+		if _order_timer <= 0.0:
+			_order = &""
+	if _flank_route_timer > 0.0:
+		_flank_route_timer -= delta
+	if _howler_call_timer > 0.0:
+		_howler_call_timer -= delta
 	match _behavior:
 		&"pack":
 			_pack_tick(delta)
+		&"flanker":
+			_flanker_tick(delta)
 		&"howler":
 			_behavior_timer -= delta
 			if _behavior_timer <= 0.0:
-				_behavior_timer = 6.0
+				# El aullido tarda menos en repetirse dentro de territorio propio.
+				_behavior_timer = 4.5 if in_territory() else 6.0
 				_howl()
 		&"spitter":
 			_behavior_timer -= delta
@@ -860,12 +1070,50 @@ func _behavior_full_control(delta: float) -> bool:
 ## Desvio del punto objetivo segun el comportamiento (rodeos, kiting, jefe).
 func _behavior_target_position(default_target: Vector2) -> Vector2:
 	match _behavior:
-		&"flanker":
-			# Rodea: apunta a un punto LATERAL fijo del objetivo hasta acercarse
-			# (el lado se elige al nacer y no cambia constantemente).
-			if global_position.distance_to(default_target) > 220.0:
+		&"pack":
+			# Durante el telegrafo el lider se PARA y se hace ver: la carga tiene
+			# anticipacion real, no es un aceleron sorpresa.
+			if _charge_telegraph > 0.0:
+				return global_position
+			var pack_dist: float = global_position.distance_to(default_target)
+			# Orden vigente de un Aullador: manda sobre la conducta por defecto
+			# mientras dure. "regroup" junta al grupo en el punto de la orden;
+			# "press" va directo; el resto sigue la logica normal de abajo.
+			match get_order():
+				&"regroup":
+					if global_position.distance_to(_order_point) > 190.0:
+						return _order_point
+				&"press":
+					return default_target
+			# Nivel 2+: si la manada tiene rutas urbanas vigentes, este perro se
+			# aproxima POR SU RUTA hasta estar cerca; solo entonces converge. Es
+			# lo que hace que lleguen por calles distintas en vez de en bloque.
+			if behavior_level >= 2 and _pack_route_index >= 0 and pack_dist > 340.0:
+				var routes := _pack_routes
+				if _pack_route_index < routes.size():
+					return routes[_pack_route_index]
+			# Semicirculo: cada perro ocupa un arco fijo (por id de instancia),
+			# asi rodean en vez de apilarse. En territorio el arco se cierra algo
+			# mas: la manada se agrupa mejor en su terreno.
+			if behavior_level >= 2 and pack_dist > 150.0 and pack_dist < 460.0:
+				var slot: int = absi(int(get_instance_id())) % 5
 				var to_me: Vector2 = (global_position - default_target).normalized()
-				var side: Vector2 = Vector2(-to_me.y, to_me.x) * _flank_side
+				var spread: float = 0.5 if not in_territory() else 0.42
+				var slot_dir: Vector2 = to_me.rotated((float(slot) - 2.0) * spread)
+				return default_target + slot_dir * 130.0
+			return default_target
+		&"flanker":
+			# Nivel 2+: va a la RUTA lateral elegida (una salida probable del
+			# jugador) mientras siga lejos. Cerca ya converge al objetivo: no se
+			# queda bailando en una esquina.
+			if behavior_level >= 2 and _flank_route != Vector2.ZERO \
+					and global_position.distance_to(default_target) > 260.0:
+				return _flank_route
+			# Nivel 1: rodeo lateral simple. El lado se elige al nacer y no cambia
+			# constantemente (nada de saltos instantaneos de un flanco al otro).
+			if global_position.distance_to(default_target) > 220.0:
+				var to_me2: Vector2 = (global_position - default_target).normalized()
+				var side: Vector2 = Vector2(-to_me2.y, to_me2.x) * _flank_side
 				return default_target + side * 170.0
 			return default_target
 		&"spitter":
@@ -896,9 +1144,58 @@ func _behavior_target_position(default_target: Vector2) -> Vector2:
 	return default_target
 
 
+# --- Rutas urbanas compartidas ---------------------------------------------------
+
+## Rutas de aproximacion vigentes alrededor de `center`, cacheadas para TODA la
+## manada. Se recalculan como mucho cada ROUTE_REFRESH_INTERVAL segundos, o si el
+## objetivo se ha movido lo bastante como para que las rutas viejas no sirvan.
+##
+## Esta es la consulta que hace que la manada "use las calles": los puntos salen
+## de MapGeometry.approach_points(), que los coloca sobre corredores viales
+## realmente separados entre si.
+func _shared_routes(center: Vector2) -> Array[Vector2]:
+	var now: float = float(Time.get_ticks_msec()) / 1000.0
+	if now - _pack_routes_time < ROUTE_REFRESH_INTERVAL \
+			and _pack_routes_center.distance_to(center) < 320.0:
+		return _pack_routes
+	_pack_routes_time = now
+	_pack_routes_center = center
+	_pack_routes = []
+	var manager: Node = get_tree().get_first_node_in_group("map_manager")
+	if not is_instance_valid(manager) or not manager.has_method("get_world_seed"):
+		return _pack_routes
+	var map = manager.get_active_map() if manager.has_method("get_active_map") else null
+	if map == null:
+		return _pack_routes
+	# 4 rutas: suficientes para repartir la manada y dejar hueco entre ellas.
+	_pack_routes = MapGeometry.approach_points(
+		manager.get_world_seed(), map.biome, center, 420.0, 4)
+	return _pack_routes
+
+
 # --- Perro de manada ------------------------------------------------------------
 
 func _pack_tick(delta: float) -> void:
+	# Nivel 3: carga coordinada. Cada perro sortea su temporizador; al dispararse
+	# con manada cerca, se marca LIDER un instante y ordena la carga (potenciacion
+	# breve de los perros cercanos, canal del Aullador: no se apila, tope x1.5).
+	if behavior_level >= 3:
+		_pack_charge_timer -= delta
+	# El telegrafo corre por frame (es la ventana de reaccion del jugador); el
+	# resto del escaneo de manada sigue a 0.5 s.
+	if _charge_telegraph > 0.0:
+		_charge_telegraph -= delta
+		# Reusa la linea de telegrafo del Embestidor (mismo lenguaje visual: si
+		# ves esa linea roja, algo va a cargar) apuntando al jugador.
+		if is_instance_valid(_player):
+			_behavior_dir = global_position.direction_to(_player.global_position)
+			_ensure_charge_line()
+			_charge_line.visible = true
+			_update_charge_line()
+		if _charge_telegraph <= 0.0:
+			if is_instance_valid(_charge_line):
+				_charge_line.visible = false
+			_resolve_pack_charge()
 	_pack_scan_timer -= delta
 	if _pack_scan_timer > 0.0:
 		return
@@ -916,6 +1213,89 @@ func _pack_tick(delta: float) -> void:
 	if is_instance_valid(_pack_ring):
 		_pack_ring.visible = _pack_bonus > 0.0
 
+	# Nivel 2: reparto de RUTAS urbanas. Cada perro se queda con la ruta que le
+	# pilla mas a mano de las que la manada tiene vigentes, y no dos con la misma
+	# si hay alternativas: por eso el indice se deriva del id de instancia y solo
+	# se reasigna cuando cambia el juego de rutas.
+	if behavior_level >= 2 and is_instance_valid(_player):
+		var routes := _shared_routes(_player.global_position)
+		if routes.is_empty():
+			_pack_route_index = -1
+		else:
+			_pack_route_index = absi(int(get_instance_id())) % routes.size()
+
+	if behavior_level >= 3 and _pack_charge_timer <= 0.0:
+		# Dentro de territorio la manada se organiza ANTES: es el efecto de la
+		# marca que el jugador debe poder notar y desactivar destruyendola.
+		_pack_charge_timer = randf_range(8.0, 12.0)
+		if in_territory():
+			_pack_charge_timer *= 0.65
+		if near >= 2 and is_instance_valid(_player) \
+				and global_position.distance_to(_player.global_position) < 520.0 \
+				and active_charge_count() < MAX_SIMULTANEOUS_CHARGES:
+			_begin_pack_charge()
+	# Orden "charge" de un Aullador: adelanta la carga sin saltarse ni el tope
+	# simultaneo ni el telegrafo.
+	elif behavior_level >= 3 and get_order() == &"charge" and _charge_telegraph <= 0.0 \
+			and not _charge_is_leader and active_charge_count() < MAX_SIMULTANEOUS_CHARGES \
+			and is_instance_valid(_player) \
+			and global_position.distance_to(_player.global_position) < 460.0:
+		_order = &""  # la orden se consume: no dispara cargas en bucle
+		_begin_pack_charge()
+
+
+## Este perro se marca LIDER y ANUNCIA la carga. La carga no ocurre aun: primero
+## corre el telegrafo (CHARGE_TELEGRAPH). Matar al lider durante esa ventana
+## cancela la carga entera — es el contrajuego explicito de la mecanica.
+func _begin_pack_charge() -> void:
+	_charge_is_leader = true
+	_charge_telegraph = CHARGE_TELEGRAPH
+	_active_charge_leaders.append(self)
+	RunTelemetry.count(&"pack_charges_started")
+	# Aviso inconfundible: destello del lider + aullido. Sin esto la carga seria
+	# daño sin anticipacion, que el diseño prohibe.
+	Feedback.hit_effect(global_position, Color(1.0, 0.72, 0.2, 0.9), 0.7, 3.0)
+	var audio: Node = get_node_or_null("/root/AudioManager")
+	if audio != null and audio.has_method("play_sfx"):
+		audio.play_sfx(&"event_alert")
+
+
+## Fin del telegrafo: se ejecuta la carga si el lider sigue vivo y la formacion
+## aguanta. Si no queda manada cerca, la carga DEGRADA a un aceleron individual
+## en vez de cancelarse en seco (el perro ya se habia comprometido).
+func _resolve_pack_charge() -> void:
+	_charge_is_leader = false
+	_active_charge_leaders.erase(self)
+	if _is_dead:
+		return
+	apply_howler_buff(1.4, 1.8)
+	var buffed: int = 0
+	for other in get_tree().get_nodes_in_group("pack_dogs"):
+		if other == self or not is_instance_valid(other) or not (other is Node2D):
+			continue
+		if global_position.distance_to((other as Node2D).global_position) <= PACK_RADIUS * 1.4 \
+				and other.has_method("apply_howler_buff"):
+			other.apply_howler_buff(1.4, 1.8)
+			buffed += 1
+			if buffed >= 6:
+				break
+	if buffed == 0:
+		RunTelemetry.count(&"pack_charges_degraded")
+	else:
+		RunTelemetry.count(&"pack_charges_executed")
+	Feedback.hit_effect(global_position, Color(1.0, 0.55, 0.15, 0.8), 0.5, 2.2)
+
+
+## Cancelacion de la carga: la llama la muerte del lider. Los perros que estaban
+## esperando la orden vuelven a su conducta normal sin acelerones.
+func _cancel_pack_charge() -> void:
+	if not _charge_is_leader:
+		return
+	_charge_is_leader = false
+	_charge_telegraph = 0.0
+	_active_charge_leaders.erase(self)
+	RunTelemetry.count(&"pack_charges_cancelled")
+
 
 func _ensure_pack_ring() -> void:
 	if _pack_ring != null:
@@ -932,6 +1312,102 @@ func _ensure_pack_ring() -> void:
 	move_child(_pack_ring, 0)
 
 
+# --- Flanqueador ------------------------------------------------------------------
+
+## Reserva/suelta el "cierre de ruta" contra el jugador objetivo. La reserva es
+## lo que impide que TODOS los flanqueadores sellen a la vez todas las salidas.
+func _claim_flank_close(target: Node) -> bool:
+	if target == null:
+		return false
+	var key: int = target.get_instance_id()
+	# Como mucho la MITAD de las salidas puede estar cerrada a la vez, y nunca
+	# mas de 2 flanqueadores por jugador: siempre queda por donde salir.
+	if closing_flanker_count(target) >= 2:
+		return false
+	var list: Array = _closing_flankers.get(key, [])
+	if not list.has(self):
+		list.append(self)
+	_closing_flankers[key] = list
+	_flank_closing = true
+	return true
+
+
+## Suelta el cierre de ruta. `by_death` distingue las dos formas de terminar un
+## flanqueo, que NO significan lo mismo al leer la telemetria: si el jugador mata
+## al flanqueador (interrupted) el contrajuego funciono; si el flanqueador
+## abandona por su cuenta (abandoned) es la IA cediendo la ruta.
+func _release_flank_claim(by_death: bool = false) -> void:
+	if not _flank_closing:
+		return
+	_flank_closing = false
+	for key in _closing_flankers:
+		(_closing_flankers[key] as Array).erase(self)
+	if by_death:
+		RunTelemetry.count(&"flanks_interrupted_by_player")
+	else:
+		RunTelemetry.count(&"flanks_abandoned")
+
+
+## Logica periodica del flanqueador. Nivel 1 no necesita nada aqui (su rodeo
+## lateral vive en _behavior_target_position); los niveles 2 y 3 eligen y
+## mantienen una RUTA lateral concreta.
+func _flanker_tick(_delta: float) -> void:
+	if behavior_level < 2 or not is_instance_valid(_player):
+		return
+	if _flank_route_timer > 0.0:
+		return
+	# Cadencia baja a proposito: recalcular el destino cada frame produce el
+	# movimiento erratico y los cambios bruscos de objetivo que el diseño veta.
+	_flank_route_timer = 1.2
+
+	# Nivel 2: predice hacia donde va el jugador y busca una ruta lateral que
+	# desemboque en esa salida probable.
+	var player_vel: Vector2 = Vector2.ZERO
+	if _player.has_method("get_velocity"):
+		player_vel = _player.get_velocity()
+	elif _player.get("velocity") != null:
+		player_vel = _player.get("velocity")
+	var predicted: Vector2 = _player.global_position + player_vel.normalized() * 260.0
+
+	var routes := _shared_routes(_player.global_position)
+	if routes.is_empty():
+		_flank_route = predicted
+		return
+
+	# Se queda con la ruta mas cercana a la salida predicha, no a si mismo: la
+	# gracia del flanqueo es llegar antes ADONDE VA el jugador.
+	var best: Vector2 = routes[0]
+	var best_distance: float = INF
+	for point in routes:
+		var d: float = point.distance_to(predicted)
+		if d < best_distance:
+			best_distance = d
+			best = point
+	# Un flanqueo EMPIEZA cuando el perro se compromete con una ruta nueva.
+	if not _flank_route.is_equal_approx(best):
+		_flank_route = best
+		_flank_arrived = false
+		RunTelemetry.count(&"flanks_started")
+
+	# Nivel 3: ademas de posicionarse, INTENTA cerrar esa ruta. La reserva puede
+	# denegarse (ya hay dos cerrando): entonces solo presiona, sin sellar.
+	if behavior_level >= 3:
+		var wants_close: bool = in_territory() or randf() < 0.5
+		if wants_close and not _flank_closing:
+			_claim_flank_close(_player)
+		elif _flank_closing:
+			# Abandona el cierre si el punto dejo de ser util o navegable.
+			if global_position.distance_to(_flank_route) > 900.0 \
+					or not MapGeometry.is_clear(self, _flank_route, 30.0):
+				_release_flank_claim()
+
+	# Un flanqueo se COMPLETA cuando el perro llega de verdad a ocupar la salida
+	# que eligio. Antes se contaba al reservarla, que solo medía intencion.
+	if not _flank_arrived and global_position.distance_to(_flank_route) < 140.0:
+		_flank_arrived = true
+		RunTelemetry.count(&"flanks_completed")
+
+
 # --- Aullador ---------------------------------------------------------------------
 
 func _howl() -> void:
@@ -943,12 +1419,120 @@ func _howl() -> void:
 	var audio: Node = get_node_or_null("/root/AudioManager")
 	if audio != null and audio.has_method("play_sfx"):
 		audio.play_sfx(&"event_alert")
+	# Nivel 1: potenciacion moderada de los cercanos (tope duro en el receptor).
+	var nearby: Array[Node2D] = []
 	for other in get_tree().get_nodes_in_group("enemies"):
 		if other == self or not is_instance_valid(other) or not (other is Node2D):
 			continue
-		if global_position.distance_to((other as Node2D).global_position) <= 260.0 \
-				and other.has_method("apply_howler_buff"):
-			other.apply_howler_buff(1.3, 4.0)
+		if global_position.distance_to((other as Node2D).global_position) <= 260.0:
+			if other.has_method("apply_howler_buff"):
+				other.apply_howler_buff(1.3, 4.0)
+			if other.has_method("receive_order"):
+				nearby.append(other as Node2D)
+
+	# Nivel 2: llama a una manada pequeña que entra POR UNA RUTA URBANA distinta
+	# de la que ya esta presionando. Respeta presupuesto y tope del spawner, y
+	# los invocados dan XP reducida (una llamada no puede financiar la build).
+	if behavior_level >= 2:
+		_howler_call_pack()
+
+	# Nivel 3: da una ORDEN concreta al grupo cercano, con duracion acotada.
+	if behavior_level >= 3 and not nearby.is_empty():
+		_howler_give_order(nearby)
+
+
+## Llamada de refuerzos del Aullador (N2). Entra por una ruta urbana distinta a
+## la del propio aullador para que la presion venga de dos sitios.
+func _howler_call_pack() -> void:
+	# Cooldown PROPIO, mucho mas largo que el del aullido: el aullador coordina a
+	# menudo pero solo trae refuerzos de vez en cuando. Sin esto, cada aullido
+	# (4.5-6 s) inyectaba perros y la partida se ganaba/perdia por cantidad.
+	if _howler_call_timer > 0.0:
+		return
+	_howler_call_timer = 20.0
+	var spawner: Node = get_tree().get_first_node_in_group("enemy_spawner")
+	if not is_instance_valid(spawner) or not spawner.has_method("spawn_pack_from_street"):
+		return
+	if not is_instance_valid(_player):
+		return
+	var routes := _shared_routes(_player.global_position)
+	if routes.is_empty():
+		return
+	# La ruta MAS LEJANA a este aullador: la llamada abre un segundo frente.
+	var far: Vector2 = routes[0]
+	var best: float = -1.0
+	for point in routes:
+		var d: float = point.distance_to(global_position)
+		if d > best:
+			best = d
+			far = point
+	var called: int = spawner.spawn_pack_from_street(&"zombie_dog", 2, far, 1)
+	if called > 0:
+		RunTelemetry.count(&"howler_calls", called)
+
+
+## Orden del Aullador (N3): elige UNA orden para el grupo cercano y la reparte.
+## Duracion acotada y cooldown implicito (el aullido tiene su propio periodo):
+## no existen ordenes globales permanentes.
+func _howler_give_order(group: Array[Node2D]) -> void:
+	if not is_instance_valid(_player):
+		return
+	# La orden se elige por SITUACION, no al azar puro: si el grupo es pequeño
+	# manda agrupar; si hay masa, presiona o flanquea. En territorio propio se
+	# permite la carga coordinada.
+	var order: StringName = &"press"
+	if group.size() <= 2:
+		order = &"regroup"
+	elif in_territory() and active_charge_count() < MAX_SIMULTANEOUS_CHARGES:
+		order = &"charge"
+	elif randf() < 0.5:
+		order = &"flank"
+	var point: Vector2 = _player.global_position
+	var given: int = 0
+	for member in group:
+		member.receive_order(order, point, 4.0)
+		given += 1
+		if given >= 8:
+			break
+	RunTelemetry.count(&"howler_orders")
+	RunTelemetry.count(StringName("howler_order_%s" % order))
+	# La orden se ve: pulso del color del aullador hacia el grupo.
+	Feedback.hit_effect(global_position, Color(1.0, 0.9, 0.45, 0.7), 0.5, 2.4)
+
+
+## La marca de aullido informa a este perro de que esta EN TERRITORIO. No aplica
+## estadisticas: solo deja constancia de la fuerza y del centro. Lo que cambia es
+## la CONDUCTA (agruparse antes, esperar rezagados, repartir rutas, cargar antes).
+func enter_territory(strength: float, center: Vector2, radius: float) -> void:
+	if _is_dead:
+		return
+	# Prioridad, no acumulacion: si ya esta en un territorio mas fuerte, se queda
+	# con aquel. Dos marcas superpuestas no dan doble coordinacion.
+	if strength >= _territory_strength:
+		_territory_strength = strength
+		_territory_center = center
+		_territory_radius = radius
+	# TTL algo mayor que el tick de la marca (1 s): al salir del radio se apaga
+	# solo, sin que la marca tenga que perseguir a quien se fue.
+	_territory_timer = 1.6
+
+
+## true si el enemigo esta dentro de un territorio de manada activo.
+func in_territory() -> bool:
+	return _territory_strength > 0.0 and _territory_timer > 0.0
+
+
+## Orden de un Aullador (N3). Duracion acotada: no existen ordenes permanentes.
+func receive_order(order: StringName, point: Vector2, duration: float) -> void:
+	if _is_dead:
+		return
+	_order = order
+	_order_point = point
+	_order_timer = duration
+
+
+func get_order() -> StringName:
+	return _order if _order_timer > 0.0 else &""
 
 
 ## Potenciacion temporal del Aullador. No se apila: gana la mas fuerte, con tope
@@ -970,14 +1554,33 @@ func apply_push(impulse: Vector2) -> void:
 # --- Escupidor ---------------------------------------------------------------------
 
 func _spit() -> void:
+	# Nivel 2+: dispara LIDERADO hacia la ruta de escape (usa la velocidad del
+	# jugador amortiguada); nivel 1 dispara directo.
+	var aim: Vector2 = _player.global_position
+	var player_vel: Vector2 = Vector2.ZERO
+	if _player is CharacterBody2D:
+		player_vel = (_player as CharacterBody2D).velocity
+	if behavior_level >= 2 and player_vel != Vector2.ZERO:
+		aim += player_vel * 0.5
+	_spit_projectile(global_position.direction_to(aim))
+	# Nivel 3: segundo proyectil que CIERRA la escapatoria (barrera), si el
+	# presupuesto global de proyectiles lo permite.
+	if behavior_level >= 3 and player_vel.length_squared() > 100.0 \
+			and get_tree().get_node_count_in_group(ENEMY_PROJECTILE_SCRIPT.GROUP) \
+			< RunPhaseConfig.MAX_ENEMY_PROJECTILES:
+		var escape_point: Vector2 = _player.global_position + player_vel.normalized() * 150.0
+		_spit_projectile(global_position.direction_to(escape_point))
+	# Destello de aviso en el momento del disparo.
+	Feedback.hit_effect(global_position, Color(0.6, 1.0, 0.4, 0.7), 0.25, 1.2)
+
+
+func _spit_projectile(direction: Vector2) -> void:
 	var proj := Node2D.new()
 	proj.set_script(ENEMY_PROJECTILE_SCRIPT)
-	proj.set("velocity", global_position.direction_to(_player.global_position) * 220.0)
+	proj.set("velocity", direction * 220.0)
 	proj.set("damage", maxi(1, int(round(6.0 * _damage_multiplier))))
 	proj.position = global_position
 	get_parent().add_child(proj)
-	# Destello de aviso en el momento del disparo.
-	Feedback.hit_effect(global_position, Color(0.6, 1.0, 0.4, 0.7), 0.25, 1.2)
 
 
 # --- Embestidor ----------------------------------------------------------------------
@@ -995,7 +1598,8 @@ func _charger_process(delta: float) -> bool:
 			_behavior_state_timer -= delta
 			if _behavior_state_timer <= 0.0:
 				_behavior_state = 2
-				_behavior_state_timer = 0.55
+				# Nivel 2+: carga mas larga (recorre el corredor completo).
+				_behavior_state_timer = 0.7 if behavior_level >= 2 else 0.55
 				_behavior_hit_done = false
 				if is_instance_valid(_charge_line):
 					_charge_line.visible = false
@@ -1011,6 +1615,15 @@ func _charger_process(delta: float) -> bool:
 					_player.take_damage(int(round(contact_damage * 1.5)))
 				_behavior_hit_done = true
 			_push_enemies_in_path()
+			# Nivel 3: la embestida ROMPE obstaculos destructibles al impactar
+			# (activa por fin los datos destructible de ObstacleData).
+			if collided and behavior_level >= 3:
+				var col := get_last_slide_collision()
+				if col != null:
+					var hit: Object = col.get_collider()
+					if hit != null and hit is Node and (hit as Node).is_in_group("obstacles") \
+							and hit.has_method("absorb_projectile"):
+						hit.absorb_projectile(60)
 			_behavior_state_timer -= delta
 			if collided or _behavior_state_timer <= 0.0:
 				# Queda VULNERABLE si choca con un obstaculo o falla la carga.
@@ -1028,8 +1641,10 @@ func _charger_process(delta: float) -> bool:
 				_behavior_timer = 3.2
 			return true
 	# Estado 0 (acecho): persecucion normal; entra en telegrafo por cercania.
+	# Nivel 2+: busca lineas de carga mas LARGAS (dispara desde mas lejos).
+	var trigger_range: float = CHARGER_TRIGGER_RANGE + (140.0 if behavior_level >= 2 else 0.0)
 	if _behavior_timer <= 0.0 and is_instance_valid(_player) \
-			and global_position.distance_to(_player.global_position) < CHARGER_TRIGGER_RANGE:
+			and global_position.distance_to(_player.global_position) < trigger_range:
 		_behavior_state = 1
 		_behavior_state_timer = 0.9
 		_behavior_dir = global_position.direction_to(_player.global_position)
@@ -1256,6 +1871,90 @@ func bind_boss(boss_node: Node2D) -> void:
 	_boss = boss_node
 
 
+# --- Efectos continuos de las mutaciones elite (FASE 11) ------------------------------------
+
+func _mutation_tick(delta: float) -> void:
+	match _elite_kind:
+		&"lider_manada":
+			_mutation_timer -= delta
+			if _mutation_timer <= 0.0:
+				_mutation_timer = 2.5
+				var buffed: int = 0
+				for other in get_tree().get_nodes_in_group("enemies"):
+					if other == self or not is_instance_valid(other) or not (other is Node2D):
+						continue
+					if other.is_in_group("map_interactables"):
+						continue
+					if global_position.distance_to((other as Node2D).global_position) <= 240.0 \
+							and other.has_method("apply_howler_buff"):
+						other.apply_howler_buff(1.22, 2.6)
+						buffed += 1
+						if buffed >= 8:
+							break
+				if buffed > 0:
+					Feedback.hit_effect(global_position, Color(1.0, 0.72, 0.2, 0.5), 0.3, 1.5)
+		&"carronero":
+			_mutation_timer -= delta
+			if _mutation_timer <= 0.0:
+				_mutation_timer = 1.0
+				if current_health >= max_health:
+					return
+				# Se cura junto a los restos de las bajas (orbes de XP cercanos).
+				for orb in get_tree().get_nodes_in_group("xp_orbs"):
+					if not is_instance_valid(orb) or not (orb is Node2D):
+						continue
+					if global_position.distance_to((orb as Node2D).global_position) <= 220.0:
+						current_health = mini(max_health, current_health + 4)
+						Feedback.hit_effect(global_position, Color(0.75, 0.5, 0.25, 0.5), 0.2, 1.1)
+						break
+		&"sobrecargado":
+			_mutation_state_timer -= delta
+			if _mutation_state == 0:
+				_mutation_speed_mult = 1.55
+				if _mutation_state_timer <= 0.0:
+					_mutation_state = 1
+					_mutation_state_timer = 1.2
+					Feedback.hit_effect(global_position, Color(0.3, 0.85, 1.0, 0.6), 0.35, 1.4)
+			else:
+				# Aturdido: casi quieto y VULNERABLE (take_damage x1.5).
+				_mutation_speed_mult = 0.25
+				if _mutation_state_timer <= 0.0:
+					_mutation_state = 0
+					_mutation_state_timer = 1.8
+
+
+## Efectos de muerte de la mutacion elite (esporoso/parasito/volatil).
+func _mutation_on_death() -> void:
+	match _elite_kind:
+		&"esporoso":
+			HAZARD_ZONE_SCRIPT.try_spawn(get_parent(), global_position,
+				{"kind": &"infection", "radius": 55.0, "duration": 4.0,
+				"damage_per_tick": maxi(1, int(round(4.0 * _damage_multiplier)))})
+		&"parasito":
+			_split_on_death()
+		&"volatil":
+			# Explosion dual: daña jugadores Y enemigos cercanos.
+			var radius: float = 115.0
+			Feedback.hit_effect(global_position, Color(1.0, 0.55, 0.15, 0.9), 0.7, 3.0)
+			Feedback.shake(0.2)
+			for p in get_tree().get_nodes_in_group("players"):
+				if not is_instance_valid(p) or not (p is Node2D):
+					continue
+				if global_position.distance_to((p as Node2D).global_position) <= radius \
+						and p.has_method("take_damage"):
+					p.take_damage(12)
+			var hits: int = 0
+			for other in get_tree().get_nodes_in_group("enemies"):
+				if other == self or not is_instance_valid(other) or not (other is Node2D):
+					continue
+				if global_position.distance_to((other as Node2D).global_position) <= radius \
+						and other.has_method("take_damage"):
+					other.take_damage(22, global_position.direction_to((other as Node2D).global_position))
+					hits += 1
+					if hits >= 10:
+						break
+
+
 # --- Efectos de muerte por comportamiento ---------------------------------------------------
 
 func _behavior_on_death() -> void:
@@ -1287,12 +1986,8 @@ func _split_on_death() -> void:
 		get_parent().add_child.call_deferred(child)
 
 
-## El Portador deja una zona peligrosa claramente señalada (limite global).
+## El Portador deja una zona peligrosa claramente señalada. try_spawn aplica el
+## presupuesto por tipo y fusiona con zonas superpuestas (FASE 11).
 func _leave_hazard_zone() -> void:
-	if get_tree().get_node_count_in_group(HAZARD_ZONE_SCRIPT.GROUP) >= RunPhaseConfig.MAX_HAZARD_ZONES:
-		return
-	var zone := Node2D.new()
-	zone.set_script(HAZARD_ZONE_SCRIPT)
-	zone.position = global_position
-	zone.set("damage_per_tick", maxi(1, int(round(4.0 * _damage_multiplier))))
-	get_parent().add_child.call_deferred(zone)
+	HAZARD_ZONE_SCRIPT.try_spawn(get_parent(), global_position,
+		{"kind": &"infection", "damage_per_tick": maxi(1, int(round(4.0 * _damage_multiplier)))})

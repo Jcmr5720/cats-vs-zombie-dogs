@@ -1,11 +1,11 @@
-[gd_scene load_steps=36 format=3 uid="uid://bvc01mainlevel01"]
+[gd_scene load_steps=37 format=3 uid="uid://bvc01mainlevel01"]
 
 [ext_resource type="PackedScene" uid="uid://bvc01hud01" path="res://scenes/ui/HUD.tscn" id="1_hud"]
 [ext_resource type="PackedScene" uid="uid://bvc01player01" path="res://scenes/player/Player.tscn" id="2_player"]
 [ext_resource type="Script" path="res://scripts/enemies/enemy_spawner.gd" id="3_spawner"]
 [ext_resource type="PackedScene" uid="uid://bvc01enemy01" path="res://scenes/enemies/Enemy.tscn" id="4_enemy"]
 [ext_resource type="Script" path="res://scripts/systems/game_manager.gd" id="5_gm"]
-[ext_resource type="Script" path="res://scripts/systems/upgrade_manager.gd" id="6_upgrades"]
+[ext_resource type="Script" path="res://scripts/systems/loot_director.gd" id="6b_loot"]
 [ext_resource type="Resource" path="res://data/enemies/normal_zombie_dog.tres" id="7_normal"]
 [ext_resource type="Resource" path="res://data/enemies/runner_zombie_dog.tres" id="8_runner"]
 [ext_resource type="Resource" path="res://data/enemies/tank_zombie_dog.tres" id="7b_tank"]
@@ -123,17 +123,15 @@ enemy_spawner_path = NodePath("../EnemySpawner")
 boss_spawner_path = NodePath("../BossSpawner")
 wave_event_manager_path = NodePath("../WaveEventManager")
 map_manager_path = NodePath("../MapManager")
-upgrade_manager_path = NodePath("../UpgradeManager")
+loot_director_path = NodePath("../LootDirector")
 
 [node name="GameManager" type="Node" parent="."]
 script = ExtResource("5_gm")
 player_path = NodePath("../Player")
 hud_path = NodePath("../HUD")
 
-[node name="UpgradeManager" type="Node" parent="."]
-script = ExtResource("6_upgrades")
-player_path = NodePath("../Player")
-hud_path = NodePath("../HUD")
+[node name="LootDirector" type="Node" parent="."]
+script = ExtResource("6b_loot")
 
 [node name="AmbientController" type="Node2D" parent="."]
 script = ExtResource("32_ambient")

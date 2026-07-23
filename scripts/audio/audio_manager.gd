@@ -237,6 +237,13 @@ func _build_streams() -> void:
 	_add_tone(&"defeat", 210.0, 0.75, 0.38, "defeat", 1000, 1)
 	_add_tone(&"event_alert", 360.0, 0.22, 0.28, "alert", 500, 1)
 	_add_tone(&"low_health", 270.0, 0.18, 0.22, "pulse", 1200, 1)
+	# FASE 13: cada categoria de botin suena distinto para que el oido tambien
+	# distinga caja / arma / mejora / mutacion / evolucion sin leer nada.
+	_add_tone(&"crate_open", 210.0, 0.16, 0.30, "noise_fall", 180, 2)
+	_add_tone(&"weapon_found", 500.0, 0.24, 0.30, "rise", 250, 1)
+	_add_tone(&"powerup_collect", 860.0, 0.09, 0.20, "chime", 110, 2)
+	_add_tone(&"mutation_activate", 340.0, 0.42, 0.34, "level", 400, 1)
+	_add_tone(&"evolution_complete", 520.0, 0.6, 0.38, "victory", 600, 1)
 
 	_music[&"menu"] = _make_music_loop([440.0, 523.25, 659.25, 587.33], 0.10, 0.055)
 	_music[&"gameplay"] = _make_music_loop([392.0, 440.0, 493.88, 329.63], 0.08, 0.060)

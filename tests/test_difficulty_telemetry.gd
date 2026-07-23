@@ -61,7 +61,7 @@ func _process(delta: float) -> void:
 	if not get_tree().paused:
 		_elapsed += delta
 	_keep_players_alive()
-	_auto_resolve_cards()
+	_collect_loot()
 	_inject_progression()
 	var fps: float = float(Engine.get_frames_per_second())
 	if fps > 1.0:
@@ -84,6 +84,10 @@ func _keep_players_alive() -> void:
 			if p.has_signal("damaged") and not p.damaged.is_connected(_on_player_damaged):
 				p.damaged.connect(_on_player_damaged)
 		p.set("current_health", 9999999)
+		# Sin input real, la mira manual (defecto del juego) apuntaria siempre al
+		# mismo sitio: la telemetria mide con el auto-apuntado, como siempre.
+		if p.has_method("set_aim_mode"):
+			p.set_aim_mode(&"auto")
 
 
 func _on_player_damaged(amount: int) -> void:
@@ -92,11 +96,10 @@ func _on_player_damaged(amount: int) -> void:
 
 ## Empuja la progresion hacia una curva de nivel tipica (~TELEMETRY_LEVEL_RATE
 ## niveles/min): el jugador estatico casi no recoge XP, asi que se inyecta XP real
-## (dispara level_up y cartas REALES, auto-resueltas) para que la dificultad vea
-## crecer nivel/armas/mejoras como en una partida normal.
+## para que la dificultad vea crecer nivel/mejoras como en una partida normal.
+## FASE 12: subir de nivel ya no abre cartas ni pausa, asi que ya no hay que
+## dejar un frame para "resolver la seleccion".
 func _inject_progression() -> void:
-	if get_tree().paused:
-		return
 	var rate_env: String = OS.get_environment("TELEMETRY_LEVEL_RATE")
 	var rate: float = float(rate_env) if rate_env != "" else 1.2
 	var target_level: int = mini(26, 1 + int(_elapsed / 60.0 * rate))
@@ -105,21 +108,20 @@ func _inject_progression() -> void:
 			continue
 		if int(p.get("level")) < target_level:
 			p.add_experience(int(p.get("experience_to_level")), true)
-			return  # una subida por frame: deja que la seleccion se resuelva
 
 
-## Elige siempre la carta 0 en cuanto aparece una seleccion (solo o coop).
-func _auto_resolve_cards() -> void:
-	var hud: Node = get_tree().get_first_node_in_group("hud")
-	if hud != null:
-		var panel = hud.get("upgrade_panel")
-		if panel != null and (panel as CanvasItem).visible and hud.has_signal("upgrade_card_selected"):
-			hud.emit_signal("upgrade_card_selected", 0)
-	var coop_panel: Node = get_tree().get_first_node_in_group("coop_upgrade_panel")
-	if coop_panel != null:
-		for pid in [1, 2]:
-			if bool(coop_panel.call("is_open", pid)):
-				coop_panel.emit_signal("card_chosen", pid, 0)
+## FASE 12: recoge el botin del suelo para que el jugador estatico de la
+## telemetria acumule poder como en una partida real (antes lo hacia resolviendo
+## cartas). Recogida directa: la telemetria no simula navegacion.
+func _collect_loot() -> void:
+	for pickup in get_tree().get_nodes_in_group("pickups"):
+		if not is_instance_valid(pickup) or not pickup.has_method("collect"):
+			continue
+		if not pickup.has_method("is_claimed") or pickup.is_claimed():
+			continue
+		var player: Node = get_tree().get_first_node_in_group("player")
+		if player != null:
+			pickup.call("collect", player)
 
 
 func _spawner() -> Node:

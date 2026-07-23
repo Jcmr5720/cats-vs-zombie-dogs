@@ -54,6 +54,13 @@ phase_weight_overrides = {
 &"spitter_zombie_dog": 1.3,
 &"howler_zombie_dog": 1.2
 }
+biome_mutations = Array[StringName]([&"esporoso", &"parasito"])
+dynamic_event_pool = Array[StringName]([&"lake_fog", &"carrier_bloom"])
+opening_pack_id = &"zombie_dog"
+opening_pack_alt_id = &"pup_zombie_dog"
+opening_variety_id = &"pup_zombie_dog"
+opening_variety_alt_id = &"runner_zombie_dog"
+boss_modifier_pool = Array[StringName]([&"pantanoso", &"invocador", &"veloz_alfa"])
 boss_data = ExtResource("7_boss")
 boss_spawn_time = 0.0
 miniboss_times = PackedFloat32Array()

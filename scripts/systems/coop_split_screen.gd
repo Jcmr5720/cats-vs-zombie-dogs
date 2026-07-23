@@ -35,6 +35,8 @@ class EdgeArrow:
 var _players: Array = []
 var _viewports: Array = []
 var _cameras: Array = []
+## Contenedores de cada mitad (para recortar el raton a la mitad de su dueño).
+var _containers: Array = []
 ## Referencias de UI por jugador (indice paralelo a _players).
 var _huds: Array = []
 var _player_manager: Node
@@ -47,6 +49,9 @@ func setup(players: Array, manager: Node) -> void:
 	_player_manager = manager
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# La mira manual del J1 necesita convertir el raton a traves de la camara de SU
+	# mitad: se localiza este nodo por grupo para no depender de rutas.
+	add_to_group("coop_split")
 
 	var world: World2D = get_viewport().world_2d
 	for index in _players.size():
@@ -62,11 +67,18 @@ func _build_view(index: int, world: World2D) -> void:
 	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_anchor_to_half(container, index)
 	add_child(container)
+	_containers.append(container)
 
 	var viewport := SubViewport.new()
 	viewport.disable_3d = true
 	viewport.handle_input_locally = false
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	# Las dos mitades COMPARTEN world_2d, asi que por defecto cada una dibujaria
+	# tambien la reticula del otro jugador (duplicada y en la pantalla equivocada).
+	# Se apaga la capa de visibilidad del companero: cada reticula se pinta una sola
+	# vez, en su mitad. Todo lo demas (capa 1) sigue visible en ambas.
+	var partner_layer: int = PlayerAimController.reticle_visibility_layer(2 - index)
+	viewport.canvas_cull_mask = 0xFFFFFFFF & ~partner_layer
 	container.add_child(viewport)
 	viewport.world_2d = world
 	_viewports.append(viewport)
@@ -101,6 +113,56 @@ func _anchor_to_half(control: Control, index: int) -> void:
 	control.offset_right = 0.0
 	control.offset_top = 0.0
 	control.offset_bottom = 0.0
+
+
+# --- Conversion pantalla <-> mundo (punteria con raton) -------------------------
+# El cursor NO se bloquea ni se recorta: sigue siendo libre para los menus. Lo unico
+# acotado es su INTERPRETACION — cada mitad solo traduce posiciones que caen dentro
+# de ella, porque un punto de la otra mitad, leido con esta camara, daria una
+# direccion equivocada. Quien apunta decide que hacer si el cursor sale (el
+# PlayerAimController conserva la ultima direccion valida).
+
+## Rectangulo en pantalla de la mitad de un jugador.
+func half_rect(player_index: int) -> Rect2:
+	if player_index < 0 or player_index >= _containers.size():
+		return Rect2()
+	var container: Control = _containers[player_index]
+	if not is_instance_valid(container):
+		return Rect2()
+	return container.get_global_rect()
+
+
+## ¿Esta ese punto de pantalla dentro de la mitad de este jugador?
+func contains_point(player_index: int, screen_pos: Vector2) -> bool:
+	var rect: Rect2 = half_rect(player_index)
+	return rect.size.x > 0.0 and rect.size.y > 0.0 and rect.has_point(screen_pos)
+
+
+## Punto de MUNDO -> punto de PANTALLA en la mitad de ese jugador. Lo usan la
+## flecha hacia el companero y los tests (ida y vuelta con screen_to_world).
+func world_to_screen(player_index: int, world_pos: Vector2) -> Vector2:
+	if player_index < 0 or player_index >= _cameras.size():
+		return world_pos
+	var cam: Camera2D = _cameras[player_index]
+	if not is_instance_valid(cam):
+		return world_pos
+	var vp_size: Vector2 = Vector2(_viewports[player_index].size)
+	var local: Vector2 = (world_pos - cam.get_screen_center_position()) * cam.zoom + vp_size * 0.5
+	return local + half_rect(player_index).position
+
+
+## Inversa exacta de world_to_screen: punto de PANTALLA -> punto de MUNDO visto por
+## la camara de esa mitad.
+func screen_to_world(player_index: int, screen_pos: Vector2) -> Vector2:
+	if player_index < 0 or player_index >= _cameras.size():
+		return screen_pos
+	var cam: Camera2D = _cameras[player_index]
+	if not is_instance_valid(cam):
+		return screen_pos
+	var rect: Rect2 = half_rect(player_index)
+	var vp_size: Vector2 = Vector2(_viewports[player_index].size)
+	var local: Vector2 = screen_pos - rect.position
+	return (local - vp_size * 0.5) / cam.zoom + cam.get_screen_center_position()
 
 
 ## Linea divisoria central para que las mitades se lean como dos "pantallas".
@@ -190,6 +252,18 @@ func _build_overlay(index: int, color: Color) -> void:
 	level_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	header.add_child(level_label)
 
+	# Aviso de auto-apuntado: el modo es de CADA jugador, asi que se lee en su mitad.
+	var aim_label := Label.new()
+	aim_label.text = "Auto-mira"
+	aim_label.visible = false
+	aim_label.add_theme_font_override("font", UIFonts.nunito(600))
+	aim_label.add_theme_font_size_override("font_size", UIFonts.scaled(12))
+	aim_label.add_theme_color_override("font_color", Color(color.r, color.g, color.b, 0.85))
+	aim_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	aim_label.add_theme_constant_override("outline_size", 3)
+	aim_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	header.add_child(aim_label)
+
 	# Panel de derribado: oscurece SU mitad y muestra el progreso de revive.
 	var downed := ColorRect.new()
 	downed.color = Color(0.25, 0.02, 0.04, 0.42)
@@ -274,6 +348,7 @@ func _build_overlay(index: int, color: Color) -> void:
 		"arrow": arrow,
 		"arrow_label": arrow_label,
 		"rescue_label": rescue_label,
+		"aim_label": aim_label,
 	})
 
 
@@ -316,6 +391,21 @@ func _update_half(index: int) -> void:
 	xp_bar.max_value = maxi(1, int(player.get("experience_to_level")))
 	xp_bar.value = clampi(int(player.get("experience")), 0, int(xp_bar.max_value))
 	(refs["level_label"] as Label).text = "Nv. %d" % int(player.get("level"))
+	# Modo de punteria de ESTE jugador (poll: 2 jugadores, costo despreciable). Solo
+	# se rotula lo que NO es el defecto: manual no necesita aviso.
+	var aim_label: Label = refs["aim_label"]
+	if player.has_method("get_aim_mode"):
+		match player.get_aim_mode():
+			&"auto":
+				aim_label.text = "Auto-mira"
+				aim_label.visible = true
+			&"assist":
+				aim_label.text = "Mira asistida"
+				aim_label.visible = true
+			_:
+				aim_label.visible = false
+	else:
+		aim_label.visible = false
 
 	# Estado de derribado + progreso de revive de ESTE jugador.
 	var is_down: bool = player.has_method("is_downed") and player.is_downed()
@@ -362,8 +452,9 @@ func _update_partner_arrow(index: int, refs: Dictionary) -> void:
 	rescue_label.visible = partner_down and _revive_fraction(partner) > 0.0
 
 	var vp_size: Vector2 = Vector2(_viewports[index].size)
-	var center: Vector2 = cam.get_screen_center_position()
-	var screen: Vector2 = ((partner as Node2D).global_position - center) * cam.zoom + vp_size * 0.5
+	# Coordenadas LOCALES de la mitad (la flecha se posiciona dentro del overlay).
+	var screen: Vector2 = world_to_screen(index, (partner as Node2D).global_position) \
+		- half_rect(index).position
 	var inside: bool = screen.x >= ARROW_MARGIN and screen.x <= vp_size.x - ARROW_MARGIN \
 		and screen.y >= ARROW_MARGIN and screen.y <= vp_size.y - ARROW_MARGIN
 	if inside:

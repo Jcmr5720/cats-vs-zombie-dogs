@@ -196,6 +196,10 @@ func restart_run(new_seed: bool = true) -> void:
 
 
 func _new_seed() -> int:
+	# Tests/repro (FASE 11): RUN_SEED en el entorno fija la semilla de la run
+	# (mundo + guion procedural identicos, estilo "compartir semilla").
+	if OS.has_environment("RUN_SEED"):
+		return maxi(1, abs(int(OS.get_environment("RUN_SEED"))))
 	var rng := RandomNumberGenerator.new()
 	rng.seed = abs(hash("%d:%d" % [Time.get_unix_time_from_system(), Time.get_ticks_usec()]))
 	# Rango legible para mostrar/compartir (9 digitos), nunca 0.

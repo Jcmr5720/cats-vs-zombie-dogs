@@ -5,13 +5,6 @@ extends CanvasLayer
 ## (kills, intensidad, sinergias, mapa, estado de companeros) se conserva en memoria
 ## y se ofrece en la pausa (ESC) via get_run_info(). No saturar la pantalla de juego.
 
-signal upgrade_card_selected(card_index: int)
-## Agencia en el level-up (Rework de adictividad): las gestiona UpgradeManager.
-## Fase correccion: la opcion de SALTAR la seleccion se elimino por completo
-## (rompia la progresion); subir de nivel siempre exige elegir una carta.
-signal reroll_requested
-signal banish_requested(card_index: int)
-
 const META_PANEL_SCENE := preload("res://scenes/ui/MetaUpgradePanel.tscn")
 const PAUSE_MENU_SCENE := preload("res://scenes/menus/PauseMenu.tscn")
 const MINIMAP_SYSTEM_SCRIPT := preload("res://scripts/ui/minimap/minimap_system.gd")
@@ -22,13 +15,6 @@ const IconDrawer = preload("res://scripts/ui/icon_drawer.gd")
 
 var _meta_panel: Control
 var _pause_menu: Control
-
-const RARITY_STYLE: Dictionary = {
-	&"common": {"label": "COMUN", "color": Color(0.78, 0.82, 0.88)},
-	&"rare": {"label": "RARO", "color": Color(0.36, 0.66, 1.0)},
-	&"epic": {"label": "EPICO", "color": Color(0.78, 0.45, 1.0)},
-	&"legendary": {"label": "LEGENDARIA", "color": Color(1.0, 0.82, 0.25)},
-}
 
 const COMPANION_STATE_STYLE: Dictionary = {
 	&"active": {"label": "Activo", "color": Color(0.64, 1.0, 0.72, 1.0)},
@@ -63,8 +49,6 @@ const WEAPON_TYPE_STYLE: Dictionary = {
 @onready var _boss_name_label: Label = $BossBar/BossName
 @onready var _boss_health_bar: ProgressBar = $BossBar/BossHealth
 @onready var _damage_flash: ColorRect = $DamageFlash
-@onready var upgrade_panel: Control = $UpgradePanel
-@onready var _upgrade_title: Label = $UpgradePanel/Center/Content/Title
 # --- Paneles de fin de partida (victoria / derrota) ---
 @onready var _victory_panel: Control = $VictoryPanel
 @onready var _victory_title: Label = $VictoryPanel/Center/Content/Title
@@ -78,39 +62,14 @@ const WEAPON_TYPE_STYLE: Dictionary = {
 @onready var _defeat_summary: Label = $GameOverPanel/Center/Content/Summary
 @onready var _defeat_details: Label = $GameOverPanel/Center/Content/Details
 @onready var _defeat_details_button: Button = $GameOverPanel/Center/Content/DetailsButton
-## Mosaicos de estadísticas de fin de partida (reemplazan el resumen de texto).
+## Mosaicos de estadÃ­sticas de fin de partida (reemplazan el resumen de texto).
 var _victory_tiles: GridContainer
 var _defeat_tiles: GridContainer
-## Botón "Reintentar" de cada panel (foco inicial para navegación con gamepad).
+## BotÃ³n "Reintentar" de cada panel (foco inicial para navegaciÃ³n con gamepad).
 var _victory_retry: Button
 var _defeat_retry: Button
-## Tarjetas de fondo de fin de partida (se reajustan al tamaño del viewport).
+## Tarjetas de fondo de fin de partida (se reajustan al tamaÃ±o del viewport).
 var _run_end_cards: Array[Control] = []
-@onready var _upgrade_buttons: Array[Button] = [
-	$UpgradePanel/Center/Content/Cards/Card1,
-	$UpgradePanel/Center/Content/Cards/Card2,
-	$UpgradePanel/Center/Content/Cards/Card3
-]
-@onready var _upgrade_titles: Array[Label] = [
-	$UpgradePanel/Center/Content/Cards/Card1/Margin/Content/Title,
-	$UpgradePanel/Center/Content/Cards/Card2/Margin/Content/Title,
-	$UpgradePanel/Center/Content/Cards/Card3/Margin/Content/Title
-]
-@onready var _upgrade_descriptions: Array[Label] = [
-	$UpgradePanel/Center/Content/Cards/Card1/Margin/Content/Description,
-	$UpgradePanel/Center/Content/Cards/Card2/Margin/Content/Description,
-	$UpgradePanel/Center/Content/Cards/Card3/Margin/Content/Description
-]
-@onready var _upgrade_icons: Array[Label] = [
-	$UpgradePanel/Center/Content/Cards/Card1/Margin/Content/Icon,
-	$UpgradePanel/Center/Content/Cards/Card2/Margin/Content/Icon,
-	$UpgradePanel/Center/Content/Cards/Card3/Margin/Content/Icon
-]
-@onready var _upgrade_metas: Array[Label] = [
-	$UpgradePanel/Center/Content/Cards/Card1/Margin/Content/Meta,
-	$UpgradePanel/Center/Content/Cards/Card2/Margin/Content/Meta,
-	$UpgradePanel/Center/Content/Cards/Card3/Margin/Content/Meta
-]
 
 var _damage_flash_tween: Tween
 var _event_tween: Tween
@@ -145,13 +104,21 @@ var _combo_tween: Tween
 ## Cola de toasts de mision completada (se muestran de a uno).
 var _mission_toasts: Array[Dictionary] = []
 var _mission_toast_active: bool = false
+## FASE 13: toast de botin activo por mitad de pantalla (1 = izq/solo, 2 = der).
+var _loot_toast_by_side: Dictionary = {}
+## Consejos de tutorial ya mostrados EN ESTA SESION (el perfil guarda los suyos).
+var _tips_shown: Dictionary = {}
+var _tip_panel: PanelContainer
+var _tip_tween: Tween
+## Niveles previos por arma para animar SOLO el chip que cambio.
+var _prev_weapon_levels: Dictionary = {}
+## Panel de build (tecla B): armas + mejoras + compañero + mutaciones. No pausa.
+var _build_panel: Control
 
 
 func _ready() -> void:
 	game_over_panel.visible = false
 	game_over_panel.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
-	upgrade_panel.visible = false
-	upgrade_panel.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
 	rescue_status_label.visible = false
 	rescue_arrow.visible = false
 	event_label.visible = false
@@ -174,15 +141,6 @@ func _ready() -> void:
 	update_companion_roster([])
 	on_weapons_changed([])
 
-	for index in _upgrade_buttons.size():
-		var button: Button = _upgrade_buttons[index]
-		button.pressed.connect(_on_upgrade_button_pressed.bind(index))
-		button.pressed.connect(func() -> void: _play_ui(&"ui_click"))
-		button.pivot_offset = button.custom_minimum_size * 0.5
-		button.mouse_entered.connect(_on_card_hover.bind(button, true))
-		button.mouse_exited.connect(_on_card_hover.bind(button, false))
-	_build_upgrade_actions_row()
-
 	_victory_details_button.pressed.connect(_toggle_victory_details)
 	_victory_details_button.pressed.connect(func() -> void: _play_ui(&"ui_click"))
 	_defeat_details_button.pressed.connect(_toggle_defeat_details)
@@ -192,6 +150,7 @@ func _ready() -> void:
 	_build_boss_bar_bg()
 	_build_combo_label()
 	_build_phase_label()
+	_build_aim_badge()
 	_build_debug_overlay()
 	_build_run_end_cards()
 	_victory_retry = _build_run_end_buttons($VictoryPanel/Center/Content)
@@ -206,11 +165,11 @@ func _ready() -> void:
 func _build_run_end_cards() -> void:
 	_make_run_end_card($VictoryPanel, $VictoryPanel/Center, Color(0.55, 1.0, 0.72), Color(0.09, 0.13, 0.11, 0.96))
 	_make_run_end_card($GameOverPanel, $GameOverPanel/Center, Color(1.0, 0.5, 0.5), Color(0.14, 0.09, 0.10, 0.96))
-	# Reajusta las tarjetas si cambia el tamaño de la ventana (stretch "expand").
+	# Reajusta las tarjetas si cambia el tamaÃ±o de la ventana (stretch "expand").
 	get_viewport().size_changed.connect(_fit_run_end_cards)
 
 
-## Tamaño de tarjeta acotado por el viewport: nunca se sale de pantalla.
+## TamaÃ±o de tarjeta acotado por el viewport: nunca se sale de pantalla.
 func _fit_run_end_card(card: Control) -> void:
 	if not is_instance_valid(card):
 		return
@@ -234,7 +193,7 @@ func _make_run_end_card(panel: Control, center: Control, accent: Color, bg: Colo
 	var card := Panel.new()
 	card.name = "Card"
 	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Centrada y ADAPTADA al viewport: una tarjeta de tamaño fijo se cortaba por
+	# Centrada y ADAPTADA al viewport: una tarjeta de tamaÃ±o fijo se cortaba por
 	# abajo en la resolucion base (648 px de alto < 660 de tarjeta).
 	card.anchor_left = 0.5
 	card.anchor_top = 0.5
@@ -270,7 +229,7 @@ func _make_run_end_card(panel: Control, center: Control, accent: Color, bg: Colo
 	card.add_child(strip)
 
 
-## Botones clicables de fin de partida (además de los atajos R/M/ESC). Devuelve el
+## Botones clicables de fin de partida (ademÃ¡s de los atajos R/M/ESC). Devuelve el
 ## primer boton (Reintentar) para poder darle el foco al mostrar el panel (gamepad P2).
 func _build_run_end_buttons(content: Node) -> Button:
 	if content == null:
@@ -317,9 +276,9 @@ func _on_run_end_menu() -> void:
 		gf.return_to_main_menu()
 
 
-## Viñeta radial sutil (recurso interno, sin texturas externas): oscurece los
+## ViÃ±eta radial sutil (recurso interno, sin texturas externas): oscurece los
 ## bordes de la pantalla para dar profundidad y centrar la vista en el combate.
-## Va al índice 0 del CanvasLayer, debajo de todos los paneles del HUD.
+## Va al Ã­ndice 0 del CanvasLayer, debajo de todos los paneles del HUD.
 func _build_vignette() -> void:
 	var gradient := Gradient.new()
 	gradient.offsets = PackedFloat32Array([0.0, 0.62, 1.0])
@@ -401,7 +360,7 @@ func _build_combo_label() -> void:
 	band.add_child(_combo_label)
 
 
-## Rotulo de fase de las Partidas rapidas: "Fase · tiempo restante" bajo el
+## Rotulo de fase de las Partidas rapidas: "Fase Â· tiempo restante" bajo el
 ## reloj. Lo actualiza el PhaseDirector (~4 veces por segundo).
 var _phase_label: Label
 
@@ -427,7 +386,51 @@ func set_phase_info(text: String) -> void:
 		_phase_label.text = text
 
 
-## Llamado por Feedback.register_kill vía el grupo "hud". count=0 termina la racha.
+## Aviso discreto del modo de punteria (Rework de apuntado). Solo en SOLO: en coop
+## cada mitad muestra el suyo (CoopSplitScreen), porque el modo es de CADA jugador
+## y este HUD es compartido. Manual (el defecto) no rotula nada.
+var _aim_badge: Label
+## Jugador cuyo modo se rotula en solo, cacheado para no barrer el grupo por frame.
+var _aim_badge_player: Node
+
+
+func _build_aim_badge() -> void:
+	_aim_badge = Label.new()
+	_aim_badge.name = "AimBadge"
+	_aim_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_aim_badge.theme_type_variation = &"HudSecondary"
+	_aim_badge.visible = false
+	_aim_badge.add_theme_color_override("font_color", Color(0.72, 0.82, 0.95, 0.8))
+	var center := $TopCenter as Control
+	if center != null:
+		center.add_child(_aim_badge)
+	else:
+		add_child(_aim_badge)
+
+
+func _update_aim_badge() -> void:
+	if _aim_badge == null:
+		return
+	if _is_coop():
+		_aim_badge.visible = false
+		return
+	if not is_instance_valid(_aim_badge_player):
+		_aim_badge_player = get_tree().get_first_node_in_group("player")
+	if not is_instance_valid(_aim_badge_player) or not _aim_badge_player.has_method("get_aim_mode"):
+		_aim_badge.visible = false
+		return
+	match _aim_badge_player.get_aim_mode():
+		&"auto":
+			_aim_badge.text = "Auto-mira"
+			_aim_badge.visible = true
+		&"assist":
+			_aim_badge.text = "Mira asistida"
+			_aim_badge.visible = true
+		_:
+			_aim_badge.visible = false
+
+
+## Llamado por Feedback.register_kill vÃ­a el grupo "hud". count=0 termina la racha.
 func show_combo(count: int) -> void:
 	if _combo_label == null:
 		return
@@ -480,13 +483,13 @@ func _show_next_mission_toast() -> void:
 	v.add_theme_constant_override("separation", 2)
 	panel.add_child(v)
 	var title := Label.new()
-	title.text = "★ Mision completada"
+	title.text = "â˜… Mision completada"
 	title.add_theme_font_override("font", UIFonts.fredoka(600))
 	title.add_theme_font_size_override("font_size", UIFonts.scaled(13))
 	title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
 	v.add_child(title)
 	var body := Label.new()
-	body.text = "%s   +%d 🐟" % [data["name"], int(data["reward"])]
+	body.text = "%s   +%d ðŸŸ" % [data["name"], int(data["reward"])]
 	body.add_theme_font_size_override("font_size", UIFonts.scaled(17))
 	body.add_theme_color_override("font_color", Color(0.95, 0.96, 1.0))
 	v.add_child(body)
@@ -523,6 +526,9 @@ func _input(event: InputEvent) -> void:
 		if _debug_label != null:
 			_debug_label.visible = not _debug_label.visible
 			_toggle_map_debug(_debug_label.visible)
+	# FASE 13: panel de build (tecla B). No pausa la partida.
+	if event.is_action_pressed(&"build_panel") and not get_tree().paused:
+		_toggle_build_panel()
 
 
 func _style_bars() -> void:
@@ -531,7 +537,7 @@ func _style_bars() -> void:
 	_apply_bar_color(health_bar, Color(0.9, 0.36, 0.38))
 	_apply_bar_color(xp_bar, Color(0.4, 0.72, 1.0))
 	_apply_bar_color(_boss_health_bar, Color(0.82, 0.22, 0.28), 3.0)
-	# Barra fantasma de vida: al recibir daño, un tramo palido persigue al valor
+	# Barra fantasma de vida: al recibir daÃ±o, un tramo palido persigue al valor
 	# real, mostrando cuanta vida acabas de perder (lectura instantanea del golpe).
 	health_bar.draw.connect(_draw_health_ghost)
 
@@ -564,6 +570,7 @@ func _draw_health_ghost() -> void:
 func _process(_delta: float) -> void:
 	_update_rescue_arrow()
 	_update_downed_arrow()
+	_update_aim_badge()
 	if _debug_label != null and _debug_label.visible and _perf != null and _perf.has_method("get_debug_line"):
 		var map_line: String = _map_debug_line()
 		_debug_label.text = _perf.get_debug_line() + ("\n" + map_line if map_line != "" else "")
@@ -678,33 +685,90 @@ func on_weapons_changed(snapshots: Array) -> void:
 	_last_weapon_names.clear()
 	for child in _weapons_bar.get_children():
 		child.queue_free()
-	for snapshot in snapshots:
+	var changed_index: int = -1
+	var new_levels: Dictionary = {}
+	for index in snapshots.size():
+		var snapshot: Dictionary = snapshots[index]
 		var color: Color = snapshot.get("color", Color(1, 1, 1))
 		var weapon_type: StringName = snapshot.get("weapon_type", &"")
-		var style: Dictionary = WEAPON_TYPE_STYLE.get(weapon_type, {"icon": &"weapon_projectile"})
 		var level: int = int(snapshot.get("level", 1))
 		var display_name: String = snapshot.get("display_name", "Arma")
+		var id: StringName = snapshot.get("id", &"")
 		_last_weapon_names.append(display_name)
-		_weapons_bar.add_child(_make_weapon_chip(style["icon"], level, color, "%s  Nv. %d" % [display_name, level]))
+		var chip := _make_weapon_chip(LootCatalog.weapon_icon(weapon_type), level, color,
+			"%s  Nv. %d" % [display_name, level], display_name,
+			bool(snapshot.get("evolved", false)))
+		_weapons_bar.add_child(chip)
+		# FASE 13: detecta el UNICO slot que cambio (nuevo o subio de nivel) para
+		# animar solo ese, no toda la barra.
+		new_levels[id] = level
+		if not _prev_weapon_levels.has(id) or int(_prev_weapon_levels[id]) < level:
+			changed_index = index
+	_prev_weapon_levels = new_levels
+	if changed_index >= 0:
+		_punch_weapon_chip(changed_index)
+	# Tutorial (FASE 13): con la segunda arma ya hay "build" que consultar.
+	if snapshots.size() >= 2:
+		show_tip(&"build_panel")
 
 
-func _make_weapon_chip(icon: StringName, level: int, color: Color, tooltip: String) -> Control:
+func _make_weapon_chip(icon: StringName, level: int, color: Color, tooltip: String,
+		display_name: String = "", evolved: bool = false) -> Control:
 	var chip := PanelContainer.new()
 	chip.tooltip_text = tooltip
 	var box := StyleBoxFlat.new()
 	box.bg_color = Color(0.08, 0.09, 0.13, 0.78)
-	box.border_color = color
-	box.set_border_width_all(2)
+	# Un arma evolucionada se lee distinta: borde dorado mas grueso + estrella.
+	box.border_color = Color(1.0, 0.82, 0.3) if evolved else color
+	box.set_border_width_all(3 if evolved else 2)
 	box.set_corner_radius_all(8)
 	box.set_content_margin_all(6)
 	chip.add_theme_stylebox_override("panel", box)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 0)
+	chip.add_child(col)
 	var icon_node := IconDrawer.new()
 	icon_node.custom_minimum_size = Vector2(34, 34)
 	icon_node.icon_type = icon
 	icon_node.accent = color
 	icon_node.level = level
-	chip.add_child(icon_node)
+	col.add_child(icon_node)
+	# FASE 13: nombre corto y estado bajo el icono; el jugador revisa su arsenal
+	# de un vistazo sin abrir menus.
+	var name_label := Label.new()
+	name_label.text = ("★ " if evolved else "") + _short_weapon_name(display_name)
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.add_theme_font_override("font", UIFonts.fredoka(600))
+	name_label.add_theme_font_size_override("font_size", 10)
+	name_label.add_theme_color_override("font_color",
+		Color(1.0, 0.88, 0.5) if evolved else Color(0.85, 0.88, 0.95))
+	col.add_child(name_label)
 	return chip
+
+
+## Primera palabra del nombre del arma ("Pistola Gatuna" -> "Pistola"): cabe en
+## el chip sin ensanchar la barra.
+func _short_weapon_name(display_name: String) -> String:
+	var first: String = display_name.get_slice(" ", 0)
+	return first if first != "" else display_name
+
+
+## Punch de escala SOLO en el chip que cambio (FASE 13).
+func _punch_weapon_chip(index: int) -> void:
+	if index < 0 or index >= _weapons_bar.get_child_count():
+		return
+	var chip := _weapons_bar.get_child(index) as Control
+	if chip == null:
+		return
+	# El chip recien creado aun no tiene tamano: anclar el pivote al centro
+	# cuando el layout lo resuelva.
+	chip.resized.connect(func() -> void: chip.pivot_offset = chip.size * 0.5, CONNECT_ONE_SHOT)
+	chip.scale = Vector2(1.35, 1.35)
+	chip.modulate = Color(1.6, 1.5, 1.2)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(chip, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(chip, "modulate", Color(1, 1, 1), 0.4)
 
 
 ## Sinergias ya no se listan en el HUD; se conservan para la pausa.
@@ -723,7 +787,7 @@ func update_companion_roster(snapshots: Array) -> void:
 		var style: Dictionary = COMPANION_STATE_STYLE.get(state_name, COMPANION_STATE_STYLE[&"active"])
 		var display_name: String = snapshot.get("display_name", "Companero")
 		var ability_name: String = str(snapshot.get("ability_name", ""))
-		var tooltip: String = "%s · %s" % [display_name, style["label"]]
+		var tooltip: String = "%s Â· %s" % [display_name, style["label"]]
 		if ability_name != "":
 			var ability_state: String = "lista"
 			if bool(snapshot.get("ability_locked", false)):
@@ -831,9 +895,13 @@ func get_run_info() -> Dictionary:
 func _hide_gameplay_chrome() -> void:
 	for node in [$TopLeft, $TopCenter, $TopRight, _weapons_bar, _companion_bar,
 			_combo_label, _phase_label, _announcement_label, event_label,
-			_downed_arrow, _downed_tag, rescue_arrow, rescue_status_label]:
+			_downed_arrow, _downed_tag, rescue_arrow, rescue_status_label,
+			_tip_panel]:
 		if node != null and is_instance_valid(node):
 			(node as CanvasItem).visible = false
+	if _build_panel != null and is_instance_valid(_build_panel):
+		_build_panel.queue_free()
+		_build_panel = null
 	_rescue_target_active = false
 
 
@@ -879,7 +947,7 @@ func show_defeat(summary: Dictionary) -> void:
 		_defeat_retry.call_deferred("grab_focus")
 
 
-## Crea el mosaico de estadísticas y lo coloca donde estaba el resumen de texto
+## Crea el mosaico de estadÃ­sticas y lo coloca donde estaba el resumen de texto
 ## (que se oculta). Se rellena en cada fin de partida con _fill_summary_tiles.
 func _make_summary_tiles(content: Node, summary_label: Label) -> GridContainer:
 	if content == null:
@@ -908,8 +976,8 @@ func _fill_summary_tiles(grid: GridContainer, summary: Dictionary) -> void:
 	if score >= 0:
 		var label: String = "%d" % score
 		if bool(summary.get("is_new_record", false)):
-			label = "★ %d" % score
-		grid.add_child(MenuTheme.make_stat_card(label, "Puntuación", MenuTheme.GOLD, &"star"))
+			label = "â˜… %d" % score
+		grid.add_child(MenuTheme.make_stat_card(label, "PuntuaciÃ³n", MenuTheme.GOLD, &"star"))
 	else:
 		grid.add_child(MenuTheme.make_stat_card("+%d" % int(summary.get("sardines_earned", 0)), "Sardinas", MenuTheme.GOLD, &"sardine"))
 	@warning_ignore("integer_division")
@@ -945,7 +1013,7 @@ func _summary_details(summary: Dictionary) -> String:
 		if seed_value != 0:
 			lines.append("Semilla: %d  (rejuega la misma para competir)" % seed_value)
 		lines.append_array(_score_breakdown_lines(summary))
-		lines.append("Mejor puntuación de esta zona/dificultad: %d" % int(summary.get("best_score", 0)))
+		lines.append("Mejor puntuaciÃ³n de esta zona/dificultad: %d" % int(summary.get("best_score", 0)))
 		return "\n".join(lines)
 	lines.append_array(_sardine_breakdown_lines(summary))
 	lines.append("Sardinas totales: %d" % int(summary.get("total_sardines", 0)))
@@ -956,8 +1024,8 @@ func _summary_details(summary: Dictionary) -> String:
 func _score_breakdown_lines(summary: Dictionary) -> Array[String]:
 	var b: Dictionary = summary.get("score_breakdown", {})
 	if b.is_empty():
-		return ["Puntuación: %d" % int(summary.get("score", 0))]
-	var lines: Array[String] = ["Desglose de puntuación:"]
+		return ["PuntuaciÃ³n: %d" % int(summary.get("score", 0))]
+	var lines: Array[String] = ["Desglose de puntuaciÃ³n:"]
 	for entry in [["Enemigos", "kills"], ["Nivel", "level"], ["Gatos", "cats"], ["Mini-jefes", "minibosses"], ["Jefes", "bosses"], ["Tiempo", "time"], ["Bonus victoria", "victory"]]:
 		var value: int = int(b.get(entry[1], 0))
 		if value > 0:
@@ -1029,15 +1097,6 @@ func toggle_meta_panel() -> void:
 		_meta_panel.toggle()
 
 
-## True mientras se muestran las cartas de mejora (para que la pausa no interfiera).
-## Cubre el panel solo clasico y el panel coop de cartas por jugador.
-func is_selecting_upgrade() -> bool:
-	if is_instance_valid(upgrade_panel) and upgrade_panel.visible:
-		return true
-	var coop_panel: Node = get_tree().get_first_node_in_group("coop_upgrade_panel")
-	return coop_panel != null and coop_panel is CanvasItem and (coop_panel as CanvasItem).visible
-
-
 func _is_coop() -> bool:
 	var gf: Node = get_node_or_null("/root/GameFlow")
 	return gf != null and gf.has_method("is_coop") and gf.is_coop()
@@ -1045,12 +1104,12 @@ func _is_coop() -> bool:
 
 ## Sufijo de modo para el resumen de fin de partida.
 func _mode_suffix() -> String:
-	return "  ·  Coop local" if _is_coop() else ""
+	return "  Â·  Coop local" if _is_coop() else ""
 
 
 ## Sufijo de nuevo record (Partida libre).
 func _record_suffix(summary: Dictionary) -> String:
-	return "   ·   ¡NUEVO RÉCORD!" if bool(summary.get("is_new_record", false)) else ""
+	return "   Â·   Â¡NUEVO RÃ‰CORD!" if bool(summary.get("is_new_record", false)) else ""
 
 
 
@@ -1084,264 +1143,6 @@ func _spawn_victory_confetti() -> void:
 		tween.tween_property(piece, "modulate:a", 0.0, 1.4)
 		tween.chain().tween_callback(piece.queue_free)
 
-
-## --- Cartas de mejora (minimalistas) ------------------------------------------
-
-func show_upgrade_selection(cards: Array[Dictionary]) -> void:
-	upgrade_panel.visible = true
-	_animate_panel_entrance()
-	# Coop: da foco a la primera carta para que el P2 pueda navegar con el gamepad
-	# (ui_left/ui_right = dpad/stick) y confirmar con A (ui_accept). El P1 sigue
-	# usando el raton. Cualquiera elige UNA carta para el equipo; el UpgradeManager
-	# evita la doble aplicacion. En solo no se toca el foco (comportamiento clasico).
-	if _is_coop() and _upgrade_buttons.size() > 0 and is_instance_valid(_upgrade_buttons[0]):
-		_upgrade_buttons[0].focus_mode = Control.FOCUS_ALL
-		_upgrade_buttons[0].call_deferred("grab_focus")
-
-	for index in _upgrade_buttons.size():
-		# Con vetos el pool puede quedarse corto: oculta los botones sin carta.
-		if index >= cards.size():
-			_upgrade_buttons[index].visible = false
-			continue
-		_upgrade_buttons[index].visible = true
-		var card: Dictionary = cards[index]
-		var rarity: StringName = card.get("rarity", &"common")
-		var style: Dictionary = RARITY_STYLE.get(rarity, RARITY_STYLE[&"common"])
-
-		_prepare_upgrade_card_layout(index)
-		_upgrade_titles[index].text = _compact_card_title(card.get("name", "Mejora"))
-		# Descripcion de 1 linea; el detalle largo va al tooltip al hacer hover.
-		_upgrade_descriptions[index].text = _compact_card_description(card.get("description", ""))
-		var affects: String = card.get("affects", "")
-		var type_label: String = card.get("type_label", "")
-		var tip: String = card.get("description", "")
-		if type_label != "" or affects != "":
-			tip += "\n(%s%s)" % [type_label, "" if affects == "" else " · " + affects]
-		_upgrade_buttons[index].tooltip_text = tip
-		# Icono geometrico grande coloreado por rareza + linea de tipo·rareza.
-		_upgrade_icons[index].text = ""
-		_upgrade_icons[index].visible = false
-		_ensure_upgrade_icon(index, _card_icon_type(type_label), style["color"])
-		var meta: String = style["label"] if type_label == "" else "%s · %s" % [type_label.to_upper(), style["label"]]
-		_upgrade_metas[index].text = meta
-		_upgrade_metas[index].add_theme_color_override("font_color", style["color"])
-		_style_card(_upgrade_buttons[index], style["color"])
-		_animate_card_entrance(_upgrade_buttons[index], index)
-
-
-func _prepare_upgrade_card_layout(index: int) -> void:
-	var button := _upgrade_buttons[index]
-	button.custom_minimum_size = Vector2(232, 264)
-	button.clip_contents = true
-	button.pivot_offset = button.custom_minimum_size * 0.5
-
-	# Fuente y tamaño vienen de las variaciones del Theme global (CardTitle /
-	# CardDescription / CardMeta): sin overrides duplicados por carta.
-	var title := _upgrade_titles[index]
-	title.custom_minimum_size = Vector2(188, 48)
-	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.set("max_lines_visible", 2)
-
-	var desc := _upgrade_descriptions[index]
-	desc.custom_minimum_size = Vector2(188, 44)
-	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	desc.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	desc.set("max_lines_visible", 2)
-
-	var meta := _upgrade_metas[index]
-	meta.custom_minimum_size = Vector2(188, 18)
-	meta.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-
-
-func _compact_card_title(text: String) -> String:
-	if text.length() <= 28:
-		return text
-	return text.substr(0, 25).strip_edges() + "..."
-
-
-func _compact_card_description(text: String) -> String:
-	if text.length() <= 58:
-		return text
-	return text.substr(0, 55).strip_edges() + "..."
-
-
-func _card_icon_type(type_label: String) -> StringName:
-	var t: String = type_label.to_lower()
-	if t.contains("arma"):
-		return &"weapon_projectile"
-	if t.contains("compa"):
-		return &"companion"
-	if t.contains("sinerg"):
-		return &"xp"
-	if t.contains("stat") or t.contains("mejora"):
-		return &"upgrade"
-	return &"cat"
-
-
-func _ensure_upgrade_icon(index: int, icon_type: StringName, color: Color) -> void:
-	var host := _upgrade_icons[index].get_parent()
-	if host == null:
-		return
-	var node: Control = host.get_node_or_null("DrawnIcon%d" % index) as Control
-	if node == null:
-		node = IconDrawer.new()
-		node.name = "DrawnIcon%d" % index
-		node.custom_minimum_size = Vector2(58, 58)
-		host.add_child(node)
-		host.move_child(node, _upgrade_icons[index].get_index())
-	node.custom_minimum_size = Vector2(58, 58)
-	node.set("icon_type", icon_type)
-	node.set("accent", color)
-
-
-## Glifo geometrico simple segun el tipo de carta.
-func _card_icon(type_label: String) -> String:
-	var t: String = type_label.to_lower()
-	if t.contains("arma"):
-		return "✦"
-	if t.contains("compa"):
-		return "✚"
-	if t.contains("sinerg"):
-		return "◆"
-	if t.contains("stat") or t.contains("mejora"):
-		return "▲"
-	return "●"
-
-
-func _animate_card_entrance(button: Button, index: int) -> void:
-	button.scale = Vector2(0.8, 0.8)
-	button.modulate.a = 0.0
-	var tween := upgrade_panel.create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(button, "scale", Vector2.ONE, 0.22) \
-		.set_delay(index * 0.06).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tween.tween_property(button, "modulate:a", 1.0, 0.18).set_delay(index * 0.06)
-
-
-func _animate_panel_entrance() -> void:
-	if not is_instance_valid(_upgrade_title):
-		return
-	_upgrade_title.scale = Vector2(0.85, 0.85)
-	_upgrade_title.pivot_offset = _upgrade_title.size * 0.5
-	var tween := upgrade_panel.create_tween()
-	tween.tween_property(_upgrade_title, "scale", Vector2.ONE, 0.25) \
-		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
-
-func _on_card_hover(button: Button, hovering: bool) -> void:
-	if hovering:
-		_play_ui(&"ui_hover")
-	var tween := upgrade_panel.create_tween()
-	var target: Vector2 = Vector2(1.06, 1.06) if hovering else Vector2.ONE
-	tween.tween_property(button, "scale", target, 0.10).set_trans(Tween.TRANS_SINE)
-
-
-func _style_card(button: Button, accent: Color) -> void:
-	# Cartas tipo juego: fondo teñido por rareza, esquinas suaves, sombra que se
-	# convierte en glow del color de la rareza al hacer hover.
-	for state in ["normal", "hover", "pressed", "focus"]:
-		var box := StyleBoxFlat.new()
-		var hovered: bool = state == "hover" or state == "pressed" or state == "focus"
-		box.bg_color = Color(0.09, 0.10, 0.145, 0.97).lerp(accent, 0.14 if hovered else 0.05)
-		box.border_color = accent if hovered else Color(accent.r, accent.g, accent.b, 0.75)
-		box.set_border_width_all(3)
-		box.border_width_top = 6
-		box.set_corner_radius_all(14)
-		box.set_content_margin_all(8)
-		box.shadow_size = 14 if hovered else 8
-		box.shadow_color = Color(accent.r, accent.g, accent.b, 0.30) if hovered else Color(0, 0, 0, 0.45)
-		box.shadow_offset = Vector2(0, 4)
-		button.add_theme_stylebox_override(state, box)
-
-
-## --- Acciones de agencia (reroll / veto; elegir carta es obligatorio) ------------
-
-var _reroll_button: Button
-var _banish_button: Button
-## Modo veto: el siguiente clic en una carta la veta en vez de elegirla.
-var _banish_mode: bool = false
-
-
-func _build_upgrade_actions_row() -> void:
-	var content := get_node_or_null("UpgradePanel/Center/Content") as Control
-	if content == null:
-		return
-	var row := HBoxContainer.new()
-	row.name = "ActionsRow"
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 14)
-	content.add_child(row)
-	_reroll_button = _make_action_button(row, "Otra tirada")
-	_reroll_button.pressed.connect(func() -> void:
-		_play_ui(&"ui_click")
-		_banish_mode = false
-		reroll_requested.emit())
-	_banish_button = _make_action_button(row, "Vetar carta")
-	_banish_button.pressed.connect(_toggle_banish_mode)
-
-
-func _make_action_button(parent: Control, text: String) -> Button:
-	var button := Button.new()
-	button.text = text
-	button.custom_minimum_size = Vector2(150, 40)
-	button.focus_mode = Control.FOCUS_ALL
-	var accent := Color(0.65, 0.72, 0.82)
-	for state in ["normal", "hover", "pressed", "focus"]:
-		var box := StyleBoxFlat.new()
-		var hovered: bool = state != "normal"
-		box.bg_color = Color(0.10, 0.11, 0.16, 0.95).lerp(accent, 0.10 if hovered else 0.03)
-		box.border_color = accent if hovered else Color(accent.r, accent.g, accent.b, 0.5)
-		box.set_border_width_all(2)
-		box.set_corner_radius_all(10)
-		box.set_content_margin_all(8)
-		button.add_theme_stylebox_override(state, box)
-	button.add_theme_font_size_override("font_size", UIFonts.scaled(14))
-	parent.add_child(button)
-	return button
-
-
-## Actualiza contadores/estado de los botones (lo llama UpgradeManager al abrir
-## la seleccion y tras cada reroll/veto). Sin "Pasar": elegir es obligatorio.
-func set_upgrade_actions(rerolls: int, banishes: int) -> void:
-	_banish_mode = false
-	if is_instance_valid(_reroll_button):
-		_reroll_button.text = "Otra tirada (%d)" % rerolls
-		_reroll_button.disabled = rerolls <= 0
-	if is_instance_valid(_banish_button):
-		_banish_button.text = "Vetar carta (%d)" % banishes
-		_banish_button.disabled = banishes <= 0
-		_banish_button.modulate = Color(1, 1, 1, 1)
-
-
-func _toggle_banish_mode() -> void:
-	_play_ui(&"ui_click")
-	_banish_mode = not _banish_mode
-	if is_instance_valid(_banish_button):
-		_banish_button.modulate = Color(1.0, 0.6, 0.6, 1.0) if _banish_mode else Color(1, 1, 1, 1)
-	if is_instance_valid(_upgrade_title):
-		_upgrade_title.text = "Elige que carta VETAR" if _banish_mode else "Elige una mejora"
-
-
-func hide_upgrade_selection() -> void:
-	upgrade_panel.visible = false
-	_banish_mode = false
-	if is_instance_valid(_upgrade_title):
-		_upgrade_title.text = "Elige una mejora"
-
-
-func _on_upgrade_button_pressed(card_index: int) -> void:
-	if _banish_mode:
-		_banish_mode = false
-		if is_instance_valid(_banish_button):
-			_banish_button.modulate = Color(1, 1, 1, 1)
-		if is_instance_valid(_upgrade_title):
-			_upgrade_title.text = "Elige una mejora"
-		banish_requested.emit(card_index)
-		return
-	upgrade_card_selected.emit(card_index)
 
 
 func _play_ui(sound_name: StringName) -> void:
@@ -1419,7 +1220,7 @@ func _update_downed_arrow() -> void:
 		_downed_arrow.position = Vector2(get_viewport().get_visible_rect().size.x * 0.5, 150.0)
 		add_child(_downed_arrow)
 		_downed_arrow_glyph = Label.new()
-		_downed_arrow_glyph.text = "▲"
+		_downed_arrow_glyph.text = "â–²"
 		_downed_arrow_glyph.add_theme_font_size_override("font_size", 30)
 		_downed_arrow_glyph.add_theme_color_override("font_color", Color(0.62, 1.0, 0.72))
 		_downed_arrow_glyph.position = Vector2(-12.0, -34.0)
@@ -1443,7 +1244,7 @@ func _update_downed_arrow() -> void:
 
 
 ## Aviso de IMPACTO (Lilita One): apariciones de boss/mini-boss, fases especiales.
-## Texto corto y grande, con entrada elástica y salida rápida; no bloquea la vista.
+## Texto corto y grande, con entrada elÃ¡stica y salida rÃ¡pida; no bloquea la vista.
 ## Para mensajes informativos ("Arma: X", "Gato cercano") usar show_event_message.
 var _announcement_label: Label
 var _announcement_tween: Tween
@@ -1493,3 +1294,274 @@ func show_event_message(text: String, duration: float = 1.8) -> void:
 	_event_tween.tween_callback(func() -> void:
 		event_label.visible = false
 	)
+
+
+## --- FASE 13: confirmacion de botin -------------------------------------------
+
+## Toast de ~2 s tras recoger algo: cabecera de categoria ("MEJORA OBTENIDA"...),
+## nombre y efecto en llano. En coop aparece en la MITAD del recolector y cada
+## mitad tiene su propio hueco (no se pisan entre jugadores). No pausa nada.
+func show_loot_toast(header: String, title: String, body: String,
+		accent: Color, player_id: int = 1) -> void:
+	var side: int = clampi(player_id, 1, 2) if _is_coop() else 1
+	# Un toast nuevo del mismo lado sustituye al anterior: sin colas que tapen.
+	var previous = _loot_toast_by_side.get(side)
+	if previous != null and is_instance_valid(previous):
+		previous.queue_free()
+
+	var panel := PanelContainer.new()
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(0.06, 0.065, 0.1, 0.94)
+	box.border_color = accent
+	box.set_border_width_all(2)
+	box.border_width_top = 4
+	box.set_corner_radius_all(10)
+	box.set_content_margin_all(10)
+	box.content_margin_left = 18.0
+	box.content_margin_right = 18.0
+	box.shadow_color = Color(0, 0, 0, 0.4)
+	box.shadow_size = 8
+	panel.add_theme_stylebox_override("panel", box)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 1)
+	panel.add_child(col)
+	var header_label := Label.new()
+	header_label.text = header
+	header_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	header_label.add_theme_font_override("font", UIFonts.lilita())
+	header_label.add_theme_font_size_override("font_size", UIFonts.scaled(15))
+	header_label.add_theme_color_override("font_color", accent)
+	col.add_child(header_label)
+	var title_label := Label.new()
+	title_label.text = title
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_label.add_theme_font_override("font", UIFonts.fredoka(600))
+	title_label.add_theme_font_size_override("font_size", UIFonts.scaled(15))
+	title_label.add_theme_color_override("font_color", Color(0.95, 0.96, 1.0))
+	col.add_child(title_label)
+	if body != "":
+		var body_label := Label.new()
+		body_label.text = body
+		body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		body_label.add_theme_font_size_override("font_size", UIFonts.scaled(12))
+		body_label.add_theme_color_override("font_color", Color(0.8, 0.83, 0.9))
+		col.add_child(body_label)
+	add_child(panel)
+	_loot_toast_by_side[side] = panel
+
+	# Posicion: centro de la mitad correspondiente (o de la pantalla en solo),
+	# bajo la zona de anuncios para no chocar con la barra de boss.
+	await get_tree().process_frame
+	if not is_instance_valid(panel):
+		return
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	var center_x: float = vp.x * 0.5
+	if _is_coop():
+		center_x = vp.x * (0.25 if side == 1 else 0.75)
+	panel.position = Vector2(center_x - panel.size.x * 0.5, 300.0)
+	panel.pivot_offset = panel.size * 0.5
+	panel.scale = Vector2(0.8, 0.8)
+	panel.modulate.a = 0.0
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(panel, "modulate:a", 1.0, 0.14)
+	tween.tween_property(panel, "scale", Vector2.ONE, 0.26).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.chain().tween_interval(1.9)
+	tween.chain().tween_property(panel, "modulate:a", 0.0, 0.3)
+	tween.chain().tween_callback(panel.queue_free)
+
+
+## --- FASE 13: consejos de tutorial (una vez por perfil) ------------------------
+
+## Muestra el consejo `tip_id` del catalogo si este perfil no lo vio nunca.
+## Persistido en el guardado ("tip_seen_*"); reiniciable desde Opciones→Juego.
+func show_tip(tip_id: StringName) -> void:
+	if _tips_shown.has(tip_id):
+		return
+	_tips_shown[tip_id] = true
+	var text: String = LootCatalog.tip_text(tip_id)
+	if text == "":
+		return
+	var save: Node = get_node_or_null("/root/SaveManager")
+	var key: String = "tip_seen_%s" % tip_id
+	if save != null and save.has_method("get_value") and bool(save.get_value(key, false)):
+		return
+	if save != null and save.has_method("set_value"):
+		save.set_value(key, true)
+	_display_tip(text)
+
+
+func _display_tip(text: String) -> void:
+	if _tip_panel == null or not is_instance_valid(_tip_panel):
+		_tip_panel = PanelContainer.new()
+		_tip_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var box := StyleBoxFlat.new()
+		box.bg_color = Color(0.05, 0.07, 0.06, 0.94)
+		box.border_color = Color(0.62, 1.0, 0.72)
+		box.set_border_width_all(1)
+		box.border_width_left = 5
+		box.set_corner_radius_all(10)
+		box.set_content_margin_all(10)
+		box.content_margin_left = 16.0
+		box.content_margin_right = 16.0
+		_tip_panel.add_theme_stylebox_override("panel", box)
+		var label := Label.new()
+		label.name = "TipText"
+		label.add_theme_font_override("font", UIFonts.fredoka(500))
+		label.add_theme_font_size_override("font_size", UIFonts.scaled(14))
+		label.add_theme_color_override("font_color", Color(0.9, 1.0, 0.94))
+		_tip_panel.add_child(label)
+		add_child(_tip_panel)
+	var tip_label := _tip_panel.get_node("TipText") as Label
+	tip_label.text = "💡 " + text
+	_tip_panel.visible = true
+	if _tip_tween != null and _tip_tween.is_valid():
+		_tip_tween.kill()
+	_tip_panel.modulate.a = 0.0
+	# Banda inferior central: fuera del combate visual y de los toasts de botin.
+	await get_tree().process_frame
+	if not is_instance_valid(_tip_panel):
+		return
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	_tip_panel.position = Vector2(vp.x * 0.5 - _tip_panel.size.x * 0.5, vp.y - 118.0)
+	_tip_tween = create_tween()
+	_tip_tween.tween_property(_tip_panel, "modulate:a", 1.0, 0.25)
+	_tip_tween.tween_interval(4.5)
+	_tip_tween.tween_property(_tip_panel, "modulate:a", 0.0, 0.4)
+	_tip_tween.tween_callback(func() -> void:
+		if is_instance_valid(_tip_panel):
+			_tip_panel.visible = false)
+
+
+## --- FASE 13: panel de build (tecla B, sin pausar) -----------------------------
+
+func _toggle_build_panel() -> void:
+	if _build_panel != null and is_instance_valid(_build_panel):
+		_build_panel.queue_free()
+		_build_panel = null
+		_play_ui(&"ui_close")
+		return
+	_build_panel = _build_build_panel()
+	add_child(_build_panel)
+	_play_ui(&"ui_open")
+
+
+## Panel lateral con la build actual, separada en Armas / Mejoras / Mejoras de
+## compañero / Mutaciones, en lenguaje llano (sin formulas internas). En coop
+## muestra una columna por jugador. Se refresca al abrirse: es una foto, no una
+## vista viva (suficiente para consultar y barato de mantener).
+func _build_build_panel() -> Control:
+	var panel := PanelContainer.new()
+	panel.name = "BuildPanel"
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(0.05, 0.055, 0.09, 0.95)
+	box.border_color = Color(0.45, 0.85, 1.0, 0.9)
+	box.set_border_width_all(2)
+	box.set_corner_radius_all(12)
+	box.set_content_margin_all(14)
+	box.shadow_color = Color(0, 0, 0, 0.5)
+	box.shadow_size = 12
+	panel.add_theme_stylebox_override("panel", box)
+	panel.anchor_left = 0.5
+	panel.anchor_right = 0.5
+	panel.anchor_top = 0.5
+	panel.anchor_bottom = 0.5
+	var root := VBoxContainer.new()
+	root.add_theme_constant_override("separation", 6)
+	panel.add_child(root)
+	var title := Label.new()
+	title.text = "TU BUILD"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_override("font", UIFonts.lilita())
+	title.add_theme_font_size_override("font_size", UIFonts.scaled(18))
+	title.add_theme_color_override("font_color", Color(0.55, 0.9, 1.0))
+	root.add_child(title)
+	var hint := Label.new()
+	hint.text = "Pulsa B para cerrar · El juego sigue en marcha"
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.add_theme_font_size_override("font_size", UIFonts.scaled(10))
+	hint.add_theme_color_override("font_color", Color(0.6, 0.65, 0.72))
+	root.add_child(hint)
+
+	var columns := HBoxContainer.new()
+	columns.add_theme_constant_override("separation", 18)
+	root.add_child(columns)
+	var players: Array = get_tree().get_nodes_in_group("players")
+	players.sort_custom(func(a, b) -> bool: return int(a.get("player_id")) < int(b.get("player_id")))
+	for player in players:
+		if is_instance_valid(player):
+			columns.add_child(_build_player_column(player, players.size() > 1))
+
+	# Centrado tras el layout (el tamano depende del contenido).
+	panel.resized.connect(func() -> void:
+		panel.offset_left = -panel.size.x * 0.5
+		panel.offset_top = -panel.size.y * 0.5
+		panel.offset_right = panel.size.x * 0.5
+		panel.offset_bottom = panel.size.y * 0.5, CONNECT_ONE_SHOT)
+	return panel
+
+
+func _build_player_column(player: Node, show_tag: bool) -> Control:
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 3)
+	col.custom_minimum_size = Vector2(280, 0)
+	if show_tag:
+		col.add_child(_build_section_label(CoopConfig.player_tag(int(player.get("player_id"))), Color(1.0, 0.85, 0.4)))
+
+	# --- Armas ---
+	col.add_child(_build_section_label("Armas", LootCatalog.category_color(&"weapon")))
+	var snapshots: Array = []
+	if player.has_method("get_weapon_manager"):
+		var wm: Node = player.get_weapon_manager()
+		if wm != null and wm.has_method("get_weapon_snapshots"):
+			snapshots = wm.get_weapon_snapshots()
+	for snapshot in snapshots:
+		var evolved: bool = bool(snapshot.get("evolved", false))
+		var line: String = "%s%s · Nv. %d/%d" % ["★ " if evolved else "",
+			snapshot.get("display_name", "Arma"), int(snapshot.get("level", 1)),
+			int(snapshot.get("max_level", 5))]
+		col.add_child(_build_entry_label(line, str(snapshot.get("description", ""))))
+	if snapshots.is_empty():
+		col.add_child(_build_entry_label("Sin armas", ""))
+
+	# --- Mejoras / compañero / mutaciones, desde lo recogido en la run ---
+	var counts: Dictionary = {}
+	var raw_counts = player.get("powerup_counts")
+	if raw_counts is Dictionary:
+		counts = raw_counts
+	for section in [[&"upgrade", "Mejoras"], [&"companion", "Mejoras de compañero"], [&"mutation", "Mutaciones"]]:
+		var category: StringName = section[0]
+		col.add_child(_build_section_label(section[1], LootCatalog.category_color(category)))
+		var any: bool = false
+		for effect_id in counts:
+			var data: PowerUpData = PowerUpRegistry.get_by_id(effect_id)
+			if data == null or LootCatalog.powerup_category(data) != category:
+				continue
+			any = true
+			var stacks: int = int(counts[effect_id])
+			var name_line: String = data.display_name
+			if stacks > 1:
+				name_line += " ×%d" % stacks
+			col.add_child(_build_entry_label(name_line, LootCatalog.effect_line(data.effect_id())))
+		if not any:
+			col.add_child(_build_entry_label("Nada todavía", ""))
+	return col
+
+
+func _build_section_label(text: String, accent: Color) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_override("font", UIFonts.fredoka(700))
+	label.add_theme_font_size_override("font_size", UIFonts.scaled(13))
+	label.add_theme_color_override("font_color", accent)
+	return label
+
+
+func _build_entry_label(title: String, effect: String) -> Label:
+	var label := Label.new()
+	label.text = "  %s" % title if effect == "" else "  %s — %s" % [title, effect]
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_size_override("font_size", UIFonts.scaled(11))
+	label.add_theme_color_override("font_color", Color(0.86, 0.89, 0.95))
+	return label

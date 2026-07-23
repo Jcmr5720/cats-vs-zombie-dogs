@@ -19,6 +19,7 @@ visual_color = Color(0.3, 0.3, 0.36, 1)
 accent_color = Color(1, 0.62, 0.2, 1)
 visual_scale = 1.15
 minion_classes = Array[StringName]([&"boss_guardian", &"boss_healer"])
+environment_rules = Array[StringName]([&"scrap_plates"])
 elite_name = "Alfa de la Chatarra Reforzado"
 phase_thresholds = PackedFloat32Array(0.75, 0.5, 0.25)
 spawn_time = 200.0
